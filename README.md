@@ -1,146 +1,314 @@
+<div align="center">
+
+<img src="docs/img/logo.png" alt="Mens 校园助手" width="104" height="104" />
+
 # Mens 校园助手
 
-<div align="center">
-  <img src="docs/img/logo.png" alt="Mens" width="104" height="104" />
-  <p><b>本地优先的校园问答工作台</b> · Electron + Vue 3 + FastAPI</p>
-  <p>
-    <a href="https://github.com/HuanMoovo/campus-agent/releases/latest">下载 Windows 安装包</a> ·
-    <a href="https://HuanMoovo.github.io/campus-agent/">项目介绍页</a> ·
-    <a href="PLATFORMS.md">平台支持</a> ·
-    <a href="VERIFICATION.md">验证记录</a> ·
-    <a href="LICENSE">Apache-2.0</a>
-  </p>
+**本地优先的校园问答工作台**  
+Electron 桌面外壳 + Vue 3 界面 + FastAPI 后端，可在单机上离线运行
+
+<a href="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml"><img src="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml/badge.svg" alt="桌面构建状态" /></a>
+<img src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-1.2.0-0e7c74" alt="版本 1.2.0" />
+<img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-Apache--2.0-0e7c74" alt="Apache-2.0" />
+<img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="平台" />
+
+[下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest) ·
+[项目介绍页](https://huanmoovo.github.io/campus-agent/)（中文 / English / 日本語） ·
+[平台支持](PLATFORMS.md) ·
+[验证记录](VERIFICATION.md) ·
+[开源协议](LICENSE)
+
 </div>
 
-[项目介绍页](https://HuanMoovo.github.io/campus-agent/)（中文 / English / 日本語） · [平台支持与构建](PLATFORMS.md) · [桌面版说明](DESKTOP.md) · [验证记录](VERIFICATION.md) · [下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest) · [开源协议](LICENSE) · [第三方组件](THIRD-PARTY-NOTICES.md)
+---
 
-**Windows 桌面版 Mens 1.2.0。** Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe` 已重新构建、升级安装并逐项验收；macOS（Intel/Apple silicon）与 Linux（AppImage/deb）的产物由 GitHub Actions 构建，尚未真机验收；Android/iOS 使用可安装网页版（PWA）。平台矩阵、构建方式与限制见 [平台支持说明](PLATFORMS.md)，实际结果和验收范围见 [验证记录](VERIFICATION.md)。以下保留网页开发/服务器部署的使用说明。
+## 这是什么
 
-1.0 基于 0.4.1 验证版本，包含圆角透明 Logo、可定制外观、校园服务和数据接口、可选择的插件，以及聊天窗口中的本地 Ollama 模型切换。0.4.x 已验证模型不可用时会明确报错，不会自动转发给云端；模型权重需在本机单独下载。**1.1.0 统一了 Mens 桌面应用、网页、安装包配置和 API 的版本号，并包含 1.0.0 之后加入的流式回答（可停止生成）、按浏览器/桌面配置隔离的历史对话、Word (.docx) 知识库上传、模型下载断点续传、数据备份导出/导入、本机报修记录、窗口位置记忆、后端日志查看、前端单元测试与构建分包、可选的更新检查；安装包已重新构建并完成安装验收。** **1.2.0 进一步加入可选的联网搜索（Bing 免密钥 / Tavily / 博查，逐条消息开关，回答引用网页链接）、跨平台构建（Windows NSIS、macOS dmg/zip、Linux AppImage/deb，同一脚本与 CI 矩阵）、可安装网页版（PWA：清单、离线外壳、iOS 安全区）以及 Windows 之外的凭据存储与图标处理。** 校园统一登录仍未实现。
+Mens 把「校园政策与办事流程问答」「本地知识库检索」「校园数据服务」放进一个桌面应用，
+并默认让文档、数据与密钥都留在本机。它适合在个人电脑上试用、评估与二次开发；
+作为校园生产系统部署前，还需要补齐统一身份认证、审计与数据合规（见[已知限制](#已知限制)）。
 
-校园政策与办事流程问答、知识库管理、有限工具调用、校园服务和外部插件管理。前端采用 Vue 3 + TypeScript + Vite + Element Plus + Pinia；后端采用 FastAPI + SQLAlchemy + LangGraph，支持 Qwen3 / DeepSeek、BGE-M3 + Chroma 和 PostgreSQL。
-
-**1.2.0 的许可证为 Apache License 2.0**（`LICENSE`，另有 `NOTICE`）：可以自由使用、修改与分发，包括商业使用、校园内部部署，以及闭源的修改版本；分发时需保留版权与许可声明并标注改动。安装包内还包含 Electron、CPython、FastAPI 等第三方组件，各自的许可证见 `THIRD-PARTY-NOTICES.md`。
-
-
-**1.0 可配置发布版（现为 1.1.0）。** 设置页可配置模型 API Key、Ollama 开源模型下载和九类校园 HTTPS JSON 数据接口。未配置的校园类型使用明确标识的演示数据；软件不附带真实学校接口、统一身份认证或模型密钥，校园生产部署仍需学校提供已授权的接口并验收。接入格式见 [校园接口说明](CAMPUS-DATA.md)，验证范围见 [验证记录](VERIFICATION.md)。
-
-## Windows 快速启动
-
-要求 Python 3.10+、Node.js 22+。可直接双击 `install.cmd`，它会安装项目内依赖、检查 LangGraph、执行后端测试并编译前端；任何一步失败会停止。完成后分别双击 `start-backend.cmd` 和 `start-frontend.cmd`，访问 <http://localhost:5173>。前端 CMD 入口提供编译后的页面；这两个终端应保持运行，关闭终端即停止服务。
-
-完整向量依赖可以运行 `install.cmd --full-rag`。已有 `.env` 会被保留，若此前关闭向量检索，需要自行设置 `ENABLE_RAG=true`。
-
-也可以在本目录打开 PowerShell：
-
-```powershell
-.\setup.ps1
-```
-
-脚本在 `backend/.venv` 中安装 Python 依赖，安装前端依赖并执行构建；首次运行会创建 `backend/.env` 和随机管理员令牌。已有 `.env` 不会被覆盖。脚本需要联网访问官方软件包仓库。
-
-在两个终端分别执行：
-
-```powershell
-.\start-backend.ps1
-```
-
-```powershell
-.\start-frontend.ps1
-```
-
-打开 <http://localhost:5173>；接口文档位于 <http://localhost:8000/docs>。在设置页填写 `backend/.env` 内的 `ADMIN_TOKEN` 后，即可管理文档和插件。令牌只保存在当前浏览器会话中。
-
-如系统执行策略不允许运行脚本，可按下面的手动命令启动，无需降低系统执行策略。
-
-## 手动安装
-
-```powershell
-cd backend
-python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-# 编辑 .env，替换 ADMIN_TOKEN 为自行生成的强随机令牌
-.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-另一个终端：
-
-```powershell
-cd frontend
-npm install --cache .npm-cache
-npm run dev
-```
-
-## 模型与向量检索
-
-基本安装包含 LangGraph。无模型密钥时使用规则规划和知识库原文摘录，不会伪造模型回答。SQLite 首次启动加载三份明确标识的演示资料；PostgreSQL 不自动加载演示知识库。
-
-在设置页保存 Qwen/DeepSeek 的 API Key、HTTPS API 地址和模型名称，再点“测试已保存配置”。桌面版通过 Windows DPAPI 保护新保存的密钥，页面不回显密钥。也兼容在 `backend/.env` 设置 `QWEN_API_KEY` 或 `DEEPSEEK_API_KEY`。`QWEN_MODEL`、`DEEPSEEK_MODEL` 可指定账号实际有权限使用的模型。自动路由对分析/比较问题优先选择已配置的 DeepSeek，其余问题优先选择已配置的 Qwen3；用户可明确选择。模型请求失败会降级到明确标识的原文检索结果。
-
-本地生成模型：先安装并启动 Ollama，在设置页选择 Qwen3 0.6B、Qwen3 1.7B 或 DeepSeek R1 1.5B，选择 Ollama 官方、Hugging Face 或 HF Mirror 下载源。镜像 GGUF 下载固定版本并校验 SHA-256，下载后导入本机 Ollama；可查看进度和取消。选择已安装模型后切换到“本地模型”进行问答。模型文件不随安装包附带。
-
-启用 BGE-M3 + Chroma：
-
-```powershell
-cd backend
-.venv\Scripts\python -m pip install -r requirements-ai.txt
-# 在 .env 设置 ENABLE_RAG=true
-```
-
-也可首次运行 `.\setup.ps1 -FullRag`。BGE-M3 默认模型为 `BAAI/bge-m3`，首次加载需要下载模型；可用 `BGE_MODEL_NAME` 指向已下载的本地模型。重启后端后，在知识库页点击“重建索引”。向量初始化/检索失败会保留 SQL 文档并降级关键词检索；更新失败的旧向量不会被当作最新资料返回。
-
-## PostgreSQL 与 Docker Compose
-
-本地默认使用 `backend/data/campus.db`。使用现有 PostgreSQL 时设置：
-
-```dotenv
-DATABASE_URL=postgresql+psycopg://user:password@localhost:5432/campus_agent
-```
-
-用户名和密码中保留字符应 URL 编码。也可使用包含 PostgreSQL、后端和 Nginx 前端的 Compose 配置：
-
-```powershell
-Copy-Item .env.example .env
-# 编辑根目录 .env，设置 POSTGRES_PASSWORD 和 ADMIN_TOKEN
-# Compose 示例密码应使用字母、数字、连字符或下划线
-docker compose up --build
-```
-
-根目录 `.env` 专用于 Compose，`backend/.env` 专用于手动开发。Compose 默认只绑定 `127.0.0.1:8080`；访问 <http://localhost:8080>。数据库、向量文件和模型缓存使用独立持久化卷。启用完整向量检索时，在根目录 `.env` 设置 `ENABLE_RAG=true`，再重建镜像。Docker 路径尚未在本机运行验证。
+- **本地优先**：知识库、会话、配置与密钥保存在本机（SQLite + 用户数据目录），无需外部数据库，不出网也能问答。
+- **如实标注**：未接入真实校园接口时使用明确标识的「演示数据」；模型不可用时降级为知识库原文摘录，不伪造模型回答。
+- **可选联网**：联网搜索默认关闭，由管理员在设置页启用（免密钥的 Bing，或 Tavily / 博查），并可逐条消息开关；回答引用来源链接与检索时间。
+- **跨平台**：Windows 安装包开箱即用；macOS（Intel / Apple silicon）与 Linux（AppImage / deb）由 CI 构建；手机与平板使用可安装网页版（PWA）。
+- **开源**：Apache License 2.0（[`LICENSE`](LICENSE) 与 [`NOTICE`](NOTICE)），第三方组件清单见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
 
 ## 功能说明
 
-| 功能 | 实现 |
+### 问答与对话
+
+| 功能 | 说明 |
 | --- | --- |
-| 智能问答 | 政策/流程/FAQ 检索、多轮对话、来源片段、刷新恢复历史 |
-| Agent | LangGraph 规划 → 检索或有限工具 → 回答；模型原生 Tool Calling；每次最多一个只读服务调用 |
-| 知识库 | TXT/Markdown/PDF 上传、文件替换、删除、向量重建；单文件 5 MB、50 万字符限制 |
-| 校园服务 | 九类可配置校园数据；成绩、课表、学分、空教室未配置时为演示数据 |
-| 报修 | 用户明确提交；配置接口后 POST 至学校，未配置时仅保存本地演示工单 |
-| 插件 | OpenAlex、Crossref、百度百科可选安装；亦支持 HTTPS JSON 清单、启停、卸载和显式调用 |
-| 管理与状态 | 管理令牌、模型密钥配置状态、后端健康状态、检索降级状态 |
+| 流式回答 | 逐字输出，生成过程中界面即时更新 |
+| 停止生成 | 随时中断；已生成内容连同「已停止」标记一并保存，历史不会伪造完整答案 |
+| 多轮对话 | 保留上下文；刷新或重启后可恢复历史会话 |
+| 来源片段 | 回答附带命中的知识库片段，便于核对依据 |
+| 会话隔离 | 桌面版按本机配置、网页版按浏览器分别隔离；支持单条删除与一键清空 |
+| 回答可信度标记 | 演示数据、降级检索、联网来源等状态在界面上明确标注 |
 
-三个推荐插件是内置连接器，点击安装仅登记配置，不下载或执行第三方 Python/JavaScript。百度百科按用户选择替换原百科方案，以系统浏览器搜索词条，不提供未获授权的内容抓取或 JSON API。OpenAlex/Crossref 通过公开 JSON 接口查询。参照 `examples/plugin-manifest.json` 建立清单，将清单与服务主机写入 `PLUGIN_ALLOWED_HOSTS`。目前插件由管理员显式试调用，普通问答不会自动向外部插件传输消息。清单和服务都只允许公网 HTTPS，禁用重定向/环境代理、固定经过校验的目标 IP 并保留 TLS 主机校验。
+### 知识库与检索
 
-## 验证
+| 功能 | 说明 |
+| --- | --- |
+| 文档格式 | PDF、Markdown、TXT、Word（.docx），单文件 ≤ 5 MB |
+| 文档管理 | 上传、替换、删除；文档数据库是权威数据源 |
+| 关键词检索 | 默认方式，无额外依赖，随安装包即可使用 |
+| 向量检索（可选） | 启用 RAG 后使用 BGE-M3 + Chroma 做语义检索；向量不可用时自动降级为关键词检索并在界面提示 |
+| 索引一致性 | 索引记录版本哈希；删除或更新文档后不会返回过期分段 |
+| 演示资料 | 首次启动的 SQLite 会加载三份明确标识的演示文档；PostgreSQL 不加载演示数据 |
 
-依赖安装成功后运行：
+### 联网搜索（可选，默认关闭）
+
+| 功能 | 说明 |
+| --- | --- |
+| 开关粒度 | 管理员总开关 + 每条消息的单独开关；关闭时应用完全不发起检索 |
+| 服务商 | `auto`（自动）/ Bing（免密钥，中国大陆可直连）/ Tavily / 博查（需 API Key） |
+| 结果处理 | 抓取前 1–3 个网页正文（单页 ≤ 2000 字、响应 ≤ 400 KB），与知识库资料统一编号后注入提示词 |
+| 引用 | 回答中列出带链接的来源与检索时间 |
+| 出站约束 | 仅 HTTPS、固定到已校验的公网 IP（保留 SNI，防 DNS 重绑定）、禁止跳转、有大小与超时上限 |
+
+### 校园服务与报修
+
+| 功能 | 说明 |
+| --- | --- |
+| 校园数据接口 | 九类可配置的 HTTPS JSON 接口：成绩、课表、学分统计、空教室、报修、校园公告、图书馆、餐饮、校车 |
+| 接口配置 | 支持结果路径（JSON 取值路径）与 Bearer 令牌；地址必须 HTTPS |
+| 报修 | 用户显式提交；配置接口后 POST 到学校，未配置时仅保存本机记录并标注「演示」 |
+| 本机记录 | 报修提交后按时间倒序列出，便于确认提交结果 |
+| 演示数据 | 未配置的接口返回明确标识的演示数据，不会假装已接入学校系统 |
+
+### 模型接入
+
+| 方式 | 说明 |
+| --- | --- |
+| 云端 API | Qwen3 / DeepSeek，填写各自 API Key 与 HTTPS 地址；密钥在本机保存，界面不回显 |
+| 自动路由 | 分析 / 比较类问题优先选择已配置的 DeepSeek，其余优先 Qwen3；也可手动指定 |
+| 本地模型 | 内置模型目录（Qwen3 0.6B / 1.7B、DeepSeek R1 1.5B），支持 Ollama 官方 / Hugging Face / HF Mirror 下载源 |
+| 下载可靠性 | 断点续传、固定版本、SHA-256 校验、导入重试，可查看进度与取消 |
+| 降级策略 | 无密钥或模型不可用时，使用规则规划 + 知识库原文摘录，并明确标注 |
+
+### 数据、备份与更新
+
+| 功能 | 说明 |
+| --- | --- |
+| 备份导出 | 一键导出 zip：知识库文档、会话、模型与校园接口配置；SQLite 用 `VACUUM INTO` 生成一致性快照，附各文件 SHA-256 清单 |
+| 备份导入 | 校验后恢复，换机或重装后可完整还原（zip 内含密钥文件，请妥善保管） |
+| 更新检查 | 管理员配置 HTTPS 清单后，设置页可检查新版本并打开下载页；留空则该功能完全不联网 |
+| 版本一致性 | 构建脚本校验桌面、前端、后端三处版本号一致后才允许打包 |
+
+### 桌面体验
+
+| 功能 | 说明 |
+| --- | --- |
+| 开箱即用 | 安装包内置 Python 运行时，无需另装 Python / Node / 数据库 |
+| 窗口记忆 | 记住窗口大小与位置（越界坐标会被丢弃） |
+| 日志与数据目录 | 设置页可查看后端日志、打开数据目录 |
+| 外观 | 浅色 / 深色 / 跟随系统，自定义主题色；侧栏与移动端布局分别适配 |
+| 运行时校验 | 冻结后端以随机端口 + 一次性令牌启动，桌面外壳校验启动信封后才加载界面 |
+
+### 插件与运维
+
+| 功能 | 说明 |
+| --- | --- |
+| 内置插件 | OpenAlex 学术检索、Crossref 文献查询、百度百科词条跳转（按需安装，仅登记配置） |
+| 插件清单 | 支持 HTTPS JSON 清单；主机需写入 `PLUGIN_ALLOWED_HOSTS` 白名单 |
+| 调用方式 | 由管理员显式试调用；插件只能返回 JSON，普通问答不会自动向外部插件发送消息 |
+| 出站约束 | 与联网搜索相同的 HTTPS / 固定 IP / 禁跳转 / 限额策略 |
+
+## 平台支持
+
+| 平台 | 状态 | 交付物与数据目录 |
+| --- | --- | --- |
+| Windows 10/11 x64 | **已构建并真机验收** | `Mens-Setup-1.2.0-x64.exe`（NSIS，用户级安装到 `%LOCALAPPDATA%\Programs\Mens`），数据在 `%APPDATA%\CampusAgent` |
+| macOS 12+（Intel） | CI 构建，未真机验收 | `Mens-1.2.0-x64.dmg` / `.zip`；未签名未公证，首次打开需右键「打开」 |
+| macOS 12+（Apple silicon） | CI 构建，未真机验收 | `Mens-1.2.0-arm64.dmg` / `.zip`；数据在 `~/Library/Application Support/CampusAgent` |
+| Linux x64 | CI 构建，未真机验收 | `Mens-1.2.0-x86_64.AppImage`（免安装）、`Mens-1.2.0-amd64.deb`；数据在 `~/.config/CampusAgent` |
+| Android / iOS | 不提供原生应用 | 使用可安装网页版（PWA）：浏览器打开部署好的站点 → 添加到主屏幕；推理由服务端完成 |
+
+> 「已验收」指在对应系统上真实安装、启动并完成界面检查；「CI 构建」指由 GitHub Actions 生成产物但尚未真机运行。
+> 平台矩阵、构建命令与原因说明见 [PLATFORMS.md](PLATFORMS.md)，实际结果与验收范围见 [VERIFICATION.md](VERIFICATION.md)。
+
+### Release 资产（v1.2.0）
+
+| 资产 | 大小 | 说明 |
+| --- | --- | --- |
+| `Mens-Setup-1.2.0-x64.exe`（+ `.blockmap`） | 126,402,135 B | Windows 安装包，本机安装验收使用的就是这一份 |
+| `Mens-1.2.0-x64.dmg` / `Mens-1.2.0-x64.zip` | ≈ 158 MB | macOS Intel |
+| `Mens-1.2.0-arm64.dmg` / `Mens-1.2.0-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
+| `Mens-1.2.0-x86_64.AppImage` / `Mens-1.2.0-amd64.deb` | 191 MB / 153 MB | Linux |
+
+安装包内含 `LICENSE`、`NOTICE` 与 `THIRD-PARTY-NOTICES.md`（安装后位于 `resources/`）。
+
+## 快速开始
+
+### 1. 安装 Windows 桌面版
+
+下载 [最新 Release](https://github.com/HuanMoovo/campus-agent/releases/latest) 中的
+`Mens-Setup-1.2.0-x64.exe`，双击安装（用户级安装，无需管理员权限），从开始菜单或桌面启动。
+首次启动后在设置页填写模型 API Key（或选择 Ollama 本地模型）即可开始问答。
+
+### 2. 从源码构建桌面版
+
+三个平台使用同一脚本，产物写入 `release/`：
+
+```bash
+# 当前平台（自动判断架构）
+python scripts/build_desktop.py
+
+# 指定目标
+python scripts/build_desktop.py --os mac   --arch arm64
+python scripts/build_desktop.py --os linux --arch x64
+
+# 常用开关
+#   --skip-install   使用已装好的依赖（快速重建）
+#   --directory      只生成未打包的应用目录
+#   --full-rag       一并打包向量检索依赖（体积更大）
+```
+
+脚本会依次执行后端 / 前端 / 桌面三套测试、冻结后端、再用 electron-builder 打包；
+任一步失败即停止，不会产出安装包。
+
+### 3. 源码开发运行（网页版）
+
+Windows 可直接双击 `install.cmd`（安装依赖、检查 LangGraph、跑后端测试、编译前端），
+随后分别运行 `start-backend.cmd` 与 `start-frontend.cmd`，访问 <http://localhost:5173>。
+
+也可以手动执行：
 
 ```powershell
+# 后端（终端一）
+cd backend
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+Copy-Item .env.example .env          # 把 ADMIN_TOKEN 改成自行生成的强随机值
+.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# 前端（终端二）
+cd frontend
+npm install
+npm run dev
+```
+
+前端 <http://localhost:5173>，接口文档 <http://localhost:8000/docs>。
+在设置页填入 `backend/.env` 中的 `ADMIN_TOKEN` 后即可管理文档与插件（令牌只保存在当前浏览器会话）。
+
+### 4. 服务器部署与手机 / 平板（PWA）
+
+后端在服务器上运行后，手机浏览器打开站点并「添加到主屏幕」即可获得全屏、独立图标的类应用体验。
+仓库提供 `compose.yaml`（PostgreSQL + 后端 + Nginx 前端，默认只绑定 `127.0.0.1:8080`）：
+
+```powershell
+Copy-Item .env.example .env      # 设置 POSTGRES_PASSWORD 与 ADMIN_TOKEN
+docker compose up --build        # 访问 http://localhost:8080
+```
+
+> Compose 路径尚未在本机验证；Docker 相关端口、卷与镜像说明见 `compose.yaml`。
+
+## 配置参考
+
+### backend/.env
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `DATABASE_URL` | `sqlite:///backend/data/campus.db` | 也可用 PostgreSQL：`postgresql+psycopg://user:pass@host:5432/campus_agent`（保留字符需 URL 编码） |
+| `ADMIN_TOKEN` | 空 | 管理令牌；设置页凭它管理文档与插件，部署前必须替换 |
+| `QWEN_API_KEY` / `DEEPSEEK_API_KEY` | 空 | 云端模型密钥（也可在设置页保存） |
+| `QWEN_BASE_URL` / `DEEPSEEK_BASE_URL` | 官方 HTTPS 地址 | 必须是 HTTPS |
+| `QWEN_MODEL` / `DEEPSEEK_MODEL` | `qwen3-235b-a22b` / `deepseek-chat` | 改成账号实际有权限的模型 |
+| `ENABLE_RAG` | `false` | 启用 BGE-M3 + Chroma 向量检索（需先安装 `requirements-ai.txt`） |
+| `BGE_MODEL_NAME` | `BAAI/bge-m3` | 也可指向已下载到本机的模型 |
+| `PLUGIN_ALLOWED_HOSTS` | 空 | 允许插件访问的主机白名单（逗号分隔） |
+| `CORS_ORIGINS` | `http://localhost:5173` | 网页版跨域来源 |
+| `WEB_SEARCH_ENABLED` | `false` | 联网搜索总开关 |
+| `WEB_SEARCH_PROVIDER` | `auto` | `auto` / `bing`（免密钥）/ `tavily` / `bocha` |
+| `WEB_SEARCH_API_KEY` | 空 | Tavily 或博查的密钥 |
+| `WEB_SEARCH_MAX_RESULTS` | `5` | 每次检索返回的结果条数 |
+| `WEB_SEARCH_FETCH_PAGES` | `2` | 抓取正文的网页数（最多 3） |
+| `UPDATE_MANIFEST_URL` | 空 | 可选的 HTTPS 更新清单，例如 `{"version":"1.2.0","url":"https://…","notes":"…"}`；留空则不做更新检查 |
+
+桌面版由外壳注入 `CAMPUS_DESKTOP_MODE`、`CAMPUS_DESKTOP_TOKEN`、`CAMPUS_DESKTOP_NONCE`、
+`CAMPUS_DATA_DIR`、`CAMPUS_FRONTEND_DIR`、`CAMPUS_CONFIG_FILE`（无需手填；仅接受绝对路径）。
+
+### 模型与向量检索
+
+- 设置页保存密钥后点「测试已保存配置」验证连通性；Windows 用 DPAPI 加密保存新密钥，页面不回显。
+- 本地模型：先安装并启动 Ollama，在设置页选择模型与下载源；GGUF 下载固定版本并校验 SHA-256 后导入本机 Ollama。模型文件不随安装包附带。
+- 启用向量检索：
+
+  ```powershell
+  cd backend
+  .venv\Scripts\python -m pip install -r requirements-ai.txt
+  # 在 .env 设置 ENABLE_RAG=true，重启后端后在知识库页点「重建索引」
+  ```
+
+  首次加载 `BAAI/bge-m3` 需要联网下载；向量初始化或检索失败会保留文档并降级为关键词检索。
+
+### 校园数据接口
+
+九类接口的字段、取值路径与示例见 [CAMPUS-DATA.md](CAMPUS-DATA.md)。要点：
+
+- 只接受 HTTPS JSON；支持 Bearer 令牌与结果路径。
+- 未配置的接口使用明确标识的演示数据；项目**不附带**任何真实学校接口、统一身份认证或模型密钥。
+- 生产部署需学校提供已授权接口并完成验收；多人使用前还需补齐统一身份认证、按用户绑定学号、访问审计与限流（详见 [校园数据说明](CAMPUS-DATA.md) 与 [架构说明](ARCHITECTURE.md)）。
+
+## 架构与安全边界
+
+### 技术栈
+
+- **前端**：Vue 3 + TypeScript + Vite + Element Plus + Pinia；构建时按依赖分包（主包约 71 KB）。
+- **后端**：FastAPI + SQLAlchemy + LangGraph；默认 SQLite 单文件数据库，可选 PostgreSQL。
+- **桌面**：Electron 外壳 + PyInstaller 冻结的 CPython（安装包内置运行时）。
+- **可安装网页版**：清单（manifest）、离线外壳（service worker）与 iOS 安全区适配。
+
+### 安全设计
+
+- **本机优先**：桌面版后端只监听 `127.0.0.1` 的随机端口，每次启动生成一次性令牌；外壳注入额外请求头并收紧 Electron 配置（`nodeIntegration:false`、`contextIsolation:true`、`sandbox:true`、`webSecurity:true`、禁用 `webviewTag`），外部页面拿不到这些接口。
+- **出站纪律**（插件 / 联网搜索 / 更新检查共用）：仅 HTTPS + 443；连接固定到解析并经校验的公网地址（保留 SNI，防 DNS 重绑定）；禁止跳转；有响应大小与超时上限；忽略系统代理环境变量（`trust_env=False`）；解析到内网地址直接拒绝。
+- **密钥存储**：Windows 用 DPAPI 加密；macOS / Linux 无等价系统接口，改为 `0600` 权限的明文文件（同一用户可读）——这一点在 [PLATFORMS.md](PLATFORMS.md) 中明确写出。
+- **备份**：导出 zip 内含密钥文件，请自行妥善保管；导入前校验 SHA-256 清单。
+- **不伪造**：演示数据、降级检索、联网来源等状态一律在界面标注。
+
+### 目录结构
+
+```text
+campus-agent/
+├─ backend/         FastAPI 后端（app/ 源码、tests/ 测试、requirements*.txt）
+├─ frontend/        Vue 3 前端（src/、tests/、dist/ 构建产物）
+├─ desktop/         Electron 外壳（main.cjs、preload.cjs、lib/、assets/ 图标）
+├─ scripts/         构建与打包（build_desktop.py、install.py、create_icon.py 等）
+├─ docs/            项目介绍页（GitHub Pages，中 / 英 / 日）
+├─ assets/          品牌源图
+├─ examples/        插件清单示例
+├─ PLATFORMS.md     平台矩阵与构建方式
+├─ DESKTOP.md       桌面版说明
+├─ ARCHITECTURE.md  架构与主要接口
+├─ CAMPUS-DATA.md   校园接口接入格式
+├─ VERIFICATION.md  验证记录（含大小、SHA-256 与验收范围）
+└─ LICENSE / NOTICE / THIRD-PARTY-NOTICES.md
+```
+
+## 测试与验证
+
+```powershell
+# 后端（260 个用例，含 65 个子测试）
+cd backend
+.venv\Scripts\python -m pytest -q
+
+# 前端（13 个单元测试）与生产构建
+cd ..\frontend
+npm test
+npm run build
+
+# 桌面外壳（8 个测试）
+cd ..\desktop
+npm test
+
+# 一次跑完以上全部（Windows）
 .\verify.ps1
 ```
 
-包括后端核心逻辑、请求模型、API 集成测试和前端类型检查/生产构建。也可单独执行：
-
-```powershell
-cd backend
-.venv\Scripts\python -m pytest -q
-cd ..\frontend
-npm run build
-```
-
-无法联网时，可用系统 Python 运行两组隔离测试：
+离线环境可用系统 Python 运行两组纯逻辑测试（不依赖框架 / 网络 / 数据库）：
 
 ```powershell
 cd backend
@@ -148,10 +316,47 @@ python -m unittest discover -s tests -p test_core_unit.py -v
 python -m unittest discover -s tests -p test_agent_unit.py -v
 ```
 
-这两组替代了框架/网络/数据库导入，测试生产的核心校验和决策逻辑，不能替代真实 FastAPI、LangGraph、Chroma、模型服务或浏览器联调。没有测试可以保证绝对无 Bug。
+这些测试覆盖核心校验与决策逻辑，但不能替代真实 FastAPI、LangGraph、Chroma、模型服务或浏览器联调；
+没有任何测试能保证绝对无 Bug。已完成的验证范围、安装包大小与 SHA-256 见 [VERIFICATION.md](VERIFICATION.md)。
 
-## 接入真实校园系统之前
+## 界面
 
-先按 [校园接口说明](CAMPUS-DATA.md) 配置学校授权 HTTPS JSON 网关；若学校接口格式不同，需要适配字段。多人部署前还需增加统一身份认证、按登录用户绑定学号和数据访问权限。演示对话当前使用随机会话 ID 作为访问凭据，只适合本地开发；生产需要用户归属校验、操作审计、限流、HTTPS、数据库迁移与备份策略。真实报修需定义幂等和审批/派工流程。当前版本不包含这些学校相关能力，不应直接公开作为生产校园系统。
+| 聊天（含联网来源） | 设置（联网搜索） |
+| --- | --- |
+| <img src="docs/img/chat-web-search.png" alt="聊天界面：联网搜索结果与来源链接" /> | <img src="docs/img/settings-web-search.png" alt="设置界面：联网搜索配置" /> |
 
-源文件和主要接口见 [架构说明](ARCHITECTURE.md)。
+| 校园服务（报修与本机记录） |
+| --- |
+| <img src="docs/img/campus-services.png" alt="校园服务界面：报修与本机记录" /> |
+
+## 已知限制
+
+- **macOS / Linux 产物未真机验收**：由 CI 构建，尚未在真机上安装运行。
+- **未签名、未公证**：没有发行者证书，Windows / macOS 首次打开可能出现系统提示；正式分发前应配置签名。
+- **校园接口与统一登录**：项目不附带任何真实学校接口、统一身份认证或模型密钥；生产部署需学校提供已授权接口并验收。
+- **云端模型与联网搜索**：需要各自的 API Key（联网搜索的 Bing 通道免密钥）；搜索服务端的可用性受网络环境限制。
+- **原生 Android / iOS 应用**：不在本项目范围，原因见 [PLATFORMS.md](PLATFORMS.md)（Python 后端无法随应用上架移动平台）。
+- **一键更新**：更新检查只提示版本差异并打开下载页，不做自动下载与静默安装。
+- **Docker Compose 路径**：本机未验证。
+- **多人部署**：当前演示会话以随机会话 ID 作为访问凭据，仅适合本地开发；生产需要用户归属校验、操作审计、限流、HTTPS、数据库迁移与备份策略。
+
+## 开源协议
+
+本项目以 **Apache License 2.0** 发布（[`LICENSE`](LICENSE)），版权与归属声明见 [`NOTICE`](NOTICE)。
+
+- **可以**：自由使用、修改、再分发，包括商业使用、校园内部部署与闭源的修改版本。
+- **需要**：保留版权、许可证与 NOTICE 声明，标注修改过的文件；本许可证不授予项目名称或商标的使用权。
+- **无担保**：软件按「现状」提供，不附带任何明示或默示担保。
+- **第三方组件**：安装包内含 Electron、Chromium、CPython、PyInstaller、FastAPI、Vue、Element Plus 等，各自按原许可证分发，清单见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
+
+## 相关文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [项目介绍页](https://huanmoovo.github.io/campus-agent/) | 中 / 英 / 日三语的图文介绍、平台矩阵与已知限制 |
+| [PLATFORMS.md](PLATFORMS.md) | 平台矩阵、构建命令、macOS / Linux 凭据存储差异、移动端方案原因 |
+| [DESKTOP.md](DESKTOP.md) | 桌面版运行方式、数据目录、IPC 与安全设置 |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | 架构、模块职责与主要接口 |
+| [CAMPUS-DATA.md](CAMPUS-DATA.md) | 九类校园接口的字段与接入格式 |
+| [VERIFICATION.md](VERIFICATION.md) | 每批改动的验证方式、安装包大小与 SHA-256、未验证范围 |
+| [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | 第三方组件与许可证清单 |
