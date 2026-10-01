@@ -312,3 +312,164 @@ def test_ollama_success_stream_completes(monkeypatch):
     current = runtime.DownloadJob("test-pull", "qwen3:0.6b", "ollama")
     runtime._run_download(current)
     assert current.status == "completed" and current.progress == 1
+
+
+def model_download_dir(settings):
+    return settings.data_dir / "model-downloads"
+
+
+def test_interrupted_download_keeps_a_resumable_partial(monkeypatch, isolated_settings):
+    big = b"tiny-gguf-payload-" * 160_000  # ~2.7 MB so a whole read chunk reaches the loop before the drop
+    spec, data = tiny_spec(monkeypatch, data=big)
+    monkeypatch.setattr(runtime.socket, "getaddrinfo", lambda *a, **kw: dns("8.8.8.8"))
+
+    class DropAfterOneChunk(httpx.SyncByteStream):
+        def __iter__(self):
+            yield data[:1_500_000]
+            raise httpx.ReadTimeout("connection dropped", request=httpx.Request("GET", "https://huggingface.co/"))
+
+    mock_clients(monkeypatch, lambda request: httpx.Response(200, stream=DropAfterOneChunk()))
+    current = job()
+    runtime._run_download(current)
+    assert current.status == "failed"
+    assert "断点" in current.error
+    parts = list(model_download_dir(isolated_settings).iterdir())
+    assert len(parts) == 1
+    assert parts[0].stat().st_size == 1_048_576
+    assert parts[0].read_bytes() == data[:1_048_576]
+
+
+def test_resume_sends_range_header_and_imports_the_complete_file(monkeypatch, isolated_settings):
+    spec, data = tiny_spec(monkeypatch)
+    directory = model_download_dir(isolated_settings)
+    directory.mkdir(parents=True, exist_ok=True)
+    runtime._gguf_partial_path(directory, spec).write_bytes(data[:7])
+    monkeypatch.setattr(runtime.socket, "getaddrinfo", lambda *a, **kw: dns("8.8.8.8"))
+    ranges, uploaded = [], []
+
+    def respond(request):
+        if request.method == "GET":
+            ranges.append(request.headers.get("Range"))
+            return httpx.Response(206, content=data[7:])
+        if "/api/blobs/" in request.url.path:
+            uploaded.append(request.read())
+            return httpx.Response(201)
+        return httpx.Response(200, content=b'{"status":"success"}\n')
+
+    mock_clients(monkeypatch, respond)
+    current = job()
+    runtime._run_download(current)
+    assert current.status == "completed" and current.progress == 1
+    assert ranges == ["bytes=7-"]
+    assert uploaded == [data]
+    assert list(directory.iterdir()) == []
+
+
+def test_server_ignoring_range_restarts_instead_of_mixing_bytes(monkeypatch, isolated_settings):
+    spec, data = tiny_spec(monkeypatch)
+    directory = model_download_dir(isolated_settings)
+    directory.mkdir(parents=True, exist_ok=True)
+    stale = b"junk" * 3
+    runtime._gguf_partial_path(directory, spec).write_bytes(stale)
+    monkeypatch.setattr(runtime.socket, "getaddrinfo", lambda *a, **kw: dns("8.8.8.8"))
+    ranges, uploaded = [], []
+
+    def respond(request):
+        if request.method == "GET":
+            ranges.append(request.headers.get("Range"))
+            return httpx.Response(200, content=data)
+        if "/api/blobs/" in request.url.path:
+            uploaded.append(request.read())
+            return httpx.Response(201)
+        return httpx.Response(200, content=b'{"status":"success"}\n')
+
+    mock_clients(monkeypatch, respond)
+    current = job()
+    runtime._run_download(current)
+    assert current.status == "completed"
+    assert ranges == [f"bytes={len(stale)}-"]
+    assert uploaded == [data]
+    assert list(directory.iterdir()) == []
+
+
+def test_complete_verified_partial_skips_the_download(monkeypatch, isolated_settings):
+    spec, data = tiny_spec(monkeypatch)
+    directory = model_download_dir(isolated_settings)
+    directory.mkdir(parents=True, exist_ok=True)
+    runtime._gguf_partial_path(directory, spec).write_bytes(data)
+    monkeypatch.setattr(runtime.socket, "getaddrinfo", lambda *a, **kw: dns("8.8.8.8"))
+    uploaded = []
+
+    def respond(request):
+        if request.method == "GET":
+            pytest.fail("A verified complete file was downloaded again")
+        if "/api/blobs/" in request.url.path:
+            uploaded.append(request.read())
+            return httpx.Response(201)
+        return httpx.Response(200, content=b'{"status":"success"}\n')
+
+    mock_clients(monkeypatch, respond)
+    current = job()
+    runtime._run_download(current)
+    assert current.status == "completed"
+    assert uploaded == [data]
+    assert list(directory.iterdir()) == []
+
+
+def test_corrupt_full_size_partial_is_downloaded_again(monkeypatch, isolated_settings):
+    spec, data = tiny_spec(monkeypatch)
+    directory = model_download_dir(isolated_settings)
+    directory.mkdir(parents=True, exist_ok=True)
+    runtime._gguf_partial_path(directory, spec).write_bytes(b"y" * len(data))
+    monkeypatch.setattr(runtime.socket, "getaddrinfo", lambda *a, **kw: dns("8.8.8.8"))
+    ranges, uploaded = [], []
+
+    def respond(request):
+        if request.method == "GET":
+            ranges.append(request.headers.get("Range"))
+            return httpx.Response(200, content=data)
+        if "/api/blobs/" in request.url.path:
+            uploaded.append(request.read())
+            return httpx.Response(201)
+        return httpx.Response(200, content=b'{"status":"success"}\n')
+
+    mock_clients(monkeypatch, respond)
+    current = job()
+    runtime._run_download(current)
+    assert current.status == "completed"
+    assert ranges == [None]
+    assert uploaded == [data]
+    assert list(directory.iterdir()) == []
+
+
+def test_import_failure_keeps_the_verified_file_for_retry(monkeypatch, isolated_settings):
+    spec, data = tiny_spec(monkeypatch)
+    monkeypatch.setattr(runtime.socket, "getaddrinfo", lambda *a, **kw: dns("8.8.8.8"))
+    state = {"fail_import": True}
+    uploaded, downloads = [], []
+
+    def respond(request):
+        if request.method == "GET":
+            downloads.append(request)
+            return httpx.Response(200, content=data)
+        if "/api/blobs/" in request.url.path:
+            if state["fail_import"]:
+                return httpx.Response(500, content=b"ollama not running")
+            uploaded.append(request.read())
+            return httpx.Response(201)
+        return httpx.Response(200, content=b'{"status":"success"}\n')
+
+    mock_clients(monkeypatch, respond)
+    first = job()
+    runtime._run_download(first)
+    assert first.status == "failed"
+    assert "导入" in first.error
+    directory = model_download_dir(isolated_settings)
+    assert [item.read_bytes() for item in directory.iterdir()] == [data]
+    state["fail_import"] = False
+    second = job()
+    runtime._run_download(second)
+    assert second.status == "completed"
+    assert len(downloads) == 1
+    assert uploaded == [data]
+    assert list(directory.iterdir()) == []

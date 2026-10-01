@@ -1,10 +1,15 @@
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
+import hashlib
 import json
+import os
+from pathlib import Path
 import secrets
+import sqlite3
 import logging
-from datetime import timezone
+from datetime import datetime, timezone
 from io import BytesIO
 from uuid import uuid4
+from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -295,8 +300,8 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
 async def parse_upload(file: UploadFile) -> tuple[str, str]:
     filename = file.filename or ""
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
-    if suffix not in {"txt", "md", "pdf"}:
-        raise HTTPException(400, "仅支持 TXT、Markdown 和 PDF")
+    if suffix not in {"txt", "md", "pdf", "docx"}:
+        raise HTTPException(400, "仅支持 TXT、Markdown、PDF 和 Word (.docx 新版格式)")
     raw = await file.read(5_000_001)
     if len(raw) > 5_000_000:
         raise HTTPException(413, "文件超过 5 MB")
@@ -304,15 +309,38 @@ async def parse_upload(file: UploadFile) -> tuple[str, str]:
         if suffix == "pdf":
             from pypdf import PdfReader
             content = "\n".join(page.extract_text() or "" for page in PdfReader(BytesIO(raw)).pages)
+        elif suffix == "docx":
+            content = docx_text(raw)
         else:
             content = raw.decode("utf-8-sig")
     except Exception as exc:
-        raise HTTPException(400, "文件无法解析") from exc
+        raise HTTPException(400, "文件无法解析；旧版 .doc 请先另存为 .docx") from exc
     if not content.strip():
         raise HTTPException(400, "文档没有可提取的文本")
     if len(content) > 500_000:
         raise HTTPException(413, "文档文本超过 50 万字符，请拆分上传")
     return filename[:255], content
+
+
+def docx_text(raw: bytes) -> str:
+    """Extract paragraph text from a .docx (OOXML) archive with the standard library only."""
+    from xml.etree import ElementTree
+
+    try:
+        with ZipFile(BytesIO(raw)) as archive:
+            info = archive.getinfo("word/document.xml")
+            if info.file_size > 30_000_000:
+                raise ValueError("Word document body is too large")
+            root = ElementTree.fromstring(archive.read("word/document.xml"))
+    except (BadZipFile, ElementTree.ParseError, KeyError, OSError, ValueError) as exc:
+        raise ValueError("Word document cannot be read") from exc
+    namespace = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+    lines = []
+    for paragraph in root.iter(f"{namespace}p"):
+        line = "".join(node.text or "" for node in paragraph.iter(f"{namespace}t")).strip()
+        if line:
+            lines.append(line)
+    return "\n".join(lines)
 
 
 @app.put("/api/documents/{document_id}/upload", dependencies=[Depends(require_admin)])
@@ -540,6 +568,120 @@ def cancel_local_model_job(job_id: str):
     if result is None:
         raise HTTPException(404, "下载任务不存在")
     return result
+
+
+BACKUP_FORMAT = 1
+BACKUP_CONFIG_FILES = ("workspace.json", "model-providers.json", "campus-sources.json", ".env")
+BACKUP_MAX_BYTES = 200_000_000
+
+
+def sqlite_database_path() -> Path | None:
+    url = get_settings().database_url
+    if not url.startswith("sqlite:///"):
+        return None
+    return Path(url.removeprefix("sqlite:///"))
+
+
+@app.get("/api/backup/export", dependencies=[Depends(require_admin)])
+def export_backup():
+    """Zip of knowledge base, conversations and configuration; SQLite is snapshotted through VACUUM INTO."""
+    data_dir = Path(get_settings().data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    files: dict[str, dict] = {}
+    database = "server-managed"
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+        database_path = sqlite_database_path()
+        if database_path is not None and database_path.is_file():
+            database = "sqlite"
+            snapshot = data_dir / ".mens-backup-snapshot.db"
+            snapshot.unlink(missing_ok=True)
+            try:
+                with engine.connect() as connection:
+                    connection.exec_driver_sql("VACUUM INTO ?", (str(snapshot),))
+                payload = snapshot.read_bytes()
+            finally:
+                snapshot.unlink(missing_ok=True)
+            archive.writestr("campus.db", payload)
+            files["campus.db"] = {"size": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+        for name in BACKUP_CONFIG_FILES:
+            path = data_dir / name
+            if path.is_file():
+                payload = path.read_bytes()
+                archive.writestr(name, payload)
+                files[name] = {"size": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+        manifest = {"app": "Mens", "format": BACKUP_FORMAT, "created_at": iso_utc(datetime.now(timezone.utc)),
+                    "database": database, "files": files}
+        archive.writestr("mens-backup.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+    buffer.seek(0)
+    filename = f"mens-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+    return StreamingResponse(buffer, media_type="application/zip",
+                             headers={"Content-Disposition": f'attachment; filename="{filename}"',
+                                      "Cache-Control": "no-store"})
+
+
+@app.post("/api/backup/import", dependencies=[Depends(require_admin)])
+async def import_backup(file: UploadFile = File(...)):
+    """Restore a Mens backup; the live SQLite database is replaced through the backup API, never by file swap."""
+    raw = await file.read(BACKUP_MAX_BYTES + 1)
+    if len(raw) > BACKUP_MAX_BYTES:
+        raise HTTPException(413, "备份文件超过 200 MB")
+    try:
+        archive = ZipFile(BytesIO(raw))
+    except BadZipFile as exc:
+        raise HTTPException(400, "不是有效的备份文件（zip）") from exc
+    with archive:
+        names = archive.namelist()
+        if "mens-backup.json" not in names:
+            raise HTTPException(400, "缺少备份清单 mens-backup.json")
+        allowed = {"mens-backup.json", "campus.db", *BACKUP_CONFIG_FILES}
+        if any(name not in allowed or "/" in name or "\\" in name for name in names):
+            raise HTTPException(400, "备份文件包含不允许的路径")
+        try:
+            manifest = json.loads(archive.read("mens-backup.json"))
+            payloads = {name: archive.read(name) for name in names if name != "mens-backup.json"}
+        except (ValueError, KeyError, OSError) as exc:
+            raise HTTPException(400, "备份内容无法读取") from exc
+    if not isinstance(manifest, dict) or manifest.get("app") != "Mens" or manifest.get("format") != BACKUP_FORMAT:
+        raise HTTPException(400, "备份格式不受支持")
+    data_dir = Path(get_settings().data_dir)
+    data_dir.mkdir(parents=True, exist_ok=True)
+    restored: list[str] = []
+    failed: list[str] = []
+    if "campus.db" in payloads:
+        database_path = sqlite_database_path()
+        if database_path is None:
+            raise HTTPException(400, "该部署使用服务器数据库，不能导入 SQLite 备份")
+        staging = data_dir / ".mens-restore-staging.db"
+        staging.write_bytes(payloads["campus.db"])
+        try:
+            # Validate the uploaded database before the live file is touched at all.
+            with closing(sqlite3.connect(staging)) as source:
+                tables = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if not {"conversations", "messages", "documents"} <= tables:
+                    raise HTTPException(400, "备份中的数据库不是 Mens 数据")
+                with closing(sqlite3.connect(database_path)) as target:
+                    source.backup(target)
+        except sqlite3.DatabaseError as exc:
+            raise HTTPException(400, "备份中的数据库无法读取") from exc
+        finally:
+            staging.unlink(missing_ok=True)
+        ensure_conversation_client_id()
+        restored.append("campus.db")
+    for name in BACKUP_CONFIG_FILES:
+        if name in payloads:
+            temporary = data_dir / f".{name.lstrip('.')}.import"
+            try:
+                temporary.write_bytes(payloads[name])
+                os.replace(temporary, data_dir / name)
+                restored.append(name)
+            except OSError:
+                failed.append(name)
+                temporary.unlink(missing_ok=True)
+                logger.warning("Could not restore backup file %s", name)
+    logger.info("Backup imported: %s", ", ".join(restored) or "nothing")
+    return {"restored": restored, "failed": failed,
+            "restart_required": any(name in payloads for name in (".env", "workspace.json"))}
 
 
 install_desktop_routes(app)

@@ -238,6 +238,8 @@ button { cursor: pointer; }
 .file-cell .el-icon { color: var(--accent-text); flex: 0 0 18px; }.file-cell span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .status-text { display: inline-block; background: var(--success-soft); color: var(--success-text); border-radius: 3px; padding: 3px 7px; font-size: 11px; }
 .table-action { color: var(--accent-text); cursor: pointer; font-size: 12px; margin-right: 13px; }.table-action input { display: none; }
+.backup-actions { display: flex; gap: 9px; flex-shrink: 0; align-items: center; }
+.backup-info { margin: 10px 0 0; color: var(--success-text); font-size: 12px; overflow-wrap: anywhere; }
 .data-panel .el-table { --el-table-border-color: var(--border-subtle); --el-table-header-bg-color: var(--surface-muted); }
 
 .install-band { display: flex; align-items: center; justify-content: space-between; gap: 30px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 21px 0; margin-bottom: 24px; }

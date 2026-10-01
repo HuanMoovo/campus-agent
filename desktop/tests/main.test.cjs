@@ -73,7 +73,13 @@ test('desktop main process confines requests and IPC and waits for backend shutd
       showItemInFolder(value) { revealedPath = value },
       async openExternal(value) { externalUrl = value },
     },
-    dialog: { showErrorBox(_title, message) { throw new Error(message) }, showMessageBox() {} },
+    dialog: {
+      showErrorBox(_title, message) { throw new Error(message) }, showMessageBox() {},
+      async showSaveDialog(_window, options) {
+        return { canceled: false, filePath: path.join(temporary, path.basename(options.defaultPath)) }
+      },
+      async showOpenDialog() { return { canceled: false, filePaths: [path.join(temporary, 'picked-backup.zip')] } },
+    },
   }
   const directory = path.resolve(__dirname, '..')
   vm.runInNewContext(fs.readFileSync(path.join(directory, 'main.cjs'), 'utf8'), {
@@ -114,6 +120,19 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   assert.equal(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8')).conversationId, 'c-123')
   assert.match(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8')).clientId, /^[0-9a-f-]{36}$/)
   assert.throws(() => handlers.get('campus:save-workspace')(valid, { clientId: '../escape' }))
+  const backupBytes = new Uint8Array([7, 8, 9, 10])
+  const savedBackup = await handlers.get('campus:save-backup')(valid, { name: 'mens-backup-2026-10-01.zip', bytes: backupBytes })
+  assert.equal(savedBackup.saved, true)
+  assert.deepEqual([...fs.readFileSync(savedBackup.path)], [7, 8, 9, 10])
+  await assert.rejects(handlers.get('campus:save-backup')(valid, { name: '../escape.zip', bytes: backupBytes }))
+  await assert.rejects(handlers.get('campus:save-backup')(valid, { name: 'ok.zip', bytes: 'not bytes' }))
+  await assert.rejects(handlers.get('campus:save-backup')({ sender: web, senderFrame: { url: 'https://evil.example' } }, { name: 'ok.zip', bytes: backupBytes }))
+  fs.writeFileSync(path.join(temporary, 'picked-backup.zip'), Buffer.from([9, 9]))
+  const picked = await handlers.get('campus:pick-backup')(valid)
+  assert.equal(picked.picked, true)
+  assert.equal(picked.name, 'picked-backup.zip')
+  assert.deepEqual([...picked.bytes], [9, 9])
+  await assert.rejects(handlers.get('campus:pick-backup')({ sender: web, senderFrame: { url: 'https://evil.example' } }))
   handlers.get('campus:save-workspace')(valid, { appearance: 'dark', accentColor: '#123abc', localModel: 'qwen3:1.7b' })
   assert.equal(mockElectron.nativeTheme.themeSource, 'dark')
   const savedWorkspace = JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8'))

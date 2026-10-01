@@ -34,4 +34,21 @@ function parseReadyLine(line, nonce) {
   return { origin: `http://127.0.0.1:${value.port}`, port: value.port }
 }
 
-module.exports = { isOwnUrl, validateWorkspace, parseReadyLine }
+const BACKUP_LIMIT = 300 * 1024 * 1024
+
+function validateBackupName(name) {
+  if (typeof name !== 'string' || name.startsWith('.') || !/^[A-Za-z0-9._-]{1,80}\.zip$/.test(name)) {
+    throw new TypeError('Invalid backup file name')
+  }
+  return name
+}
+
+function validateBackupBytes(bytes, limit = BACKUP_LIMIT) {
+  const size = bytes instanceof ArrayBuffer ? bytes.byteLength
+    : ArrayBuffer.isView(bytes) ? bytes.byteLength : -1
+  if (size < 0) throw new TypeError('Invalid backup payload')
+  if (size > limit) throw new TypeError('Backup payload is too large')
+  return size
+}
+
+module.exports = { isOwnUrl, BACKUP_LIMIT, validateWorkspace, parseReadyLine, validateBackupName, validateBackupBytes }

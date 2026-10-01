@@ -115,6 +115,10 @@ const campusForm = ref({ url: '', result_path: '', token: '' })
 const campusError = ref('')
 const campusAction = ref('')
 const activeCampusSource = computed(() => campusSources.value.find(item => item.kind === campusKind.value))
+const backupAction = ref('')
+const backupError = ref('')
+const backupInfo = ref('')
+const backupInput = ref<HTMLInputElement | null>(null)
 let downloadTimer: ReturnType<typeof setTimeout> | undefined
 
 function fileSize(bytes?: number) {
@@ -362,8 +366,85 @@ async function clearConversations() {
   }
 }
 
-function stopChat() {
+async function stopChat() {
   chatAbort.value?.abort()
+}
+
+async function exportBackup() {
+  if (backupAction.value) return
+  backupAction.value = 'export'
+  backupError.value = ''
+  backupInfo.value = ''
+  try {
+    const blob = await api.exportBackup()
+    const name = `mens-backup-${new Date().toISOString().slice(0, 10)}.zip`
+    if (desktop) {
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      const result = await desktop.saveBackup(name, bytes)
+      backupInfo.value = result.saved ? `备份已保存：${result.path || name}` : '已取消导出。'
+    } else {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = name
+      link.click()
+      URL.revokeObjectURL(url)
+      backupInfo.value = `已开始下载 ${name}。`
+    }
+  } catch (error) {
+    backupError.value = `导出失败：${friendlyError(error)}`
+  } finally {
+    backupAction.value = ''
+  }
+}
+
+async function importBackup() {
+  if (backupAction.value) return
+  try {
+    await ElMessageBox.confirm('导入会覆盖当前知识库、对话记录和接口配置，且无法撤销。确定继续？', '导入备份', { type: 'warning', confirmButtonText: '导入', cancelButtonText: '取消' })
+  } catch { return }
+  if (!desktop) { backupInput.value?.click(); return }
+  backupAction.value = 'import'
+  backupError.value = ''
+  backupInfo.value = ''
+  try {
+    const picked = await desktop.pickBackup()
+    if (!picked.picked || !picked.bytes) return
+    await finishImport(picked.name || 'mens-backup.zip', picked.bytes)
+  } catch (error) {
+    backupError.value = `导入失败：${friendlyError(error)}`
+  } finally {
+    backupAction.value = ''
+  }
+}
+
+async function onBackupFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  backupAction.value = 'import'
+  backupError.value = ''
+  backupInfo.value = ''
+  try {
+    await finishImport(file.name, new Uint8Array(await file.arrayBuffer()))
+  } catch (error) {
+    backupError.value = `导入失败：${friendlyError(error)}`
+  } finally {
+    backupAction.value = ''
+  }
+}
+
+async function finishImport(name: string, bytes: Uint8Array) {
+  const result = await api.importBackup(bytes, name)
+  backupInfo.value = `已恢复：${result.restored.join('、') || '无'}${result.failed?.length ? `；${result.failed.join('、')} 未能写入` : ''}。`
+  if (!result.restart_required) return
+  backupInfo.value += '重启应用后完全生效。'
+  if (!desktop) return
+  try {
+    await ElMessageBox.confirm('备份已导入，重启应用后完全生效。现在重启？', '导入完成', { type: 'info', confirmButtonText: '重启应用', cancelButtonText: '稍后' })
+    await restartDesktop()
+  } catch { /* 用户选择稍后重启 */ }
 }
 
 async function loadHealth() {
@@ -510,8 +591,8 @@ function validDocument(file: File) {
     ElMessage.error('文件超过 5 MB。')
     return false
   }
-  if (!/\.(pdf|md|txt)$/i.test(file.name)) {
-    ElMessage.error('仅支持 PDF、Markdown 和 TXT 文件。')
+  if (!/\.(pdf|md|txt|docx)$/i.test(file.name)) {
+    ElMessage.error('仅支持 PDF、Markdown、TXT 和 Word (.docx) 文件。')
     return false
   }
   return true
@@ -840,10 +921,10 @@ onUnmounted(() => {
         </section>
 
         <section v-else-if="workspace.view === 'knowledge'" class="content-view">
-          <div class="page-heading"><div><div class="eyebrow">KNOWLEDGE BASE</div><h1>知识库</h1><p>维护政策文件与办事指南，更新后可重建检索索引。</p></div><div class="heading-actions"><el-button :icon="Refresh" :loading="docAction === 'reindex'" @click="reindex">重建索引</el-button><el-button type="primary" :icon="Upload" :loading="docAction === 'upload'" @click="uploadInput?.click()">上传文档</el-button><input ref="uploadInput" class="hidden-input" type="file" accept=".pdf,.md,.txt" @change="onUpload" /></div></div>
+          <div class="page-heading"><div><div class="eyebrow">KNOWLEDGE BASE</div><h1>知识库</h1><p>维护政策文件与办事指南，更新后可重建检索索引。</p></div><div class="heading-actions"><el-button :icon="Refresh" :loading="docAction === 'reindex'" @click="reindex">重建索引</el-button><el-button type="primary" :icon="Upload" :loading="docAction === 'upload'" @click="uploadInput?.click()">上传文档</el-button><input ref="uploadInput" class="hidden-input" type="file" accept=".pdf,.md,.txt,.docx" @change="onUpload" /></div></div>
           <div class="section-toolbar"><div><strong>文档列表</strong><span>{{ documents.length }} 份文档</span></div><el-button text :icon="Refresh" :loading="docsBusy" @click="loadDocuments">刷新</el-button></div>
           <el-alert v-if="docsError" class="alert" :title="docsError" type="error" show-icon :closable="false" />
-          <p class="management-note">支持 PDF、Markdown、TXT，最大 5 MB。<template v-if="!desktop">管理操作需在「设置」填写管理员令牌。</template><template v-else>文档保存在本机应用数据目录。</template></p>
+          <p class="management-note">支持 PDF、Markdown、TXT、Word (.docx)，最大 5 MB。<template v-if="!desktop">管理操作需在「设置」填写管理员令牌。</template><template v-else>文档保存在本机应用数据目录。</template></p>
           <div class="data-panel"><el-empty v-if="!docsBusy && !docsError && documents.length === 0" description="暂无文档，上传政策文件开始使用" :image-size="96" /><el-table v-else v-loading="docsBusy" :data="documents" stripe><el-table-column label="文件" min-width="220"><template #default="scope"><div class="file-cell"><el-icon :size="18"><Document /></el-icon><span>{{ scope.row.filename }}</span></div></template></el-table-column><el-table-column label="文本长度" width="110"><template #default="scope">{{ scope.row.content?.length ?? '—' }}</template></el-table-column><el-table-column prop="updated_at" label="更新时间" min-width="170"><template #default="scope">{{ scope.row.updated_at ? String(scope.row.updated_at).slice(0, 16).replace('T', ' ') : '—' }}</template></el-table-column><el-table-column label="操作" width="165" fixed="right"><template #default="scope"><label class="table-action">更新<input type="file" accept=".pdf,.md,.txt" :disabled="Boolean(docAction)" @change="onReplace(scope.row.id, $event)" /></label><el-button link type="danger" :loading="docAction === scope.row.id" :disabled="Boolean(docAction)" @click="deleteDocument(scope.row)">删除</el-button></template></el-table-column></el-table></div>
         </section>
 
@@ -895,6 +976,7 @@ onUnmounted(() => {
             <div class="form-action"><el-button type="primary" :loading="campusAction === 'save'" :disabled="Boolean(campusAction) || !campusForm.url.trim()" @click="saveCampusSource">保存接口</el-button><el-button :disabled="Boolean(campusAction) || !activeCampusSource?.configured" @click="testCampusSource">测试读取</el-button><el-button text type="danger" :loading="campusAction === 'remove'" :disabled="Boolean(campusAction) || !activeCampusSource?.configured" @click="removeCampusSource">移除接口</el-button></div>
             <el-alert v-if="campusError" class="alert" :title="campusError" type="error" show-icon :closable="false" />
           </div>
+          <div class="settings-section"><div class="settings-copy"><h2>备份与恢复</h2><p>导出包含知识库、对话记录、模型与校园接口配置的 zip 备份；其中的密钥和令牌属于敏感数据，请妥善保管。导入会覆盖当前数据<template v-if="desktop">，重启应用后完全生效</template>。</p><p v-if="backupInfo" class="backup-info" aria-live="polite">{{ backupInfo }}</p><el-alert v-if="backupError" class="alert" :title="backupError" type="error" show-icon :closable="false" /></div><div class="backup-actions"><el-button :icon="Download" :loading="backupAction === 'export'" :disabled="Boolean(backupAction) || !workspace.ready" @click="exportBackup">导出备份</el-button><el-button :icon="Upload" :loading="backupAction === 'import'" :disabled="Boolean(backupAction) || !workspace.ready" @click="importBackup">导入备份</el-button><input v-if="!desktop" ref="backupInput" class="hidden-input" type="file" accept=".zip" @change="onBackupFile" /></div></div>
           <div v-if="!desktop" class="settings-section"><div class="settings-copy"><h2>管理员令牌</h2><p>用于文档与插件管理，仅保存在当前浏览器会话。</p></div><el-input :model-value="adminToken" type="password" show-password placeholder="输入后端 ADMIN_TOKEN" style="max-width: 280px" @update:model-value="saveAdminToken(String($event))" /></div>
           <div class="settings-section"><div class="settings-copy"><h2>服务状态</h2><p>{{ healthLabel }}<template v-if="health"> · {{ health.rag_degraded ? '向量检索故障，已降级关键词检索' : health.rag_enabled ? '向量检索已启用' : '本地关键词检索' }} · {{ health.demo_services ? '校务服务为演示数据' : '已配置部分校务接口' }}</template></p></div><el-button :icon="Refresh" :loading="healthBusy" @click="loadHealth">刷新状态</el-button></div>
           <el-alert v-if="healthError" :title="healthError" type="error" show-icon :closable="false" />

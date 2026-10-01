@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('campusDesktop', Object.freeze({
   openBaike: query => ipcRenderer.invoke('campus:open-baike', query),
   openOllamaDownload: () => ipcRenderer.invoke('campus:open-ollama-download'),
   restart: () => ipcRenderer.invoke('campus:restart'),
+  saveBackup: (name, bytes) => ipcRenderer.invoke('campus:save-backup', { name, bytes }),
+  pickBackup: () => ipcRenderer.invoke('campus:pick-backup'),
 }))

@@ -31,10 +31,12 @@ flowchart TD
 | DELETE | /api/conversations | 清空该 client_id 的全部会话 |
 | GET | /api/conversations/{id} | 历史内容及来源和演示标识 |
 | GET/POST | /api/documents | 列表 / JSON 正文创建 |
-| POST | /api/documents/upload | multipart file 上传 |
+| POST | /api/documents/upload | multipart file 上传（TXT / Markdown / PDF / docx，docx 用标准库解析段落文本） |
 | PUT | /api/documents/{id}/upload | multipart file 替换 |
 | PUT/DELETE | /api/documents/{id} | JSON 正文更新 / 删除 |
 | POST | /api/documents/reindex | 重建当前文档索引 |
+| GET | /api/backup/export | 导出 zip 备份：campus.db 快照（VACUUM INTO）+ 配置文件 + SHA-256 清单 |
+| POST | /api/backup/import | 导入备份：先校验清单与数据库结构，再经 SQLite backup API 恢复；配置变更需重启 |
 | GET | /api/services/grades、schedule、credits | 演示校园查询 |
 | GET | /api/services/classrooms | building、min_seats 筛选 |
 | POST | /api/services/repairs | location、issue、contact 表单提交 |

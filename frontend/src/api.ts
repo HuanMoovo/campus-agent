@@ -149,7 +149,7 @@ const base = desktop ? '/api' : import.meta.env.VITE_API_BASE_URL || '/api'
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response
   try {
-    const needsAdmin = (path.startsWith('/documents') || path.startsWith('/plugins') || path.startsWith('/models') || path.startsWith('/campus-sources')) && init?.method !== 'GET' && init?.method !== undefined
+    const needsAdmin = (path.startsWith('/documents') || path.startsWith('/plugins') || path.startsWith('/models') || path.startsWith('/campus-sources') || path.startsWith('/backup')) && init?.method !== 'GET' && init?.method !== undefined
     const headers = new Headers(init?.headers)
     if (needsAdmin && !desktop) headers.set('X-Admin-Token', sessionStorage.getItem('campus-agent-admin-token') || '')
     response = await fetch(`${base}${path}`, { ...init, headers })
@@ -321,4 +321,29 @@ export const api = {
     request<unknown>(`/services/classrooms?building=${encodeURIComponent(building)}&min_seats=${minSeats}`),
   repair: (payload: { location: string; description: string; contact: string }) =>
     request<unknown>('/services/repairs', json('POST', { location: payload.location, issue: payload.description, contact: payload.contact })),
+  exportBackup: async () => {
+    const headers = new Headers()
+    if (!desktop) headers.set('X-Admin-Token', sessionStorage.getItem('campus-agent-admin-token') || '')
+    let response: Response
+    try {
+      response = await fetch(`${base}/backup/export`, { headers })
+    } catch {
+      throw new Error('无法连接 Mens 服务。请检查后端是否已启动。')
+    }
+    if (!response.ok) {
+      let detail = ''
+      try {
+        const data = await response.json()
+        detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data)
+      } catch { detail = response.statusText }
+      throw responseError(response.status, detail)
+    }
+    return response.blob()
+  },
+  importBackup: (bytes: Uint8Array, name: string) => {
+    const form = new FormData()
+    // DOM types require an ArrayBuffer-backed view for Blob parts.
+    form.append('file', new Blob([bytes.slice().buffer as ArrayBuffer], { type: 'application/zip' }), name)
+    return request<{ restored: string[]; failed: string[]; restart_required: boolean }>('/backup/import', { method: 'POST', body: form })
+  },
 }

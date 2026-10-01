@@ -1,7 +1,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { isOwnUrl, validateWorkspace, parseReadyLine } = require('../lib/policy.cjs')
+const { isOwnUrl, validateBackupBytes, validateBackupName, validateWorkspace, parseReadyLine } = require('../lib/policy.cjs')
 
 test('only the exact loopback origin receives desktop privileges', () => {
   const origin = 'http://127.0.0.1:53212'
@@ -24,6 +24,19 @@ test('workspace IPC cannot write arbitrary keys or invalid values', () => {
     { accentColor: '#fff; color:red' }, { accentColor: null }, { localModel: 12 }, { localModel: 'a'.repeat(129) },
     { localModel: 'bad\nmodel' }, { clientId: '' }, { clientId: '../escape' }, { clientId: 'a'.repeat(65) },
     { clientId: 'bad id' }, { clientId: 12 }]) assert.throws(() => validateWorkspace(value))
+})
+
+test('backup payloads are bounded and file names sanitized', () => {
+  assert.equal(validateBackupName('mens-backup-2026-10-01.zip'), 'mens-backup-2026-10-01.zip')
+  for (const value of ['', 'a', '.hidden.zip', '../x.zip', 'x.txt', 'a'.repeat(90) + '.zip', 12, null]) {
+    assert.throws(() => validateBackupName(value))
+  }
+  assert.equal(validateBackupBytes(new Uint8Array(16)), 16)
+  assert.equal(validateBackupBytes(new ArrayBuffer(1024)), 1024)
+  assert.equal(validateBackupBytes(new Uint8Array(16), 32), 16)
+  for (const value of [null, 'abc', 12, {}, new Uint8Array(33)]) {
+    assert.throws(() => validateBackupBytes(value, value instanceof Uint8Array ? 32 : undefined))
+  }
 })
 
 test('startup accepts only a matching nonce and valid loopback port', () => {

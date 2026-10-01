@@ -14,6 +14,18 @@
 - 未验证：真实云端 API Key 的流式链路（提供商地址必须 HTTPS，本次未使用密钥）；真实模型权重（验证时本机 Ollama 未安装模型）；重新构建后的安装包验收。
 - 脚本与截图：`.tmp/qa-streaming/`（mock 服务、ui_check.py、report.json、两张界面截图）。
 
+## 开发副本第二批改进验证（未发布，2026-10-01）
+
+新增 Word (.docx) 知识库上传、镜像模型下载断点续传、数据备份导出/导入。安装包仍未重新构建。
+
+- 改动范围：`POST /api/documents/upload` 支持 docx（标准库解析 `word/document.xml`，旧版 .doc 明确报错）；GGUF 下载按 pinned SHA-256 保存断点文件、`Range` 续传并在续传前重算已下载部分的哈希，完整未导入的文件可直接重试导入；`GET /api/backup/export`（VACUUM INTO 快照 + 配置文件 + SHA-256 清单）与 `POST /api/backup/import`（先校验清单与表结构，再通过 SQLite backup API 原地恢复，config 文件原子替换）；设置页「备份与恢复」；桌面通过 IPC 系统对话框读写备份 zip。
+- 后端测试：234 passed，44 subtests passed（本批新增 docx 解析/拒绝、备份往返与恶意 zip 拒绝、断点续传/续传校验/导入重试共 12 项）。
+- 桌面 Electron 测试 7/7；前端类型检查与生产构建通过。
+- 真实 HTTP：docx 上传返回逐段提取文本；导出 zip 含 `campus.db` 与 `mens-backup.json`（含大小与 SHA-256）；删除会话后导入成功恢复（404 → 200）。
+- 浏览器自动化（Playwright + 本机 Edge）：通过真实文件输入上传 docx（列表 4→5 行）；「导出备份」触发真实下载 `mens-backup-2026-10-01.zip`（含 campus.db 与清单）；「导入备份」经确认弹窗与文件选择器完成并显示“已恢复：campus.db。”
+- 未验证：真实 400MB–1.1GB 模型断点续传（用 2.7MB 模拟流验证中断保留、Range 续传、校验后跳过下载与导入重试）；跨机器导入（DPAPI 加密的密钥在他机无法解密，需重新填写）。
+- 脚本与截图：`.tmp/qa-batch2/`（docx 夹具、ui_check2.py、report.json、界面截图）。
+
 ## 1.0 已完成检查
 
 - 桌面与前端 package.json、两份 package-lock.json、FastAPI 版本均为 1.0.0。

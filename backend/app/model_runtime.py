@@ -51,6 +51,10 @@ class LocalModelError(RuntimeError):
         self.status_code = status_code
 
 
+class _ModelDataError(ValueError):
+    """Downloaded bytes failed integrity checks; such partial files must never be resumed into."""
+
+
 if os.name == "nt":
     class _Blob(ctypes.Structure):
         _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_byte))]
@@ -345,7 +349,8 @@ def _run_download(job: DownloadJob) -> None:
         if job.cancel.is_set():
             job.status, job.detail, job.error = "cancelled", "下载已取消", ""
         else:
-            job.status, job.detail, job.error = "failed", "下载失败", "下载或导入失败，请检查网络、磁盘空间和 Ollama 状态"
+            job.status, job.detail = "failed", "下载失败"
+            job.error = job.error or "下载或导入失败，请检查网络、磁盘空间和 Ollama 状态"
 
 
 def _ollama_events(response: httpx.Response, job: DownloadJob) -> None:
@@ -403,55 +408,119 @@ def _download_target(url: str) -> tuple[str, str]:
     return parsed._replace(netloc=authority).geturl(), host
 
 
+def _gguf_partial_path(directory: Path, spec: dict) -> Path:
+    """One resumable staging file per pinned model file; the checksum prefix prevents cross-version reuse."""
+    return directory / f"{spec['sha256'][:16]}-{spec['file']}.part"
+
+
+def _hash_file(path: Path) -> tuple[hashlib._Hash, int]:
+    digest = hashlib.sha256()
+    received = 0
+    with path.open("rb") as existing:
+        while chunk := existing.read(1024 * 1024):
+            digest.update(chunk)
+            received += len(chunk)
+    return digest, received
+
+
+def _gguf_download(job: DownloadJob, tmp: Path, url: str, spec: dict, resume_from: int) -> tuple[hashlib._Hash, int]:
+    """Stream the pinned file into `tmp`, resuming at `resume_from`; returns the primed digest and bytes on disk."""
+    digest = hashlib.sha256()
+    received = 0
+    if resume_from:
+        digest, received = _hash_file(tmp)
+    with httpx.Client(follow_redirects=False, timeout=httpx.Timeout(30, read=120), trust_env=False) as client:
+        current_url = url
+        for _ in range(5):
+            if job.cancel.is_set():
+                return digest, received
+            pinned_url, host = _download_target(current_url)
+            headers = {"Host": host, "Accept-Encoding": "identity"}
+            if received:
+                headers["Range"] = f"bytes={received}-"
+            # Host/SNI preserve TLS verification for the original host, while
+            # a numeric connection URL prevents a second DNS resolution.
+            with client.stream("GET", pinned_url, headers=headers,
+                               extensions={"sni_hostname": host}) as response:
+                if response.status_code in (301, 302, 303, 307, 308):
+                    location = response.headers.get("location")
+                    if not location:
+                        raise ValueError("Model download redirect is missing location")
+                    if any(ord(c) <= 32 or ord(c) == 127 for c in location):
+                        raise ValueError("Invalid model download redirect")
+                    current_url = urljoin(current_url, location)
+                    continue
+                if response.status_code == 416 and received == spec["size_bytes"]:
+                    return digest, received  # every byte is already on disk; the caller verifies the hash
+                response.raise_for_status()
+                if response.status_code == 206:
+                    mode = "ab"
+                elif response.status_code == 200:
+                    # The server ignored Range; previously received bytes cannot join one hash, start over.
+                    digest, received, mode = hashlib.sha256(), 0, "wb"
+                else:
+                    raise ValueError("Model download did not return a complete file")
+                with tmp.open(mode) as output:
+                    for chunk in response.iter_bytes(1024 * 1024):
+                        if job.cancel.is_set():
+                            return digest, received
+                        received += len(chunk)
+                        if received > spec["size_bytes"]:
+                            raise _ModelDataError("Model download exceeds pinned size")
+                        digest.update(chunk)
+                        output.write(chunk)
+                        job.progress = min(0.8, received / spec["size_bytes"] * 0.8)
+                        job.detail = f"正在下载 {received // 1048576} / {spec['size_bytes'] // 1048576} MB"
+                return digest, received
+        raise ValueError("Too many model download redirects")
+
+
 def _gguf_pull(job: DownloadJob) -> None:
     spec = _catalog[job.model]
     host = "huggingface.co" if job.source == "huggingface" else "hf-mirror.com"
     url = f"https://{host}/{spec['repo']}/resolve/{spec['revision']}/{spec['file']}?download=true"
     directory = get_settings().data_dir / "model-downloads"
     directory.mkdir(parents=True, exist_ok=True)
-    tmp = directory / (job.id + ".gguf.part")
-    digest = hashlib.sha256()
-    received = 0
+    tmp = _gguf_partial_path(directory, spec)
+    keep_partial = True
     try:
-        with httpx.Client(follow_redirects=False, timeout=httpx.Timeout(30, read=120), trust_env=False) as client:
-            current_url = url
-            for _ in range(5):
-                if job.cancel.is_set():
-                    return
-                pinned_url, host = _download_target(current_url)
-                # Host/SNI preserve TLS verification for the original host, while
-                # a numeric connection URL prevents a second DNS resolution.
-                with client.stream("GET", pinned_url, headers={"Host": host, "Accept-Encoding": "identity"},
-                                   extensions={"sni_hostname": host}) as response:
-                    if response.status_code in (301, 302, 303, 307, 308):
-                        location = response.headers.get("location")
-                        if not location:
-                            raise ValueError("Model download redirect is missing location")
-                        if any(ord(c) <= 32 or ord(c) == 127 for c in location):
-                            raise ValueError("Invalid model download redirect")
-                        current_url = urljoin(current_url, location)
-                        continue
-                    response.raise_for_status()
-                    if response.status_code != 200:
-                        raise ValueError("Model download did not return a complete file")
-                    with tmp.open("xb") as output:
-                        for chunk in response.iter_bytes(1024 * 1024):
-                            if job.cancel.is_set():
-                                return
-                            received += len(chunk)
-                            if received > spec["size_bytes"]:
-                                raise ValueError("Model download exceeds pinned size")
-                            digest.update(chunk)
-                            output.write(chunk)
-                            job.progress = min(0.8, received / spec["size_bytes"] * 0.8)
-                            job.detail = f"正在下载 {received // 1048576} / {spec['size_bytes'] // 1048576} MB"
-                    break
+        resume_from = 0
+        if tmp.exists():
+            size = tmp.stat().st_size
+            if size > spec["size_bytes"]:
+                tmp.unlink()  # bytes that cannot belong to this file must not seed a resume
             else:
-                raise ValueError("Too many model download redirects")
-        if received != spec["size_bytes"] or digest.hexdigest() != spec["sha256"]:
-            raise ValueError("Model checksum mismatch")
+                resume_from = size
+        if resume_from == spec["size_bytes"]:
+            digest, received = _hash_file(tmp)
+            if digest.hexdigest() != spec["sha256"]:
+                tmp.unlink()
+                resume_from = 0
+            else:
+                job.detail = "已存在完整文件，直接导入"
+        if resume_from < spec["size_bytes"]:
+            if resume_from:
+                job.detail = f"已保留 {resume_from // 1048576} MB，继续下载"
+            try:
+                digest, received = _gguf_download(job, tmp, url, spec, resume_from)
+            except _ModelDataError:
+                tmp.unlink(missing_ok=True)
+                raise
+            except Exception:
+                if not job.cancel.is_set() and tmp.exists():
+                    job.error = f"下载中断，已保留 {tmp.stat().st_size // 1048576} MB 断点，重试可继续"
+                raise
         if job.cancel.is_set():
             return
+        if received != spec["size_bytes"]:
+            if received:
+                job.error = f"下载未完成，已保留 {received // 1048576} MB 断点，重试可继续"
+            else:
+                tmp.unlink(missing_ok=True)
+            raise ValueError("Model download is incomplete")
+        if digest.hexdigest() != spec["sha256"]:
+            tmp.unlink()
+            raise ValueError("Model checksum mismatch")
         job.status, job.detail = "importing", "正在导入 Ollama"
         blob = "sha256:" + spec["sha256"]
         def upload_chunks():
@@ -461,14 +530,21 @@ def _gguf_pull(job: DownloadJob) -> None:
                         raise ValueError("Model import cancelled")
                     yield chunk
 
-        with httpx.Client(timeout=httpx.Timeout(30, write=120, read=120), trust_env=False) as client:
-            response = client.post(OLLAMA_URL + "/api/blobs/" + blob, content=upload_chunks(),
-                                   headers={"Content-Type": "application/octet-stream", "Content-Length": str(received)})
-            response.raise_for_status()
-            if job.cancel.is_set():
-                return
-            with client.stream("POST", OLLAMA_URL + "/api/create", json={"model": job.model,
-                               "files": {spec["file"]: blob}, "stream": True}) as response:
-                _ollama_events(response, job)
+        try:
+            with httpx.Client(timeout=httpx.Timeout(30, write=120, read=120), trust_env=False) as client:
+                response = client.post(OLLAMA_URL + "/api/blobs/" + blob, content=upload_chunks(),
+                                       headers={"Content-Type": "application/octet-stream", "Content-Length": str(received)})
+                response.raise_for_status()
+                if job.cancel.is_set():
+                    return
+                with client.stream("POST", OLLAMA_URL + "/api/create", json={"model": job.model,
+                                   "files": {spec["file"]: blob}, "stream": True}) as response:
+                    _ollama_events(response, job)
+        except Exception:
+            if not job.cancel.is_set():
+                job.error = "导入 Ollama 失败，模型文件已保留；确认 Ollama 运行后重试将直接导入"
+            raise
+        keep_partial = False
     finally:
-        tmp.unlink(missing_ok=True)
+        if job.cancel.is_set() or not keep_partial:
+            tmp.unlink(missing_ok=True)

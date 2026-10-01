@@ -24,6 +24,8 @@ export interface CampusDesktop {
   openBaike(query: string): Promise<void>
   openOllamaDownload(): Promise<void>
   restart(): Promise<void>
+  saveBackup(name: string, bytes: Uint8Array): Promise<{ saved: boolean; path?: string }>
+  pickBackup(): Promise<{ picked: boolean; name?: string; bytes?: Uint8Array }>
 }
 
 declare global {

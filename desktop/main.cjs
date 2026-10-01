@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { startBackend } = require('./lib/backend.cjs')
-const { isOwnUrl, validateWorkspace } = require('./lib/policy.cjs')
+const { isOwnUrl, BACKUP_LIMIT, validateBackupBytes, validateBackupName, validateWorkspace } = require('./lib/policy.cjs')
 
 app.setName('Mens')
 // Keep the established data path so upgrades retain the existing database and settings.
@@ -106,6 +106,35 @@ function bindIPC() {
     assertSender(event)
     app.relaunch()
     app.quit()
+  })
+  ipcMain.handle('campus:save-backup', async (event, payload) => {
+    assertSender(event)
+    const name = validateBackupName(payload?.name)
+    const size = validateBackupBytes(payload?.bytes)
+    const bytes = payload.bytes
+    const view = bytes instanceof ArrayBuffer
+      ? new Uint8Array(bytes)
+      : new Uint8Array(bytes.buffer, bytes.byteOffset, size)
+    const { canceled, filePath } = await dialog.showSaveDialog(window, {
+      title: '导出 Mens 备份',
+      defaultPath: path.join(app.getPath('documents'), name),
+      filters: [{ name: 'Zip 备份', extensions: ['zip'] }],
+    })
+    if (canceled || !filePath) return { saved: false }
+    fs.writeFileSync(filePath, view)
+    return { saved: true, path: filePath }
+  })
+  ipcMain.handle('campus:pick-backup', async event => {
+    assertSender(event)
+    const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+      title: '选择 Mens 备份文件',
+      properties: ['openFile'],
+      filters: [{ name: 'Zip 备份', extensions: ['zip'] }],
+    })
+    if (canceled || !filePaths || !filePaths.length) return { picked: false }
+    const stats = fs.statSync(filePaths[0])
+    if (stats.size > BACKUP_LIMIT) throw new Error('备份文件超过 300 MB')
+    return { picked: true, name: path.basename(filePaths[0]), bytes: fs.readFileSync(filePaths[0]) }
   })
 }
 
