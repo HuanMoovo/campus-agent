@@ -144,12 +144,21 @@ export function parseSseFrame(frame: string): { event: string; data: Record<stri
   }
 }
 
+export interface RepairRecord {
+  id: string
+  location: string
+  issue: string
+  contact: string
+  status: string
+  created_at: string
+}
+
 const base = desktop ? '/api' : import.meta.env.VITE_API_BASE_URL || '/api'
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, admin = false): Promise<T> {
   let response: Response
   try {
-    const needsAdmin = (path.startsWith('/documents') || path.startsWith('/plugins') || path.startsWith('/models') || path.startsWith('/campus-sources') || path.startsWith('/backup')) && init?.method !== 'GET' && init?.method !== undefined
+    const needsAdmin = admin || ((path.startsWith('/documents') || path.startsWith('/plugins') || path.startsWith('/models') || path.startsWith('/campus-sources') || path.startsWith('/backup')) && init?.method !== 'GET' && init?.method !== undefined)
     const headers = new Headers(init?.headers)
     if (needsAdmin && !desktop) headers.set('X-Admin-Token', sessionStorage.getItem('campus-agent-admin-token') || '')
     response = await fetch(`${base}${path}`, { ...init, headers })
@@ -321,6 +330,7 @@ export const api = {
     request<unknown>(`/services/classrooms?building=${encodeURIComponent(building)}&min_seats=${minSeats}`),
   repair: (payload: { location: string; description: string; contact: string }) =>
     request<unknown>('/services/repairs', json('POST', { location: payload.location, issue: payload.description, contact: payload.contact })),
+  repairs: () => request<{ demo: boolean; items: RepairRecord[] }>('/services/repairs', undefined, true),
   exportBackup: async () => {
     const headers = new Headers()
     if (!desktop) headers.set('X-Admin-Token', sessionStorage.getItem('campus-agent-admin-token') || '')

@@ -5,7 +5,7 @@ import {
   ArrowRight, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, FolderOpened,
   Grid, Plus, Refresh, Search, Setting, Upload, Download,
 } from '@element-plus/icons-vue'
-import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type Source } from './api'
+import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source } from './api'
 import { useWorkspaceStore, type Model, type View } from './store'
 import { desktop, type DesktopInfo } from './desktop'
 import mensLogo from './assets/mens.png'
@@ -59,6 +59,10 @@ const serviceResult = ref<unknown>(null)
 const serviceError = ref('')
 const classroom = ref({ building: '', minSeats: 0 })
 const repair = ref({ location: '', description: '', contact: '' })
+const repairList = ref<RepairRecord[]>([])
+const repairListBusy = ref(false)
+const repairListError = ref('')
+const repairListDemo = ref(true)
 const serviceNames: Record<ServiceKey, string> = {
   grades: '成绩查询', schedule: '课表查询', credits: '学分统计', classrooms: '空教室查询', repair: '报修申请',
   notices: '校园公告', library: '图书馆', dining: '餐饮', shuttle: '校车',
@@ -119,6 +123,9 @@ const backupAction = ref('')
 const backupError = ref('')
 const backupInfo = ref('')
 const backupInput = ref<HTMLInputElement | null>(null)
+const logText = ref('')
+const logBusy = ref(false)
+const logError = ref('')
 let downloadTimer: ReturnType<typeof setTimeout> | undefined
 
 function fileSize(bytes?: number) {
@@ -447,6 +454,21 @@ async function finishImport(name: string, bytes: Uint8Array) {
   } catch { /* 用户选择稍后重启 */ }
 }
 
+async function loadLog() {
+  if (!desktop || logBusy.value) return
+  logBusy.value = true
+  logError.value = ''
+  try {
+    const result = await desktop.readLog()
+    logText.value = result.available ? (result.text || '日志文件为空。') : ''
+    if (!result.available) logError.value = '尚未生成日志文件，运行一段时间后再试。'
+  } catch (error) {
+    logError.value = `无法读取日志：${friendlyError(error)}`
+  } finally {
+    logBusy.value = false
+  }
+}
+
 async function loadHealth() {
   healthBusy.value = true
   healthError.value = ''
@@ -535,6 +557,23 @@ function selectService(key: ServiceKey) {
   activeService.value = key
   serviceResult.value = null
   serviceError.value = ''
+  if (key === 'repair') void loadRepairs()
+}
+
+async function loadRepairs() {
+  if (repairListBusy.value) return
+  repairListBusy.value = true
+  repairListError.value = ''
+  try {
+    const result = await api.repairs()
+    repairList.value = result.items
+    repairListDemo.value = result.demo
+  } catch (error) {
+    repairList.value = []
+    repairListError.value = friendlyError(error)
+  } finally {
+    repairListBusy.value = false
+  }
 }
 
 async function runService() {
@@ -553,7 +592,10 @@ async function runService() {
     else if (activeService.value === 'classrooms') serviceResult.value = await api.classrooms(classroom.value.building.trim(), classroom.value.minSeats || 0)
     else if (activeService.value === 'repair') serviceResult.value = await api.repair(repair.value)
     else serviceResult.value = await api.campusData(activeService.value)
-    if (activeService.value === 'repair') ElMessage.success(serviceIsDemo.value ? '演示报修单已保存在后端' : '报修申请已提交')
+    if (activeService.value === 'repair') {
+      ElMessage.success(serviceIsDemo.value ? '演示报修单已保存在后端' : '报修申请已提交')
+      void loadRepairs()
+    }
   } catch (error) {
     serviceError.value = friendlyError(error)
   } finally {
@@ -917,6 +959,12 @@ onUnmounted(() => {
               </div><div class="form-action"><el-button type="primary" :icon="activeService === 'repair' ? Check : Search" :loading="serviceBusy" @click="runService">{{ activeService === 'repair' ? '提交报修' : '查询' }}</el-button></div>
               <el-alert v-if="serviceError" class="alert" :title="serviceError" type="error" show-icon :closable="false" />
               <div v-if="serviceResult !== null" class="result-section"><div class="result-title"><h3>{{ activeService === 'repair' ? '提交结果' : '查询结果' }}</h3><span v-if="serviceIsDemo" class="demo-label">后端演示数据</span></div><el-empty v-if="resultRows.length === 0" description="暂无结果" :image-size="84" /><div v-else class="table-scroll"><el-table :data="resultRows" stripe border><el-table-column v-for="column in resultColumns" :key="column" :prop="column" :label="columnLabels[column] || column" min-width="130"><template #default="scope">{{ cellText(scope.row[column]) }}</template></el-table-column></el-table></div></div>
+              <div v-if="activeService === 'repair'" class="result-section">
+                <div class="result-title"><h3>本机报修记录</h3><el-button text :icon="Refresh" :loading="repairListBusy" @click="loadRepairs">刷新记录</el-button></div>
+                <el-alert v-if="repairListError" class="alert" :title="repairListError" type="warning" show-icon :closable="false"><el-button text @click="selectView('settings')">填写管理员令牌</el-button></el-alert>
+                <el-empty v-else-if="!repairListBusy && repairList.length === 0" description="暂无本机报修记录" :image-size="84" />
+                <template v-else><div class="table-scroll"><el-table v-loading="repairListBusy" :data="repairList" stripe border><el-table-column label="提交时间" min-width="160"><template #default="scope">{{ String(scope.row.created_at).slice(0, 16).replace('T', ' ') }}</template></el-table-column><el-table-column prop="location" label="地点" min-width="150" /><el-table-column prop="issue" label="问题" min-width="220" /><el-table-column prop="status" label="状态" width="140" /></el-table></div><p v-if="repairListDemo" class="management-note">未接入学校报修接口，以上记录仅保存在本机。</p></template>
+              </div>
             </div></div>
         </section>
 
@@ -947,6 +995,7 @@ onUnmounted(() => {
           <template v-if="desktop">
             <div class="settings-section"><div class="settings-copy"><h2>Mens 桌面版</h2><p>版本 {{ desktopInfo?.version || '读取中…' }} · 启动应用时自动运行本机服务。</p></div><el-button :icon="Refresh" :loading="desktopAction === 'restart'" :disabled="!workspace.ready || Boolean(desktopAction)" @click="restartDesktop">重启应用</el-button></div>
             <div class="settings-section desktop-storage"><div class="settings-copy"><h2>本机数据</h2><p>知识库、对话记录和应用配置保存在以下位置。</p><code v-if="desktopInfo" class="data-path">{{ desktopInfo.dataPath }}</code></div><el-button :icon="FolderOpened" :loading="desktopAction === 'folder'" :disabled="Boolean(desktopAction)" @click="openDataFolder">打开数据文件夹</el-button></div>
+            <div class="settings-section log-section"><div class="settings-copy"><h2>后端日志</h2><p>最近的后端诊断输出（最多 200 KB），完整日志位于数据目录的 <code>logs/backend.log</code>。</p><el-alert v-if="logError" class="alert" :title="logError" type="warning" show-icon :closable="false" /><pre v-if="logText" class="log-view">{{ logText }}</pre></div><div class="backup-actions"><el-button :icon="Refresh" :loading="logBusy" @click="loadLog">读取日志</el-button><el-button :icon="FolderOpened" :loading="desktopAction === 'folder'" :disabled="Boolean(desktopAction)" @click="openDataFolder">打开文件夹</el-button></div></div>
             <el-alert v-if="desktopError" class="alert" :title="desktopError" type="error" show-icon :closable="false"><el-button text @click="loadDesktopInfo">重试</el-button></el-alert>
           </template>
           <el-alert v-if="workspace.persistenceError" class="alert" :title="workspace.persistenceError" type="error" show-icon :closable="false"><el-button text @click="workspace.persistWorkspace">重试保存</el-button></el-alert>

@@ -1,5 +1,6 @@
 from uuid import uuid4
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import Repair
@@ -62,3 +63,13 @@ def submit_repair(db: Session, data: RepairCreate) -> dict:
     db.add(repair)
     db.commit()
     return {"id": repair.id, "status": repair.status, "demo": True}
+
+
+def list_repairs(db: Session, limit: int = 50) -> dict:
+    """Local demo tickets newest first; a configured campus API remains the authoritative channel."""
+    rows = db.scalars(select(Repair).order_by(Repair.created_at.desc(), Repair.id.desc()).limit(limit)).all()
+    return {"demo": not campus_data.configured("repairs"), "items": [
+        {"id": row.id, "location": row.location, "issue": row.issue, "contact": row.contact,
+         "status": row.status, "created_at": row.created_at}
+        for row in rows
+    ]}

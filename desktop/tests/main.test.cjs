@@ -63,9 +63,14 @@ test('desktop main process confines requests and IPC and waits for backend shutd
     }
     async loadURL(url) { this.webContents.mainFrame.url = url; this.emit('ready-to-show') }
     show() {} focus() {} isMinimized() { return false } restore() {}
+    getBounds() { return { x: 40, y: 30, width: 1300, height: 900 } }
+    isMaximized() { return false }
+    maximize() { this.maximized = true }
+    isDestroyed() { return false }
   }
   const mockElectron = {
     nativeTheme: { themeSource: 'system', shouldUseDarkColors: false },
+    screen: { getAllDisplays: () => [{ workArea: { x: 0, y: 0, width: 1920, height: 1080 } }] },
     app, BrowserWindow, ipcMain: { handle(name, handler) { handlers.set(name, handler) } },
     Menu: { buildFromTemplate(value) { return value }, setApplicationMenu(value) { menu = value } },
     shell: {
@@ -82,6 +87,9 @@ test('desktop main process confines requests and IPC and waits for backend shutd
     },
   }
   const directory = path.resolve(__dirname, '..')
+  fs.mkdirSync(path.join(temporary, 'CampusAgent'), { recursive: true })
+  fs.writeFileSync(path.join(temporary, 'CampusAgent', 'window.json'),
+    JSON.stringify({ width: 1111, height: 777, x: 900000, y: 900000, maximized: true }))
   vm.runInNewContext(fs.readFileSync(path.join(directory, 'main.cjs'), 'utf8'), {
     require(name) {
       if (name === 'electron') return mockElectron
@@ -92,10 +100,16 @@ test('desktop main process confines requests and IPC and waits for backend shutd
       return name.startsWith('.') ? require(path.join(directory, name)) : require(name)
     },
     __dirname: directory, process: { platform: 'win32', resourcesPath: temporary },
+    setTimeout, clearTimeout, TextDecoder,
   }, { filename: 'desktop/main.cjs' })
   await startup
   const web = activeWindow.webContents
   const valid = { sender: web, senderFrame: web.mainFrame }
+  assert.equal(activeWindow.options.width, 1111)
+  assert.equal(activeWindow.options.height, 777)
+  assert.equal(activeWindow.options.x, undefined)
+  assert.equal('maximized' in activeWindow.options, false)
+  assert.equal(activeWindow.maximized, true)
   assert.equal(activeWindow.options.webPreferences.nodeIntegration, false)
   assert.equal(activeWindow.options.webPreferences.contextIsolation, true)
   assert.equal(activeWindow.options.webPreferences.sandbox, true)
@@ -133,6 +147,18 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   assert.equal(picked.name, 'picked-backup.zip')
   assert.deepEqual([...picked.bytes], [9, 9])
   await assert.rejects(handlers.get('campus:pick-backup')({ sender: web, senderFrame: { url: 'https://evil.example' } }))
+  const missingLog = handlers.get('campus:read-log')(valid)
+  assert.equal(missingLog.available, false)
+  assert.throws(() => handlers.get('campus:read-log')({ sender: web, senderFrame: { url: 'https://evil.example' } }))
+  fs.mkdirSync(path.join(info.dataPath, 'logs'), { recursive: true })
+  fs.writeFileSync(path.join(info.dataPath, 'logs', 'backend.log'), '第一行日志\nApplication startup complete.\n')
+  const log = handlers.get('campus:read-log')(valid)
+  assert.equal(log.available, true)
+  assert.ok(log.text.includes('Application startup complete.'))
+  assert.ok(log.text.includes('第一行日志'))
+  activeWindow.emit('close')
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'window.json'), 'utf8')),
+    { x: 40, y: 30, width: 1300, height: 900, maximized: false })
   handlers.get('campus:save-workspace')(valid, { appearance: 'dark', accentColor: '#123abc', localModel: 'qwen3:1.7b' })
   assert.equal(mockElectron.nativeTheme.themeSource, 'dark')
   const savedWorkspace = JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8'))

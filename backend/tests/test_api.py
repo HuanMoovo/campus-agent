@@ -73,6 +73,21 @@ def test_blank_input_and_invalid_model_are_rejected():
         assert client.post("/api/services/repairs", json={"location": "  ", "issue": "     ", "contact": "  "}).status_code == 422
 
 
+def test_repair_history_requires_admin_and_lists_newest_first():
+    marker = f"测试报修-{uuid4()}"
+    with TestClient(app) as client:
+        created = client.post("/api/services/repairs", json={
+            "location": "3 号宿舍楼 205 室", "issue": f"{marker} 灯管闪烁需要更换", "contact": "tester@example.edu"})
+        assert created.status_code == 200
+        assert client.get("/api/services/repairs").status_code == 401
+        listed = client.get("/api/services/repairs", headers={"X-Admin-Token": "test-admin-token"}).json()
+        assert listed["demo"] is True
+        rows = listed["items"]
+        assert any(row["issue"].startswith(marker) for row in rows)
+        assert [row["created_at"] for row in rows] == sorted([row["created_at"] for row in rows], reverse=True)
+        assert {"id", "location", "issue", "contact", "status"} <= set(rows[0])
+
+
 def test_plugin_manifest_and_patch_validation():
     with TestClient(app) as client:
         headers = {"X-Admin-Token": "test-admin-token"}

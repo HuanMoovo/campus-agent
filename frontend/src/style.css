@@ -240,6 +240,9 @@ button { cursor: pointer; }
 .table-action { color: var(--accent-text); cursor: pointer; font-size: 12px; margin-right: 13px; }.table-action input { display: none; }
 .backup-actions { display: flex; gap: 9px; flex-shrink: 0; align-items: center; }
 .backup-info { margin: 10px 0 0; color: var(--success-text); font-size: 12px; overflow-wrap: anywhere; }
+.log-section { align-items: flex-start; }
+.log-section .settings-copy { min-width: 0; }
+.log-view { max-height: 260px; overflow: auto; margin: 12px 0 0; padding: 12px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-muted); color: var(--text-secondary); font: 11px/1.7 Consolas, "Microsoft YaHei", monospace; white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .data-panel .el-table { --el-table-border-color: var(--border-subtle); --el-table-header-bg-color: var(--surface-muted); }
 
 .install-band { display: flex; align-items: center; justify-content: space-between; gap: 30px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 21px 0; margin-bottom: 24px; }

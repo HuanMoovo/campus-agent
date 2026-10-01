@@ -410,6 +410,12 @@ def add_repair(body: RepairCreate, db: Session = Depends(get_db)):
     return services.submit_repair(db, body)
 
 
+@app.get("/api/services/repairs", dependencies=[Depends(require_admin)])
+def list_local_repairs(db: Session = Depends(get_db), limit: int = Query(default=50, ge=1, le=200)):
+    """Repair history contains contact details, so it stays behind admin authorization."""
+    return services.list_repairs(db, limit)
+
+
 @app.get("/api/campus-sources")
 def get_campus_sources():
     return campus_data.list_sources()

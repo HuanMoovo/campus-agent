@@ -40,6 +40,7 @@ flowchart TD
 | GET | /api/services/grades、schedule、credits | 演示校园查询 |
 | GET | /api/services/classrooms | building、min_seats 筛选 |
 | POST | /api/services/repairs | location、issue、contact 表单提交 |
+| GET | /api/services/repairs | 本机报修记录（含联系方式，需管理员；桌面模式由桌面令牌自动授权） |
 | GET/POST | /api/plugins | 插件列表 / JSON 清单直接登记 |
 | POST | /api/plugins/install | 从 source HTTPS 清单地址安装 |
 | PATCH/DELETE | /api/plugins/{id} | 启停或说明更新 / 卸载 |

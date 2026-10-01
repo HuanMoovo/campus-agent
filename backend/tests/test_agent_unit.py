@@ -24,7 +24,7 @@ stubs = {
     "_campus_agent_test.rag": module("_campus_agent_test.rag", knowledge_index=retriever),
     "_campus_agent_test.models": module("_campus_agent_test.models", Repair=object),
     "_campus_agent_test.schemas": module("_campus_agent_test.schemas", RepairCreate=object),
-    "sqlalchemy": module("sqlalchemy"),
+    "sqlalchemy": module("sqlalchemy", select=lambda *args, **kwargs: None),
     "sqlalchemy.orm": module("sqlalchemy.orm", Session=object),
     "httpx": module("httpx", HTTPError=type("HTTPError", (Exception,), {})),
 }

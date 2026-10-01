@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld('campusDesktop', Object.freeze({
   restart: () => ipcRenderer.invoke('campus:restart'),
   saveBackup: (name, bytes) => ipcRenderer.invoke('campus:save-backup', { name, bytes }),
   pickBackup: () => ipcRenderer.invoke('campus:pick-backup'),
+  readLog: () => ipcRenderer.invoke('campus:read-log'),
 }))

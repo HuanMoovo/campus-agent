@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } = require('electron')
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, screen, shell } = require('electron')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
@@ -70,6 +70,63 @@ function writeWorkspaceFile(value) {
   fs.renameSync(temporary, workspacePath)
 }
 
+function clampNumber(value, min, max) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.min(Math.max(Math.round(value), min), max) : null
+}
+
+function visibleOnSomeDisplay(bounds) {
+  try {
+    return screen.getAllDisplays().some(display => {
+      const area = display.workArea
+      return bounds.x < area.x + area.width - 48 && bounds.x + 48 > area.x
+        && bounds.y < area.y + area.height - 48 && bounds.y + 24 > area.y
+    })
+  } catch {
+    return false
+  }
+}
+
+function readWindowState() {
+  try {
+    const value = JSON.parse(fs.readFileSync(path.join(dataDir, 'window.json'), 'utf8'))
+    const width = clampNumber(value?.width, 760, 6000)
+    const height = clampNumber(value?.height, 580, 4000)
+    if (!width || !height) return {}
+    const state = { width, height }
+    const x = clampNumber(value?.x, -20000, 20000)
+    const y = clampNumber(value?.y, -20000, 20000)
+    if (x !== null && y !== null && visibleOnSomeDisplay({ x, y, width, height })) Object.assign(state, { x, y })
+    if (value?.maximized === true) state.maximized = true
+    return state
+  } catch {
+    return {}
+  }
+}
+
+function writeWindowState(state) {
+  try {
+    fs.writeFileSync(path.join(dataDir, 'window.json'), JSON.stringify(state), { encoding: 'utf8', mode: 0o600 })
+  } catch { /* window state is best effort; never block shutdown on it */ }
+}
+
+function trackWindowState(target) {
+  let timer = null
+  const save = () => {
+    if (!target || target.isDestroyed()) return
+    writeWindowState({ ...target.getBounds(), maximized: target.isMaximized() })
+  }
+  const schedule = () => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(save, 400)
+  }
+  target.on('resize', schedule)
+  target.on('move', schedule)
+  target.on('close', () => {
+    if (timer) clearTimeout(timer)
+    save()
+  })
+}
+
 function bindIPC() {
   ipcMain.handle('campus:info', event => {
     assertSender(event)
@@ -136,6 +193,23 @@ function bindIPC() {
     if (stats.size > BACKUP_LIMIT) throw new Error('备份文件超过 300 MB')
     return { picked: true, name: path.basename(filePaths[0]), bytes: fs.readFileSync(filePaths[0]) }
   })
+  ipcMain.handle('campus:read-log', event => {
+    assertSender(event)
+    const logPath = path.join(dataDir, 'logs', 'backend.log')
+    let handle = null
+    try {
+      const stats = fs.statSync(logPath)
+      const length = Math.min(200_000, stats.size)
+      const bytes = new Uint8Array(length)
+      handle = fs.openSync(logPath, 'r')
+      fs.readSync(handle, bytes, 0, length, stats.size - length)
+      return { available: true, path: logPath, text: new TextDecoder('utf-8').decode(bytes) }
+    } catch {
+      return { available: false, path: logPath, text: '' }
+    } finally {
+      if (handle !== null) fs.closeSync(handle)
+    }
+  })
 }
 
 function installMenu() {
@@ -182,8 +256,9 @@ async function start() {
   bindIPC()
   nativeTheme.themeSource = workspace.appearance
   installMenu()
+  const { maximized, ...windowState } = readWindowState()
   window = new BrowserWindow({
-    title: 'Mens', width: 1240, height: 820, minWidth: 760, minHeight: 580,
+    title: 'Mens', width: 1240, height: 820, minWidth: 760, minHeight: 580, ...windowState,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#181b1e' : '#f5f7f7', icon: path.join(__dirname, 'assets', 'mens.png'), show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true,
@@ -191,6 +266,8 @@ async function start() {
       devTools: !app.isPackaged,
     },
   })
+  if (maximized) window.maximize()
+  trackWindowState(window)
   window.once('ready-to-show', () => { if (window && !quitting) window.show() })
   window.on('closed', () => { window = null })
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

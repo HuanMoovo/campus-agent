@@ -26,6 +26,7 @@ export interface CampusDesktop {
   restart(): Promise<void>
   saveBackup(name: string, bytes: Uint8Array): Promise<{ saved: boolean; path?: string }>
   pickBackup(): Promise<{ picked: boolean; name?: string; bytes?: Uint8Array }>
+  readLog(): Promise<{ available: boolean; path: string; text: string }>
 }
 
 declare global {
