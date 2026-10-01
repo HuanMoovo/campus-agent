@@ -12,7 +12,7 @@ Electron desktop shell + Vue 3 interface + FastAPI backend, able to run offline 
 <img src="https://img.shields.io/badge/license-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="Platforms" />
 
-**中文** · [English](README.en.md) · [日本語](README.ja.md)
+[中文](README.md) · **English** · [日本語](README.ja.md)
 
 [Download for Windows](https://github.com/HuanMoovo/campus-agent/releases/latest) ·
 [Project page](https://huanmoovo.github.io/campus-agent/) ·
