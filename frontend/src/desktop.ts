@@ -1,0 +1,34 @@
+export type WorkspaceModel = 'auto' | 'qwen3' | 'deepseek' | 'ollama'
+export type AppearanceMode = 'light' | 'dark' | 'system'
+
+export interface DesktopWorkspace {
+  model: WorkspaceModel
+  conversationId: string
+  localModel: string
+  appearance: AppearanceMode
+  accentColor: string
+}
+
+export interface DesktopInfo {
+  version: string
+  dataPath: string
+}
+
+export interface CampusDesktop {
+  isDesktop: true
+  getInfo(): Promise<DesktopInfo>
+  loadWorkspace(): Promise<DesktopWorkspace>
+  saveWorkspace(state: DesktopWorkspace): Promise<void>
+  openDataFolder(): Promise<void>
+  openBaike(query: string): Promise<void>
+  openOllamaDownload(): Promise<void>
+  restart(): Promise<void>
+}
+
+declare global {
+  interface Window {
+    campusDesktop?: CampusDesktop
+  }
+}
+
+export const desktop = window.campusDesktop?.isDesktop ? window.campusDesktop : undefined

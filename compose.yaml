@@ -1,0 +1,51 @@
+services:
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: campus_agent
+      POSTGRES_USER: campus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in root .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U campus -d campus_agent]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build:
+      context: ./backend
+      args:
+        INSTALL_VECTOR: ${ENABLE_RAG:-false}
+    environment:
+      DATABASE_URL: postgresql+psycopg://campus:${POSTGRES_PASSWORD}@database:5432/campus_agent
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN in root .env}
+      QWEN_API_KEY: ${QWEN_API_KEY:-}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      QWEN_MODEL: ${QWEN_MODEL:-qwen3-235b-a22b}
+      DEEPSEEK_MODEL: ${DEEPSEEK_MODEL:-deepseek-chat}
+      ENABLE_RAG: ${ENABLE_RAG:-false}
+      PLUGIN_ALLOWED_HOSTS: ${PLUGIN_ALLOWED_HOSTS:-}
+      CORS_ORIGINS: http://localhost:8080
+    volumes:
+      - backend_data:/app/data
+      - model_cache:/home/campus/.cache
+    depends_on:
+      database:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+  frontend:
+    build: ./frontend
+    ports:
+      - '127.0.0.1:8080:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+volumes:
+  postgres_data:
+  backend_data:
+  model_cache:

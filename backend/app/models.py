@@ -1,0 +1,55 @@
+from datetime import datetime, timezone
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from .db import Base
+
+
+def utcnow() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[str] = mapped_column(ForeignKey("conversations.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(16))
+    content: Mapped[str] = mapped_column(Text)
+    result_data: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Document(Base):
+    __tablename__ = "documents"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    title: Mapped[str] = mapped_column(String(255))
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
+class Plugin(Base):
+    __tablename__ = "plugins"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), unique=True)
+    description: Mapped[str] = mapped_column(String(500))
+    url: Mapped[str] = mapped_column(String(500))
+    parameters: Mapped[dict] = mapped_column(JSON, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class Repair(Base):
+    __tablename__ = "repairs"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    location: Mapped[str] = mapped_column(String(120))
+    issue: Mapped[str] = mapped_column(Text)
+    contact: Mapped[str] = mapped_column(String(120))
+    status: Mapped[str] = mapped_column(String(30), default="已提交（演示）")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

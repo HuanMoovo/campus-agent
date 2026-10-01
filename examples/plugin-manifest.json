@@ -1,0 +1,14 @@
+{
+  "name": "campus_map",
+  "description": "查询公开校园地点信息",
+  "url": "https://plugins.example.edu/campus-map",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "query": {"type": "string", "description": "公开地点名称", "minLength": 1, "maxLength": 80}
+    },
+    "required": ["query"],
+    "additionalProperties": false
+  },
+  "enabled": true
+}

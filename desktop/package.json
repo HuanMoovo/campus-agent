@@ -1,0 +1,46 @@
+{
+  "name": "mens-desktop",
+  "version": "1.0.0",
+  "description": "Mens 桌面校园助手",
+  "author": "Mens",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "pack": "electron-builder --win --x64 --dir",
+    "dist": "electron-builder --win nsis --x64"
+  },
+  "devDependencies": {
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "edu.campus.agent.desktop",
+    "productName": "Mens",
+    "artifactName": "Mens-Setup-${version}-${arch}.${ext}",
+    "electronDist": "node_modules/electron/dist",
+    "asar": true,
+    "directories": { "output": "../release", "buildResources": "assets" },
+    "files": ["main.cjs", "preload.cjs", "lib/**/*", "assets/**/*", "package.json"],
+    "extraResources": [
+      { "from": "../build/backend/campus-backend", "to": "backend", "filter": ["**/*"] },
+      { "from": "../frontend/dist", "to": "frontend", "filter": ["**/*"] }
+    ],
+    "win": {
+      "icon": "assets/mens.ico",
+      "target": [ { "target": "nsis", "arch": ["x64"] } ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Mens",
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": ["zh_CN", "en_US"]
+    }
+  }
+}

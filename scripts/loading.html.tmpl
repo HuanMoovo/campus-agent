@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">
+  <title>Mens</title>
+  <style>
+    :root{color-scheme:light dark}
+    body{margin:0;background:#f5f7f7;color:#263e43;font-family:'Microsoft YaHei',sans-serif;display:grid;place-items:center;height:100vh;text-align:center}
+    .mark{display:block;object-fit:contain;width:104px;height:104px;border-radius:20%;margin:0 auto}
+    h1{font-size:26px;margin:24px 0 10px}p{font-size:14px;color:#617578}
+    .progress{height:3px;width:160px;margin:28px auto;background:#dce3e9;overflow:hidden;border-radius:4px}
+    .progress:before{content:'';display:block;height:100%;width:50%;background:#779dc6;animation:move 1.2s ease-in-out infinite}
+    @keyframes move{from{transform:translateX(-100%)}to{transform:translateX(220%)}}
+    @media(prefers-color-scheme:dark){body{background:#191c20;color:#ecf0f2}p{color:#b3bdc3}.progress{background:#373e45}}
+    @media(prefers-reduced-motion:reduce){.progress:before{animation:none;width:100%}}
+  </style>
+</head>
+<body><main><img class="mark" src="__MENS_LOGO_DATA_URL__" alt=""><h1>Mens</h1><p>正在准备本地服务…</p><div class="progress"></div><p>首次启动可能需要片刻</p></main></body>
+</html>
