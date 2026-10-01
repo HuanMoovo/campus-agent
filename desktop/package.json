@@ -4,6 +4,8 @@
   "description": "Mens 桌面校园助手",
   "license": "AGPL-3.0-only",
   "author": "Mens",
+  "homepage": "https://huanmoovo.github.io/campus-agent/",
+  "repository": { "type": "git", "url": "https://github.com/HuanMoovo/campus-agent.git" },
   "private": true,
   "main": "main.cjs",
   "scripts": {
