@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全问题（私密报告）
+    url: https://github.com/HuanMoovo/campus-agent/security/advisories/new
+    about: 请不要用公开 issue 报告安全漏洞
+  - name: 使用说明与已知限制
+    url: https://github.com/HuanMoovo/campus-agent/blob/main/README.md
+    about: 安装、配置、平台支持与已知限制先看 README
+  - name: 项目介绍页
+    url: https://huanmoovo.github.io/campus-agent/
+    about: 中 / 英 / 日三语的图文介绍与平台矩阵

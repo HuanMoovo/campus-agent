@@ -141,6 +141,15 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   await assert.rejects(handlers.get('campus:save-backup')(valid, { name: '../escape.zip', bytes: backupBytes }))
   await assert.rejects(handlers.get('campus:save-backup')(valid, { name: 'ok.zip', bytes: 'not bytes' }))
   await assert.rejects(handlers.get('campus:save-backup')({ sender: web, senderFrame: { url: 'https://evil.example' } }, { name: 'ok.zip', bytes: backupBytes }))
+  const savedMarkdown = await handlers.get('campus:save-export')(valid, { name: 'mens-conversation-ab12cd34.md', bytes: backupBytes })
+  assert.equal(savedMarkdown.saved, true)
+  assert.deepEqual([...fs.readFileSync(savedMarkdown.path)], [7, 8, 9, 10])
+  const savedJson = await handlers.get('campus:save-export')(valid, { name: 'mens-conversation-ab12cd34.json', bytes: backupBytes })
+  assert.match(savedJson.path, /\.json$/)
+  await assert.rejects(handlers.get('campus:save-export')(valid, { name: '../escape.md', bytes: backupBytes }))
+  await assert.rejects(handlers.get('campus:save-export')(valid, { name: 'notes.txt', bytes: backupBytes }))
+  await assert.rejects(handlers.get('campus:save-export')(valid, { name: 'ok.md', bytes: 'not bytes' }))
+  await assert.rejects(handlers.get('campus:save-export')({ sender: web, senderFrame: { url: 'https://evil.example' } }, { name: 'ok.md', bytes: backupBytes }))
   fs.writeFileSync(path.join(temporary, 'picked-backup.zip'), Buffer.from([9, 9]))
   const picked = await handlers.get('campus:pick-backup')(valid)
   assert.equal(picked.picked, true)
@@ -229,7 +238,7 @@ test('preload exposes a frozen narrow surface with a single validated HTTPS open
   assert.equal(Object.isFrozen(exposed), true)
   assert.deepEqual(Object.keys(exposed).sort(), [
     'getInfo', 'isDesktop', 'loadWorkspace', 'openBaike', 'openDataFolder', 'openExternal',
-    'openOllamaDownload', 'pickBackup', 'readLog', 'restart', 'saveBackup', 'saveWorkspace',
+    'openOllamaDownload', 'pickBackup', 'readLog', 'restart', 'saveBackup', 'saveExport', 'saveWorkspace',
   ])
   await exposed.openBaike('大学')
   await exposed.openOllamaDownload('https://evil.example')

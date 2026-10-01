@@ -1,0 +1,52 @@
+name: 缺陷报告
+description: 报告可复现的问题（请不要在这里粘贴密钥、令牌或学生个人信息）
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。为了让问题可复现，请尽量填全下面的内容。
+        安全漏洞请改用 [私密报告](https://github.com/HuanMoovo/campus-agent/security/advisories/new)。
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - Windows 桌面版（安装包）
+        - macOS 桌面版
+        - Linux 桌面版
+        - 网页版 / PWA
+        - Docker 部署
+        - 从源码运行
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: 版本
+      description: 设置页显示的应用版本，或安装包文件名（如 1.2.0）
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      placeholder: |
+        1. 打开「知识库」
+        2. 上传 …
+        3. 看到 …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望结果与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或截图
+      description: 设置页可以查看后端日志；请先确认其中没有密钥、令牌或个人信息
+    validations:
+      required: false

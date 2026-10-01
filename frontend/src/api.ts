@@ -337,6 +337,27 @@ export const api = {
     form.append('file', file)
     return request<KnowledgeDocument>('/documents/upload', { method: 'POST', body: form })
   },
+  importDocumentUrl: (url: string) => request<KnowledgeDocument>('/documents/import-url', json('POST', { url }))
+    .then(doc => ({ ...doc, filename: doc.filename || String((doc as { title?: string }).title || '') })),
+  exportConversation: async (id: string, format: 'md' | 'json') => {
+    let response: Response
+    try {
+      response = await fetch(`${base}/conversations/${encodeURIComponent(id)}/export?format=${format}`)
+    } catch {
+      throw new Error('无法连接 Mens 服务。请检查后端是否已启动。')
+    }
+    if (!response.ok) {
+      let detail = ''
+      try {
+        const data = await response.json()
+        detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data)
+      } catch { detail = response.statusText }
+      throw responseError(response.status, detail)
+    }
+    const disposition = response.headers.get('content-disposition') || ''
+    const match = /filename="([^"]+)"/.exec(disposition)
+    return { blob: await response.blob(), name: match ? match[1] : `mens-conversation.${format}` }
+  },
   updateDocument: (id: string, file: File) => {
     const form = new FormData()
     form.append('file', file)

@@ -52,6 +52,15 @@ function validateBackupBytes(bytes, limit = BACKUP_LIMIT) {
   return size
 }
 
+const EXPORT_LIMIT = 20 * 1024 * 1024
+
+function validateExportName(name) {
+  if (typeof name !== 'string' || name.startsWith('.') || !/^[A-Za-z0-9._-]{1,120}\.(md|json)$/.test(name)) {
+    throw new TypeError('Invalid export file name')
+  }
+  return name
+}
+
 function validateExternalUrl(url) {
   if (typeof url !== 'string' || url.length > 2048) throw new TypeError('Invalid external URL')
   let parsed
@@ -62,4 +71,4 @@ function validateExternalUrl(url) {
   return parsed.href
 }
 
-module.exports = { isOwnUrl, BACKUP_LIMIT, validateWorkspace, parseReadyLine, validateBackupName, validateBackupBytes, validateExternalUrl }
+module.exports = { isOwnUrl, BACKUP_LIMIT, EXPORT_LIMIT, validateWorkspace, parseReadyLine, validateBackupName, validateBackupBytes, validateExportName, validateExternalUrl }

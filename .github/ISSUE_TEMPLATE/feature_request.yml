@@ -1,0 +1,26 @@
+name: 功能建议
+description: 提出改进或新功能（请说明实际场景，便于判断优先级）
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 你想解决的问题
+      placeholder: 例如：课表查询结果想直接导出成日历文件，方便导入手机日历。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 你期望的做法
+    validations:
+      required: false
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: 约束确认
+      options:
+        - label: 这个功能不依赖未授权的学校接口或数据
+          required: false
+        - label: 我理解项目坚持「本机优先」与「演示数据必须标注」的原则
+          required: false

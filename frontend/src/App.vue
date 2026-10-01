@@ -748,17 +748,73 @@ function validDocument(file: File) {
 
 async function onUpload(event: Event) {
   const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  if (!file || docAction.value) { input.value = ''; return }
-  if (!validDocument(file)) { input.value = ''; return }
+  const files = Array.from(input.files || [])
+  if (!files.length || docAction.value) { input.value = ''; return }
+  const accepted = files.filter(file => validDocument(file))
+  if (!accepted.length) { input.value = ''; return }
   docAction.value = 'upload'
+  let uploaded = 0
+  const problems: string[] = []
   try {
-    const result = await api.uploadDocument(file)
+    for (const file of accepted) {
+      try {
+        const result = await api.uploadDocument(file)
+        uploaded += 1
+        if (result.warning) problems.push(`${file.name}：${result.warning}`)
+      } catch (error) {
+        problems.push(`${file.name}：${friendlyError(error)}`)
+      }
+    }
     await loadDocuments()
-    if (result.warning) ElMessage.warning(result.warning)
-    else ElMessage.success('文档已上传')
-  } catch (error) { ElMessage.error(friendlyError(error)) }
-  finally { docAction.value = ''; input.value = '' }
+    if (uploaded && !problems.length) ElMessage.success(accepted.length > 1 ? `已上传 ${uploaded} 份文档` : '文档已上传')
+    else if (uploaded) ElMessage.warning(`已上传 ${uploaded} 份；其余失败——${problems.join('；')}`)
+    else ElMessage.error(`上传失败——${problems.join('；')}`)
+  } finally { docAction.value = ''; input.value = '' }
+}
+
+async function importDocumentUrl() {
+  if (docAction.value) return
+  let value = ''
+  try {
+    const answer = await ElMessageBox.prompt(
+      '填写要导入知识库的公开网页地址（https://）。导入后正文会保存为本机文档，可离线检索。',
+      '导入网页',
+      { confirmButtonText: '导入', cancelButtonText: '取消', inputPlaceholder: 'https://www.example.edu/notice/123',
+        inputPattern: /^https:\/\/\S+$/, inputErrorMessage: '地址必须以 https:// 开头' })
+    value = String(answer.value || '').trim()
+  } catch { return }
+  docAction.value = 'import-url'
+  try {
+    const imported = await api.importDocumentUrl(value)
+    await loadDocuments()
+    ElMessage.success(`已导入：${imported.filename}`)
+  } catch (error) { ElMessage.error(`导入失败：${friendlyError(error)}`) }
+  finally { docAction.value = '' }
+}
+
+async function exportConversation(item: ConversationSummary, format: string) {
+  if (historyBusy.value) return
+  const kind = format === 'json' ? 'json' : 'md'
+  historyBusy.value = true
+  historyError.value = ''
+  try {
+    const { blob, name } = await api.exportConversation(item.id, kind)
+    if (desktop) {
+      const bytes = new Uint8Array(await blob.arrayBuffer())
+      const result = await desktop.saveExport(name, bytes)
+      if (result.saved) ElMessage.success(`对话已导出：${result.path || name}`)
+      else ElMessage.info('已取消导出。')
+    } else {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = name
+      link.click()
+      URL.revokeObjectURL(url)
+      ElMessage.success(`已开始下载 ${name}`)
+    }
+  } catch (error) { ElMessage.error(`导出失败：${friendlyError(error)}`) }
+  finally { historyBusy.value = false }
 }
 
 async function onReplace(id: string, event: Event) {
@@ -1027,6 +1083,15 @@ onUnmounted(() => {
                 <p v-if="!conversationsBusy && !conversationsError && conversations.length === 0" class="history-empty">暂无历史对话。<br />发送第一条消息后会自动保存。</p>
                 <div v-for="item in conversations" :key="item.id" class="history-item" :class="{ active: item.id === workspace.conversationId, disabled: chatBusy }" role="button" tabindex="0" :aria-disabled="chatBusy" @click="openConversation(item.id)" @keydown.enter="openConversation(item.id)">
                   <div class="history-item-main"><strong>{{ item.title }}</strong><small>{{ item.message_count }} 条消息 · {{ chatTime(item.updated_at) }}</small></div>
+                  <el-dropdown class="history-export-menu" trigger="click" @command="(format: string) => exportConversation(item, format)" @click.stop>
+                    <el-button class="history-export" text :icon="Download" :disabled="chatBusy" :aria-label="`导出对话：${item.title}`" />
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item command="md">导出 Markdown</el-dropdown-item>
+                        <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
                   <el-button class="history-delete" text type="danger" :icon="Delete" :disabled="chatBusy" :aria-label="`删除对话：${item.title}`" @click.stop="deleteConversation(item)" />
                 </div>
               </div>
@@ -1076,7 +1141,7 @@ onUnmounted(() => {
         </section>
 
         <section v-else-if="workspace.view === 'knowledge'" class="content-view">
-          <div class="page-heading"><div><div class="eyebrow">KNOWLEDGE BASE</div><h1>知识库</h1><p>维护政策文件与办事指南，更新后可重建检索索引。</p></div><div class="heading-actions"><el-button :icon="Refresh" :loading="docAction === 'reindex'" @click="reindex">重建索引</el-button><el-button type="primary" :icon="Upload" :loading="docAction === 'upload'" @click="uploadInput?.click()">上传文档</el-button><input ref="uploadInput" class="hidden-input" type="file" accept=".pdf,.md,.txt,.docx" @change="onUpload" /></div></div>
+          <div class="page-heading"><div><div class="eyebrow">KNOWLEDGE BASE</div><h1>知识库</h1><p>维护政策文件与办事指南，更新后可重建检索索引。</p></div><div class="heading-actions"><el-button :icon="Refresh" :loading="docAction === 'reindex'" @click="reindex">重建索引</el-button><el-button :icon="Link" :loading="docAction === 'import-url'" :disabled="Boolean(docAction)" @click="importDocumentUrl">导入网页</el-button><el-button type="primary" :icon="Upload" :loading="docAction === 'upload'" @click="uploadInput?.click()">上传文档</el-button><input ref="uploadInput" class="hidden-input" type="file" accept=".pdf,.md,.txt,.docx" multiple @change="onUpload" /></div></div>
           <div class="section-toolbar"><div><strong>文档列表</strong><span>{{ documents.length }} 份文档</span></div><el-button text :icon="Refresh" :loading="docsBusy" @click="loadDocuments">刷新</el-button></div>
           <el-alert v-if="docsError" class="alert" :title="docsError" type="error" show-icon :closable="false" />
           <p class="management-note">支持 PDF、Markdown、TXT、Word (.docx)，最大 5 MB。<template v-if="!desktop">管理操作需在「设置」填写管理员令牌。</template><template v-else>文档保存在本机应用数据目录。</template></p>

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('campusDesktop', Object.freeze({
   openOllamaDownload: () => ipcRenderer.invoke('campus:open-ollama-download'),
   restart: () => ipcRenderer.invoke('campus:restart'),
   saveBackup: (name, bytes) => ipcRenderer.invoke('campus:save-backup', { name, bytes }),
+  saveExport: (name, bytes) => ipcRenderer.invoke('campus:save-export', { name, bytes }),
   pickBackup: () => ipcRenderer.invoke('campus:pick-backup'),
   readLog: () => ipcRenderer.invoke('campus:read-log'),
   openExternal: url => ipcRenderer.invoke('campus:open-external-https', url),

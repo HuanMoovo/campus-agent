@@ -299,6 +299,27 @@ def html_to_text(markup: str, limit: int = MAX_PAGE_TEXT) -> tuple[str, str]:
     return title, parser.text()[:limit]
 
 
+MAX_DOCUMENT_BYTES = 2_000_000
+MAX_DOCUMENT_TEXT = 500_000
+
+
+def fetch_document_text(url: str, limit: int = MAX_DOCUMENT_TEXT) -> tuple[str, str]:
+    """Fetch one URL and return (title, text) for knowledge-base import.
+
+    Uses the same discipline as page fetching during a search: HTTPS only, the connection is
+    pinned to the validated public address with SNI preserved, redirects are refused, and the
+    payload has a size cap. HTML is reduced to readable text; anything else is taken verbatim.
+    """
+    limit = max(1_000, min(limit, MAX_DOCUMENT_TEXT))
+    content_type, data = fetch_bytes(url, max_bytes=MAX_DOCUMENT_BYTES)
+    raw = _decode(data, content_type)
+    if "html" in (content_type or "").lower() or "xhtml" in (content_type or "").lower():
+        title, text = html_to_text(raw, limit=limit)
+    else:
+        title, text = "", raw
+    return title, text[:limit]
+
+
 def _plain(fragment: str) -> str:
     return html_module.unescape(re.sub(r"<[^>]+>", " ", fragment)).strip()
 

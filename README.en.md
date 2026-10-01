@@ -58,6 +58,7 @@ assistant is meant to be.
 | Source passages | Answers list the knowledge-base passages they used, so the evidence can be checked |
 | Conversation isolation | Desktop builds are isolated per machine, web builds per browser; individual conversations can be deleted or all cleared |
 | Honest labelling | Demo data, degraded retrieval and web sources are all labelled in the interface |
+| Conversation export | Any conversation can be exported as Markdown (for reading) or JSON (for tooling), including source links, tool calls and demo-data labels; the desktop app uses a save dialog and the web app downloads directly |
 
 ### Knowledge base and retrieval
 
@@ -69,6 +70,8 @@ assistant is meant to be.
 | Vector retrieval (optional) | Enabling RAG switches to semantic retrieval with BGE-M3 + Chroma; when vectors are unavailable the app falls back to keyword search and says so |
 | Index consistency | The index records a version hash, so deleted or updated documents never come back as stale passages |
 | Demo material | The first SQLite start loads three clearly labelled demo documents; PostgreSQL loads none |
+| Web import | Fetch the text of a public page (HTTPS) and store it as a local document for offline retrieval; the fetch follows the web-search egress rules (HTTPS only, pinned to a validated public address, no redirects, size caps) and private addresses are refused |
+| Batch upload | Select several files at once and get a result per file |
 
 ### Web search (optional, off by default)
 

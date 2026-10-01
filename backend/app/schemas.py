@@ -97,6 +97,19 @@ class DocumentUpdate(DocumentCreate):
     pass
 
 
+class ImportUrlRequest(RequestModel):
+    """Import one public web page into the knowledge base."""
+
+    url: str = Field(min_length=8, max_length=2048)
+
+    @field_validator("url")
+    @classmethod
+    def require_https(cls, value: str) -> str:
+        if not value.lower().startswith("https://"):
+            raise ValueError("网页地址必须是 https:// 开头")
+        return value
+
+
 class PluginCreate(RequestModel):
     name: str = Field(pattern=r"^[a-z][a-z0-9_]{1,79}$")
     description: str = Field(min_length=1, max_length=500)

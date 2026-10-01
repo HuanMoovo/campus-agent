@@ -16,7 +16,7 @@ from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 import httpx
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
@@ -32,7 +32,7 @@ from .model_runtime import configuration as model_configuration, update_provider
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
 from .plugin_catalog import catalog_list, install_curated_plugin
 from .rag import knowledge_index
-from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
+from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
 from .seed import seed_demo_documents
 from . import services
 
@@ -288,6 +288,83 @@ def conversation_history(conversation_id: str, db: Session = Depends(get_db)):
     return {"id": conversation_id, "messages": [{"role": row.role, "content": row.content, "created_at": row.created_at, **(row.result_data or {})} for row in rows]}
 
 
+def conversation_rows(db: Session, conversation_id: str) -> list[Message]:
+    return list(db.scalars(select(Message).where(Message.conversation_id == conversation_id).order_by(Message.id)).all())
+
+
+def conversation_title(rows: list[Message]) -> str:
+    """Same title rule as the history list, so exports match what the sidebar shows."""
+    first_user = next((row for row in rows if row.role == "user" and row.content.strip()), None)
+    return first_user.content.strip().splitlines()[0][:80] if first_user else "新对话"
+
+
+def exported_message(row: Message) -> dict:
+    data = row.result_data if isinstance(row.result_data, dict) else {}
+    return {"role": row.role, "content": row.content, "created_at": iso_utc(row.created_at),
+            "sources": data.get("sources", []), "tool_calls": data.get("tool_calls", []), "mode": data.get("mode", "")}
+
+
+def conversation_markdown(title: str, conversation_id: str, exported_at: str, rows: list[Message]) -> str:
+    lines = [f"# {title}", "",
+             f"- 对话 ID：`{conversation_id}`",
+             f"- 消息数：{len(rows)}",
+             f"- 导出时间：{exported_at}",
+             "- 导出工具：Mens 校园助手（Apache-2.0）。演示数据与降级结果在消息内标注。",
+             "", "---", ""]
+    for index, row in enumerate(rows, 1):
+        speaker = "用户" if row.role == "user" else "助手"
+        lines += [f"## {index}. {speaker} · {iso_utc(row.created_at)}", "", row.content.strip() or "（空）", ""]
+        data = row.result_data if isinstance(row.result_data, dict) else {}
+        if data.get("mode") == "demo":
+            lines += ["> 本条回答使用演示数据或降级结果，未接入学校接口。", ""]
+        calls = data.get("tool_calls") or []
+        if calls:
+            lines += ["**工具调用**", ""]
+            for call in calls:
+                name = call.get("name") or call.get("tool") or "tool"
+                lines.append(f"- `{name}`")
+            lines.append("")
+        sources = data.get("sources") or []
+        if sources:
+            lines += ["**参考来源**", ""]
+            for position, source in enumerate(sources, 1):
+                label = source.get("title") or source.get("url") or f"来源 {position}"
+                url = source.get("url") or ""
+                kind = f"（{source['kind']}）" if source.get("kind") else ""
+                lines.append(f"{position}. [{label}]({url}){kind}" if url else f"{position}. {label}{kind}")
+                snippet = (source.get("snippet") or "").strip()
+                if snippet:
+                    lines.append(f"   - {snippet[:200]}")
+            lines.append("")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+@app.get("/api/conversations/{conversation_id}/export")
+def export_conversation(conversation_id: str, format: str = Query(default="md", pattern="^(md|json)$"),
+                        db: Session = Depends(get_db)):
+    """Export one conversation as Markdown (for reading) or JSON (for tooling)."""
+    if db.get(Conversation, conversation_id) is None:
+        raise HTTPException(404, "对话不存在")
+    rows = conversation_rows(db, conversation_id)
+    if not rows:
+        raise HTTPException(404, "对话不存在")
+    exported_at = iso_utc(datetime.now(timezone.utc))
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    if format == "json":
+        payload = {"app": "Mens", "format": "mens-conversation/1", "license": "Apache-2.0",
+                   "exported_at": exported_at,
+                   "conversation": {"id": conversation_id, "title": conversation_title(rows), "message_count": len(rows)},
+                   "messages": [exported_message(row) for row in rows]}
+        body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+        media_type, extension = "application/json", "json"
+    else:
+        body = conversation_markdown(conversation_title(rows), conversation_id, exported_at, rows).encode("utf-8")
+        media_type, extension = "text/markdown; charset=utf-8", "md"
+    filename = f"mens-conversation-{conversation_id[:8]}-{stamp}.{extension}"
+    return Response(body, media_type=media_type, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "no-store"})
+
+
 @app.get("/api/documents")
 def list_documents(db: Session = Depends(get_db)):
     return [document_json(doc) for doc in db.scalars(select(Document).order_by(Document.updated_at.desc())).all()]
@@ -305,6 +382,29 @@ def add_document(body: DocumentCreate, db: Session = Depends(get_db)):
 async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
     filename, content = await parse_upload(file)
     doc = Document(id=str(uuid4()), title=filename, content=content)
+    db.add(doc)
+    db.commit()
+    return indexed_document_json(doc)
+
+
+@app.post("/api/documents/import-url", dependencies=[Depends(require_admin)])
+def import_document_url(body: ImportUrlRequest, db: Session = Depends(get_db)):
+    """Import one public web page as a knowledge-base document.
+
+    The fetch follows the same rules as web search (HTTPS only, address pinned to the validated
+    public IP with SNI preserved, no redirects, size cap) and the page text is stored locally, so
+    the imported material is searchable offline afterwards.
+    """
+    try:
+        title, text = web_search.fetch_document_text(body.url)
+    except web_search.WebSearchError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    text = text.strip()
+    if len(text) < 20:
+        raise HTTPException(400, "网页没有可提取的正文文本")
+    label = (title or urlsplit(body.url).netloc or body.url)[:180]
+    content = f"来源：{body.url}\n导入时间：{iso_utc(datetime.now(timezone.utc))}\n\n{text}"
+    doc = Document(id=str(uuid4()), title=f"[网页] {label}"[:255], content=content)
     db.add(doc)
     db.commit()
     return indexed_document_json(doc)

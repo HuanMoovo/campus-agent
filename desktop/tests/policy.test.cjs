@@ -1,7 +1,18 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { isOwnUrl, validateBackupBytes, validateBackupName, validateExternalUrl, validateWorkspace, parseReadyLine } = require('../lib/policy.cjs')
+const { isOwnUrl, validateBackupBytes, validateBackupName, validateExportName, EXPORT_LIMIT, validateExternalUrl, validateWorkspace, parseReadyLine } = require('../lib/policy.cjs')
+
+test('conversation export file names are constrained to Markdown and JSON', () => {
+  assert.equal(validateExportName('mens-conversation-ab12cd34-20261001-120000.md'),
+    'mens-conversation-ab12cd34-20261001-120000.md')
+  assert.equal(validateExportName('talk.json'), 'talk.json')
+  for (const name of ['../escape.md', '.hidden.md', 'notes.txt', 'report.md.exe', '', `${'x'.repeat(130)}.md`, 'a/b.md']) {
+    assert.throws(() => validateExportName(name), TypeError, name)
+  }
+  assert.equal(validateBackupBytes(new Uint8Array(10), EXPORT_LIMIT), 10)
+  assert.throws(() => validateBackupBytes(new Uint8Array(EXPORT_LIMIT + 1), EXPORT_LIMIT), TypeError)
+})
 
 test('only the exact loopback origin receives desktop privileges', () => {
   const origin = 'http://127.0.0.1:53212'

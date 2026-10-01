@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { startBackend } = require('./lib/backend.cjs')
-const { isOwnUrl, BACKUP_LIMIT, validateBackupBytes, validateBackupName, validateExternalUrl, validateWorkspace } = require('./lib/policy.cjs')
+const { isOwnUrl, BACKUP_LIMIT, EXPORT_LIMIT, validateBackupBytes, validateBackupName, validateExportName, validateExternalUrl, validateWorkspace } = require('./lib/policy.cjs')
 
 app.setName('Mens')
 // Keep the established data path so upgrades retain the existing database and settings.
@@ -176,6 +176,26 @@ function bindIPC() {
       title: '导出 Mens 备份',
       defaultPath: path.join(app.getPath('documents'), name),
       filters: [{ name: 'Zip 备份', extensions: ['zip'] }],
+    })
+    if (canceled || !filePath) return { saved: false }
+    fs.writeFileSync(filePath, view)
+    return { saved: true, path: filePath }
+  })
+  ipcMain.handle('campus:save-export', async (event, payload) => {
+    assertSender(event)
+    const name = validateExportName(payload?.name)
+    const size = validateBackupBytes(payload?.bytes, EXPORT_LIMIT)
+    const bytes = payload.bytes
+    const view = bytes instanceof ArrayBuffer
+      ? new Uint8Array(bytes)
+      : new Uint8Array(bytes.buffer, bytes.byteOffset, size)
+    const markdown = name.endsWith('.md')
+    const { canceled, filePath } = await dialog.showSaveDialog(window, {
+      title: markdown ? '导出对话（Markdown）' : '导出对话（JSON）',
+      defaultPath: path.join(app.getPath('documents'), name),
+      filters: markdown
+        ? [{ name: 'Markdown', extensions: ['md'] }]
+        : [{ name: 'JSON', extensions: ['json'] }],
     })
     if (canceled || !filePath) return { saved: false }
     fs.writeFileSync(filePath, view)
