@@ -2,6 +2,24 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 功能批次：会话导出、网页导入、批量上传与工程化（2026-10-01）
+
+- **后端 266 passed（+6）、前端 13 passed 且 `vue-tsc`/Vite 构建干净、桌面外壳 9 passed（+1）**。
+- 新增测试：`backend/tests/test_export_and_import.py` 覆盖两种导出格式、未知会话 404、非法格式 422、
+  导入需管理员令牌、非 HTTPS 拒绝、**解析到内网地址时由真实抓取路径拒绝**（patch `socket.getaddrinfo`
+  指向私网仍被拦下、文档数不变）、无正文 400。
+- 真实浏览器（Edge，dev 栈 5173 + 8000）：
+  - 从历史面板导出会话 → 得到 `mens-conversation-<id>-<时间>.md`，首行为标题，含 `## 1. 用户` / `## 2. 助手`
+    与 `**参考来源**`；JSON 导出可被 `json.loads` 解析，消息角色为 `['user', 'assistant']` 且来源标题保留。
+  - 知识库「导入网页」导入 `https://example.com/` → 提示「已导入：[网页] Example Domain」，列表出现该文档。
+  - 一次选择两个文件上传 → 提示「已上传 2 份文档」，两份文件均出现在列表。
+  - 验收产生的文档与测试会话随后通过管理接口清理，未留在开发数据目录。
+- CI：`ci.yml`（后端 / 前端 / 桌面三套测试 + `docker compose config` 校验）与 `codeql.yml` 在 main 上
+  首次运行即通过（run 见 GitHub Actions）；Dependabot 已按配置为 pip / npm / actions 开出更新 PR。
+- 未覆盖：应用界面本身的多语言（界面仍为中文，README 与介绍页为三语）；代码签名与真机（macOS/Linux）验收。
+
+
+
 ## Docker 部署验证（compose 栈，2026-10-01）
 
 - `docker compose build` 在本机 Docker Desktop 29.1.3 上通过，生成 `campus-agent-backend` 与 `campus-agent-frontend` 两个镜像（后端 `python:3.11-slim`，前端 `node:22-alpine` 构建 + `nginx:alpine` 运行）。
