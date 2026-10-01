@@ -1,0 +1,14 @@
+Mens 校园助手 (Mens Campus Assistant)
+Copyright 2026 HuanMoovo
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This product includes software developed by third parties, each distributed under its own
+licence. The full list is in THIRD-PARTY-NOTICES.md. In particular it includes:
+
+  * Electron and Chromium (https://www.electronjs.org, https://www.chromium.org)
+  * CPython (https://www.python.org)
+  * PyInstaller (https://pyinstaller.org), used under its bootloader exception
+  * FastAPI, Starlette, Uvicorn, Pydantic, SQLAlchemy, LangGraph/LangChain, httpx,
+    pypdf, python-multipart (MIT / BSD-3-Clause / Apache-2.0)
+  * Vue 3, Pinia, Element Plus, Vite (MIT) and TypeScript (Apache-2.0)

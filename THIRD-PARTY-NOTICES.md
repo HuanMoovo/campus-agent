@@ -1,6 +1,6 @@
 # 第三方组件与许可证
 
-Mens 校园助手本体以 **GNU Affero General Public License v3.0**（见 [LICENSE](LICENSE)）发布。
+Mens 校园助手本体以 **Apache License 2.0**（见 [LICENSE](LICENSE)，版权与归属声明见 [NOTICE](NOTICE)）发布。
 安装包里同时包含下列第三方组件，它们各自按其原许可证分发，版权归各自的作者。以下为主要组件
 （版本以构建时的 `package-lock.json` / `requirements-desktop.txt` 为准）。
 
@@ -54,4 +54,4 @@ Bing / Tavily / 博查 搜索服务）。这些服务由其提供方按其自身
 ## 品牌资源
 
 仓库中的 `assets/branding/mens-source.png` 及由其生成的全部图标（`.ico` / `.icns` / PNG）
-为本项目自有资源，随项目一并按 AGPL-3.0 提供。
+为本项目自有资源，随项目一并按 Apache License 2.0 提供。

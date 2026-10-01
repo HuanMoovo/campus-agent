@@ -8,7 +8,7 @@
     <a href="https://HuanMoovo.github.io/campus-agent/">项目介绍页</a> ·
     <a href="PLATFORMS.md">平台支持</a> ·
     <a href="VERIFICATION.md">验证记录</a> ·
-    <a href="LICENSE">AGPL-3.0</a>
+    <a href="LICENSE">Apache-2.0</a>
   </p>
 </div>
 
@@ -20,7 +20,7 @@
 
 校园政策与办事流程问答、知识库管理、有限工具调用、校园服务和外部插件管理。前端采用 Vue 3 + TypeScript + Vite + Element Plus + Pinia；后端采用 FastAPI + SQLAlchemy + LangGraph，支持 Qwen3 / DeepSeek、BGE-M3 + Chroma 和 PostgreSQL。
 
-**1.2.0 的许可证为 GNU Affero General Public License v3.0**（`LICENSE`）：可以自由使用、修改与分发，包括用于校园内部部署；但如果你修改后把服务通过网络提供给别人使用，必须以同样的许可证公开你的修改版本。安装包内还包含 Electron、CPython、FastAPI 等第三方组件，各自的许可证见 `THIRD-PARTY-NOTICES.md`。
+**1.2.0 的许可证为 Apache License 2.0**（`LICENSE`，另有 `NOTICE`）：可以自由使用、修改与分发，包括商业使用、校园内部部署，以及闭源的修改版本；分发时需保留版权与许可声明并标注改动。安装包内还包含 Electron、CPython、FastAPI 等第三方组件，各自的许可证见 `THIRD-PARTY-NOTICES.md`。
 
 
 **1.0 可配置发布版（现为 1.1.0）。** 设置页可配置模型 API Key、Ollama 开源模型下载和九类校园 HTTPS JSON 数据接口。未配置的校园类型使用明确标识的演示数据；软件不附带真实学校接口、统一身份认证或模型密钥，校园生产部署仍需学校提供已授权的接口并验收。接入格式见 [校园接口说明](CAMPUS-DATA.md)，验证范围见 [验证记录](VERIFICATION.md)。

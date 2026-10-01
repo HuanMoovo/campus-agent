@@ -2,7 +2,7 @@
   "name": "mens-desktop",
   "version": "1.2.0",
   "description": "Mens 桌面校园助手",
-  "license": "AGPL-3.0-only",
+  "license": "Apache-2.0",
   "author": "Mens",
   "homepage": "https://huanmoovo.github.io/campus-agent/",
   "repository": { "type": "git", "url": "https://github.com/HuanMoovo/campus-agent.git" },
@@ -33,6 +33,7 @@
       { "from": "../build/backend/campus-backend", "to": "backend", "filter": ["**/*"] },
       { "from": "../frontend/dist", "to": "frontend", "filter": ["**/*"] },
       { "from": "../LICENSE", "to": "LICENSE" },
+      { "from": "../NOTICE", "to": "NOTICE" },
       { "from": "../THIRD-PARTY-NOTICES.md", "to": "THIRD-PARTY-NOTICES.md" }
     ],
     "win": {
