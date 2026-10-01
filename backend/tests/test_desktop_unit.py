@@ -91,7 +91,7 @@ class DesktopPathTests(unittest.TestCase):
             env = {"CAMPUS_DESKTOP_TOKEN": TOKEN, "CAMPUS_DESKTOP_NONCE": NONCE, "CAMPUS_DATA_DIR": str(root / "data"),
                    "CAMPUS_FRONTEND_DIR": str(root), "CAMPUS_CONFIG_FILE": str(root / ".env")}
             runtime = DesktopRuntime.from_environment(env)
-            self.assertEqual(runtime.data_dir, root / "data")
+            self.assertEqual(runtime.data_dir, (root / "data").resolve())
             self.assertNotIn(TOKEN, repr(runtime))
             self.assertNotIn(NONCE, repr(runtime))
             for name in ("CAMPUS_DATA_DIR", "CAMPUS_FRONTEND_DIR", "CAMPUS_CONFIG_FILE"):

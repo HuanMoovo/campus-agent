@@ -129,7 +129,7 @@ class DesktopIntegrationTests(unittest.TestCase):
                                 env={**self.env, "CAMPUS_DESKTOP_MODE": "1"},
                                 capture_output=True, text=True, encoding="utf-8", timeout=20, check=True)
         settings = json.loads(result.stdout)
-        self.assertEqual(settings["database"], "sqlite:///" + (self.root / "user-data" / "campus.db").as_posix())
+        self.assertEqual(settings["database"], "sqlite:///" + (self.root / "user-data" / "campus.db").resolve().as_posix())
         self.assertEqual(settings["admin"], self.token)
         self.assertEqual(settings["model"], "desktop-model-test")
         self.assertEqual(settings["cors"], "")
