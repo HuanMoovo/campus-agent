@@ -2,6 +2,15 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## Docker 部署验证（compose 栈，2026-10-01）
+
+- `docker compose build` 在本机 Docker Desktop 29.1.3 上通过，生成 `campus-agent-backend` 与 `campus-agent-frontend` 两个镜像（后端 `python:3.11-slim`，前端 `node:22-alpine` 构建 + `nginx:alpine` 运行）。
+- `docker compose up -d` 后 database / backend / frontend 三个服务全部启动，`postgres:16-alpine` 与后端均通过健康检查（后端的检查调用 `/api/health`）。
+- 端点实测：`http://localhost:8080/` → 200（1,265 字节 HTML）、`/manifest.webmanifest` → 200（588 字节）、`/sw.js` → 200（1,622 字节）、`/api/health` → 200 且内容为 `{"status":"ok","rag_enabled":false,"rag_degraded":false,"models":{"qwen":false,"deepseek":false},"demo_services":true}`。
+- 数据库：后端在容器内用 `DATABASE_URL` 连接 `database:5432`，`select 1` 与 `select version()` 均成功，返回 PostgreSQL 16.15；连接串由根目录 `.env` 透传（`POSTGRES_PASSWORD` 为随机生成，`.env` 已被 `.gitignore` 忽略）。
+- 真实浏览器（Edge）打开 `http://localhost:8080/`：标题「Mens 工作台」、侧栏与「后端已连接」正常，零失败请求、零页面错误。
+- 验收结束后执行 `docker compose down` 停止容器（保留命名卷，数据不丢）。
+
 ## Mens 1.2.0：跨平台构建、联网搜索与可安装网页版（2026-10-01）
 
 Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe`（126,402,135 字节，SHA-256 `02d9bfa13e2a5251ce00890f053e080eb33a033246077e6cd42d92279652ab71`）由跨平台构建脚本 `scripts/build_desktop.py` 完整重建；macOS 与 Linux 产物由 CI 构建（见下）。
@@ -173,4 +182,4 @@ Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe`（126,402,135 字节，SHA-
 - 未使用真实云端 API Key 或学校账号；学校接口、云端推理的业务联通仍需真实配置验收。
 - 本次没有进行 GB 级模型下载。下载镜像、大小/校验和、取消和失败处理由既有隔离测试覆盖；已安装的 gemma4:e4b 完成了真实推理验证。
 - 百度百科仍采用系统浏览器搜索交接，不声称提供百度百科 JSON 内容接口。OpenAlex、Crossref 的网络状况没有在本次更新中重新验收。
-- BGE-M3/Chroma 完整向量包、PostgreSQL 和 Docker 全栈不在本次桌面升级验收范围。
+- BGE-M3/Chroma 完整向量包不在本次桌面升级验收范围；PostgreSQL 与 Docker 全栈已在「Docker 部署验证」小节中实测。

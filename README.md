@@ -12,6 +12,8 @@ Electron 桌面外壳 + Vue 3 界面 + FastAPI 后端，可在单机上离线运
 <img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="平台" />
 
+**中文** · [English](README.en.md) · [日本語](README.ja.md)
+
 [下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest) ·
 [项目介绍页](https://huanmoovo.github.io/campus-agent/)（中文 / English / 日本語） ·
 [平台支持](PLATFORMS.md) ·
@@ -193,17 +195,37 @@ npm run dev
 前端 <http://localhost:5173>，接口文档 <http://localhost:8000/docs>。
 在设置页填入 `backend/.env` 中的 `ADMIN_TOKEN` 后即可管理文档与插件（令牌只保存在当前浏览器会话）。
 
-### 4. 服务器部署与手机 / 平板（PWA）
+### 4. Docker 部署（服务器 / PWA）
 
-后端在服务器上运行后，手机浏览器打开站点并「添加到主屏幕」即可获得全屏、独立图标的类应用体验。
-仓库提供 `compose.yaml`（PostgreSQL + 后端 + Nginx 前端，默认只绑定 `127.0.0.1:8080`）：
-
-```powershell
-Copy-Item .env.example .env      # 设置 POSTGRES_PASSWORD 与 ADMIN_TOKEN
-docker compose up --build        # 访问 http://localhost:8080
+```bash
+cp .env.example .env          # 设置 POSTGRES_PASSWORD 与 ADMIN_TOKEN
+docker compose up -d --build
+docker compose logs -f backend
 ```
 
-> Compose 路径尚未在本机验证；Docker 相关端口、卷与镜像说明见 `compose.yaml`。
+打开 <http://localhost:8080>（栈只绑定 `127.0.0.1:8080`）。随后在手机浏览器打开该地址并「添加到主屏幕」，
+即得到可安装网页版（PWA）。
+
+栈由 PostgreSQL + 后端 + Nginx 组成：
+
+| 服务 | 镜像 | 说明 |
+| --- | --- | --- |
+| `database` | `postgres:16-alpine` | 通过健康检查后后端才启动；数据在 `postgres_data` 卷 |
+| `backend` | `python:3.11-slim` | 以非 root 用户运行；数据在 `backend_data`，模型缓存在 `model_cache`；健康检查 `/api/health` |
+| `frontend` | `nginx:alpine` | 提供构建好的 Vue 前端，并把 `/api/` 反向代理到后端；上传上限 6 MB |
+
+要点：
+
+- 根目录 `.env` 的变量会透传给后端，联网搜索、更新清单与插件白名单的配置方式与本地安装一致（见[配置参考](#配置参考)）。
+- `ENABLE_RAG=true` 会把向量检索依赖打进镜像（`INSTALL_VECTOR` 构建参数），需要重新构建。
+- 数据都在命名卷里：`docker compose down` 保留数据，`docker compose down -v` 删除数据；升级前请先备份数据库。
+- 该 compose 面向单机或可信网络；对公网开放仍需自行加上 HTTPS、前置认证与限流。
+- **本机已实测**（Docker Desktop 29.1.3）：两个镜像构建通过；database / backend / frontend 三个服务全部启动，前两者通过健康检查；`http://localhost:8080/` 返回 200，`/api/health` 返回 `{"status":"ok",...}`；后端在容器内确认连接 **PostgreSQL 16.15**；真实浏览器打开「Mens 工作台」，零失败请求、零页面错误。
+
+### 5. 不用 Docker 的手机 / 平板（PWA）
+
+在任何可达的服务器上部署后端（见上一节的镜像构成，或直接在服务器上按第 3 节的方式运行），
+手机浏览器打开站点后「添加到主屏幕」，即可获得全屏、独立图标的类应用体验。
 
 ## 配置参考
 
@@ -280,6 +302,7 @@ campus-agent/
 ├─ docs/            项目介绍页（GitHub Pages，中 / 英 / 日）
 ├─ assets/          品牌源图
 ├─ examples/        插件清单示例
+├─ compose.yaml     Docker 部署（PostgreSQL + 后端 + Nginx）
 ├─ PLATFORMS.md     平台矩阵与构建方式
 ├─ DESKTOP.md       桌面版说明
 ├─ ARCHITECTURE.md  架构与主要接口
@@ -337,7 +360,6 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 - **云端模型与联网搜索**：需要各自的 API Key（联网搜索的 Bing 通道免密钥）；搜索服务端的可用性受网络环境限制。
 - **原生 Android / iOS 应用**：不在本项目范围，原因见 [PLATFORMS.md](PLATFORMS.md)（Python 后端无法随应用上架移动平台）。
 - **一键更新**：更新检查只提示版本差异并打开下载页，不做自动下载与静默安装。
-- **Docker Compose 路径**：本机未验证。
 - **多人部署**：当前演示会话以随机会话 ID 作为访问凭据，仅适合本地开发；生产需要用户归属校验、操作审计、限流、HTTPS、数据库迁移与备份策略。
 
 ## 开源协议
