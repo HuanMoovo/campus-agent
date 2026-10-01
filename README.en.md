@@ -119,7 +119,7 @@ assistant is meant to be.
 | Works out of the box | The installer bundles the Python runtime — no separate Python, Node or database install |
 | Window memory | Window size and position are remembered (coordinates that fall outside the screens are discarded) |
 | Logs and data folder | Settings can show the backend log and open the data folder |
-| Appearance | Light, dark or follow the system, plus a custom accent colour; the sidebar and mobile layouts are adapted separately. The chat home screen is a draggable 3D scene that falls back to a static panel without WebGL or under reduced motion |
+| Appearance | Light, dark or follow the system, plus a custom accent colour; the sidebar and mobile layouts are adapted separately |
 | Interface language | Chinese / English / Japanese, following the system by default and remembered (currently covers the app shell, the chat view and the appearance panel) |
 | Runtime handshake | The frozen backend starts on a random port with a one-time token, and the shell validates the startup envelope before loading the interface |
 
