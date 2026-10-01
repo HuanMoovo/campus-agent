@@ -1,5 +1,7 @@
 # Mens 校园助手
 
+[项目介绍页](https://HuanMoovo.github.io/campus-agent/) · [平台支持与构建](PLATFORMS.md) · [桌面版说明](DESKTOP.md) · [验证记录](VERIFICATION.md) · [下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest)
+
 **Windows 桌面版 Mens 1.2.0。** Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe` 已重新构建、升级安装并逐项验收；macOS（Intel/Apple silicon）与 Linux（AppImage/deb）的产物由 GitHub Actions 构建，尚未真机验收；Android/iOS 使用可安装网页版（PWA）。平台矩阵、构建方式与限制见 [平台支持说明](PLATFORMS.md)，实际结果和验收范围见 [验证记录](VERIFICATION.md)。以下保留网页开发/服务器部署的使用说明。
 
 1.0 基于 0.4.1 验证版本，包含圆角透明 Logo、可定制外观、校园服务和数据接口、可选择的插件，以及聊天窗口中的本地 Ollama 模型切换。0.4.x 已验证模型不可用时会明确报错，不会自动转发给云端；模型权重需在本机单独下载。**1.1.0 统一了 Mens 桌面应用、网页、安装包配置和 API 的版本号，并包含 1.0.0 之后加入的流式回答（可停止生成）、按浏览器/桌面配置隔离的历史对话、Word (.docx) 知识库上传、模型下载断点续传、数据备份导出/导入、本机报修记录、窗口位置记忆、后端日志查看、前端单元测试与构建分包、可选的更新检查；安装包已重新构建并完成安装验收。** **1.2.0 进一步加入可选的联网搜索（Bing 免密钥 / Tavily / 博查，逐条消息开关，回答引用网页链接）、跨平台构建（Windows NSIS、macOS dmg/zip、Linux AppImage/deb，同一脚本与 CI 矩阵）、可安装网页版（PWA：清单、离线外壳、iOS 安全区）以及 Windows 之外的凭据存储与图标处理。** 校园统一登录仍未实现。
