@@ -12,7 +12,7 @@ function isOwnUrl(url, origin) {
 
 function validateWorkspace(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Invalid workspace settings')
-  if (Object.keys(value).some(key => !['model', 'conversationId', 'clientId', 'localModel', 'appearance', 'accentColor'].includes(key))) throw new TypeError('Unsupported setting')
+  if (Object.keys(value).some(key => !['model', 'conversationId', 'clientId', 'localModel', 'appearance', 'accentColor', 'webSearch'].includes(key))) throw new TypeError('Unsupported setting')
   if ('model' in value && !MODELS.has(value.model)) throw new TypeError('Invalid model')
   if ('conversationId' in value && (typeof value.conversationId !== 'string' || !/^[a-zA-Z0-9-]{0,64}$/.test(value.conversationId))) {
     throw new TypeError('Invalid conversation ID')
@@ -23,6 +23,7 @@ function validateWorkspace(value) {
   if ('localModel' in value && (typeof value.localModel !== 'string' || value.localModel.length > 128 || /[\x00-\x1f\x7f]/.test(value.localModel))) throw new TypeError('Invalid local model')
   if ('appearance' in value && !['light', 'dark', 'system'].includes(value.appearance)) throw new TypeError('Invalid appearance')
   if ('accentColor' in value && (typeof value.accentColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(value.accentColor))) throw new TypeError('Invalid accent color')
+  if ('webSearch' in value && typeof value.webSearch !== 'boolean') throw new TypeError('Invalid web search preference')
   return { ...value }
 }
 
@@ -51,14 +52,14 @@ function validateBackupBytes(bytes, limit = BACKUP_LIMIT) {
   return size
 }
 
-function validateUpdateUrl(url) {
-  if (typeof url !== 'string' || url.length > 2048) throw new TypeError('Invalid update URL')
+function validateExternalUrl(url) {
+  if (typeof url !== 'string' || url.length > 2048) throw new TypeError('Invalid external URL')
   let parsed
-  try { parsed = new URL(url) } catch { throw new TypeError('Invalid update URL') }
+  try { parsed = new URL(url) } catch { throw new TypeError('Invalid external URL') }
   if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password) {
-    throw new TypeError('Invalid update URL')
+    throw new TypeError('Invalid external URL')
   }
   return parsed.href
 }
 
-module.exports = { isOwnUrl, BACKUP_LIMIT, validateWorkspace, parseReadyLine, validateBackupName, validateBackupBytes, validateUpdateUrl }
+module.exports = { isOwnUrl, BACKUP_LIMIT, validateWorkspace, parseReadyLine, validateBackupName, validateBackupBytes, validateExternalUrl }

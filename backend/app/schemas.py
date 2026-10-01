@@ -61,6 +61,7 @@ class ChatRequest(RequestModel):
     conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
     client_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]*$")
     model: Literal["auto", "qwen", "deepseek", "ollama"] | None = None
+    web: bool = False
     local_model: str | None = Field(default=None, min_length=1, max_length=128,
                                     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
 
@@ -74,6 +75,8 @@ class ChatRequest(RequestModel):
 class Source(BaseModel):
     title: str
     snippet: str = ""
+    url: str = ""
+    kind: str = ""
 
 
 class ChatResponse(BaseModel):
@@ -82,6 +85,7 @@ class ChatResponse(BaseModel):
     sources: list[Source] = Field(default_factory=list)
     tool_calls: list[dict] = Field(default_factory=list)
     mode: str = "demo"
+    web: dict = Field(default_factory=dict)
 
 
 class DocumentCreate(RequestModel):
@@ -126,6 +130,14 @@ class RepairCreate(RequestModel):
 
 class SettingsUpdate(RequestModel):
     model: Literal["auto", "qwen", "deepseek", "ollama"]
+
+
+class WebSearchConfigUpdate(RequestModel):
+    enabled: bool | None = None
+    provider: Literal["auto", "bing", "tavily", "bocha"] | None = None
+    api_key: str | None = Field(default=None, max_length=200)
+    max_results: int | None = Field(default=None, ge=1, le=8)
+    fetch_pages: int | None = Field(default=None, ge=0, le=3)
 
 
 class ModelProviderUpdate(RequestModel):

@@ -5,6 +5,21 @@ export interface Source {
   snippet?: string
   source?: string
   score?: number
+  url?: string
+  kind?: string
+}
+
+export interface WebStatus {
+  enabled: boolean
+  provider: string
+  resolved_provider: string
+  available: boolean
+  api_key_set: boolean
+  max_results: number
+  fetch_pages: number
+  max_fetch_pages: number
+  max_results_limit: number
+  providers: { id: string; label: string; keyed: boolean }[]
 }
 
 export interface ChatResponse {
@@ -14,6 +29,7 @@ export interface ChatResponse {
   tool_calls?: Array<{ name: string; result?: unknown }>
   model?: string
   mode?: string
+  web?: { provider?: string; error?: string; fetched_at?: string }
 }
 
 export interface KnowledgeDocument {
@@ -169,7 +185,7 @@ const base = desktop ? '/api' : import.meta.env.VITE_API_BASE_URL || '/api'
 async function request<T>(path: string, init?: RequestInit, admin = false): Promise<T> {
   let response: Response
   try {
-    const needsAdmin = admin || ((path.startsWith('/documents') || path.startsWith('/plugins') || path.startsWith('/models') || path.startsWith('/campus-sources') || path.startsWith('/backup')) && init?.method !== 'GET' && init?.method !== undefined)
+    const needsAdmin = admin || ((path.startsWith('/documents') || path.startsWith('/plugins') || path.startsWith('/models') || path.startsWith('/campus-sources') || path.startsWith('/backup') || path.startsWith('/web')) && init?.method !== 'GET' && init?.method !== undefined)
     const headers = new Headers(init?.headers)
     if (needsAdmin && !desktop) headers.set('X-Admin-Token', sessionStorage.getItem('campus-agent-admin-token') || '')
     response = await fetch(`${base}${path}`, { ...init, headers })
@@ -194,12 +210,13 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
 }
 
-function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string) {
+function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false) {
   return {
     message,
     conversation_id: conversationId || undefined,
     model: model === 'qwen3' ? 'qwen' : model,
     client_id: clientId || undefined,
+    ...(web ? { web: true } : {}),
     ...(model === 'ollama' && localModel ? { local_model: localModel } : {}),
   }
 }
@@ -210,7 +227,7 @@ function responseError(status: number, detail: string) {
 
 /** Streams an answer over SSE; aborts by passing signal.abort(), partial text is kept by the caller. */
 export async function chatStream(
-  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string },
+  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean },
   callbacks: ChatStreamCallbacks,
   signal: AbortSignal,
 ): Promise<ChatResponse> {
@@ -219,7 +236,7 @@ export async function chatStream(
     response = await fetch(`${base}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId)),
+      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web)),
       signal,
     })
   } catch (error) {
@@ -293,8 +310,11 @@ export const api = {
     request<{ deleted: boolean }>(`/conversations/${encodeURIComponent(id)}?client_id=${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
   clearConversations: (clientId: string) =>
     request<{ deleted: number }>(`/conversations?client_id=${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
-  chat: (message: string, conversationId: string, model: string, localModel?: string, clientId = '') =>
-    request<ChatResponse>('/chat', json('POST', chatPayload(message, conversationId, model, localModel, clientId))),
+  chat: (message: string, conversationId: string, model: string, localModel?: string, clientId = '', web = false) =>
+    request<ChatResponse>('/chat', json('POST', chatPayload(message, conversationId, model, localModel, clientId, web))),
+  webStatus: () => request<WebStatus>('/web/status'),
+  saveWebConfig: (values: { enabled?: boolean; provider?: string; api_key?: string; max_results?: number; fetch_pages?: number }) =>
+    request<WebStatus>('/web/config', json('PUT', values)),
   modelConfig: () => request<ModelConfig>('/models/config'),
   saveModelConfig: (provider: 'qwen' | 'deepseek' | 'ollama', values: { api_key?: string; clear_api_key?: boolean; base_url?: string; model?: string }) =>
     request<ModelConfig>(`/models/config/${provider}`, json('PUT', values)),

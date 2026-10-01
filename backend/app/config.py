@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     plugin_allowed_hosts: str = ""
     cors_origins: str = "http://localhost:5173"
     update_manifest_url: str = ""
+    web_search_enabled: bool = False
+    web_search_provider: str = "auto"
+    web_search_api_key: str = ""
+    web_search_max_results: int = 5
+    web_search_fetch_pages: int = 2
 
     @property
     def allowed_plugin_hosts(self) -> set[str]:

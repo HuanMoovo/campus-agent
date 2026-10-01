@@ -3,9 +3,9 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowRight, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, FolderOpened,
-  Grid, Plus, Refresh, Search, Setting, Upload, Download,
+  Grid, Link, Plus, Refresh, Search, Setting, Upload, Download,
 } from '@element-plus/icons-vue'
-import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source } from './api'
+import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source, type WebStatus } from './api'
 import { useWorkspaceStore, type Model, type View } from './store'
 import { desktop, type DesktopInfo } from './desktop'
 import mensLogo from './assets/mens.png'
@@ -130,6 +130,19 @@ const updateBusy = ref(false)
 const updateInfo = ref('')
 const updateError = ref('')
 const updateUrl = ref('')
+const webStatus = ref<WebStatus | null>(null)
+const webError = ref('')
+const webSaved = ref('')
+const webSaving = ref(false)
+const webForm = ref({ enabled: false, provider: 'auto', apiKey: '', maxResults: 5, fetchPages: 2 })
+const webAvailable = computed(() => Boolean(webStatus.value?.enabled && webStatus.value?.available))
+const webSwitch = computed({
+  get: () => workspace.webSearch,
+  set: value => workspace.setWebSearch(Boolean(value)),
+})
+const webToggleHint = computed(() => webAvailable.value
+  ? `开启后会把问题发送到${webStatus.value?.resolved_provider === 'bing' ? ' Bing 网页搜索' : webStatus.value?.resolved_provider === 'tavily' ? ' Tavily' : ' 博查'}并引用网页结果`
+  : '管理员尚未启用联网搜索（可在设置中开启）')
 let downloadTimer: ReturnType<typeof setTimeout> | undefined
 
 function fileSize(bytes?: number) {
@@ -494,11 +507,68 @@ async function checkUpdates() {
 async function openUpdateUrl() {
   if (!updateUrl.value) return
   if (desktop) {
-    try { await desktop.openUpdatePage(updateUrl.value) }
+    try { await desktop.openExternal(updateUrl.value) }
     catch (error) { updateError.value = `无法打开下载页：${friendlyError(error)}` }
     return
   }
   window.open(updateUrl.value, '_blank', 'noopener,noreferrer')
+}
+
+function sourceHost(url?: string) {
+  try { return new URL(url || '').host } catch { return url || '' }
+}
+
+async function openSourceUrl(url?: string) {
+  if (!url) return
+  if (desktop) {
+    try { await desktop.openExternal(url) }
+    catch (error) { ElMessage.warning(`无法打开链接：${friendlyError(error)}`) }
+    return
+  }
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
+async function loadWebStatus() {
+  try {
+    const status = await api.webStatus()
+    webStatus.value = status
+    webForm.value = {
+      enabled: status.enabled,
+      provider: status.provider,
+      apiKey: '',
+      maxResults: status.max_results,
+      fetchPages: status.fetch_pages,
+    }
+  } catch (error) {
+    webStatus.value = null
+  }
+}
+
+async function saveWebConfig() {
+  if (webSaving.value) return
+  webSaving.value = true
+  webError.value = ''
+  webSaved.value = ''
+  try {
+    const payload: { enabled: boolean; provider: string; max_results: number; fetch_pages: number; api_key?: string } = {
+      enabled: webForm.value.enabled,
+      provider: webForm.value.provider,
+      max_results: webForm.value.maxResults,
+      fetch_pages: webForm.value.fetchPages,
+    }
+    if (webForm.value.apiKey.trim()) payload.api_key = webForm.value.apiKey.trim()
+    const status = await api.saveWebConfig(payload)
+    webStatus.value = status
+    webForm.value.apiKey = ''
+    webSaved.value = status.enabled
+      ? `已保存：${status.providers.find(item => item.id === status.provider)?.label || status.provider}${status.available ? '' : '（缺少 API Key，暂不可用）'}。`
+      : '已关闭联网搜索。'
+    if (!status.enabled || !status.available) workspace.setWebSearch(false)
+  } catch (error) {
+    webError.value = `保存失败：${friendlyError(error)}`
+  } finally {
+    webSaving.value = false
+  }
 }
 
 async function loadHealth() {
@@ -525,6 +595,7 @@ async function sendChat(value = prompt.value) {
   const text = value.trim()
   if (!workspace.ready || !text || chatBusy.value || historyBusy.value || historyError.value) return
   if (localChatProblem.value) { ElMessage.warning(localChatProblem.value); return }
+  const useWeb = workspace.webSearch && webAvailable.value
   messages.value.push({ role: 'user', text })
   prompt.value = ''
   const index = messages.value.push({ role: 'assistant', text: '', streaming: true }) - 1
@@ -535,7 +606,7 @@ async function sendChat(value = prompt.value) {
   scrollChat()
   try {
     const answer = await chatStream(
-      { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId },
+      { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId, web: useWeb },
       {
         onMeta: id => { if (id) workspace.setConversationId(id) },
         onDelta: chunk => { assistant.text += chunk; scrollChat() },
@@ -547,6 +618,9 @@ async function sendChat(value = prompt.value) {
     assistant.sources = answer.sources || []
     assistant.tools = answer.tool_calls?.map(call => call.name)
     assistant.demo = answer.mode === 'demo'
+    const web = answer.web || {}
+    if (useWeb && web.error) assistant.note = `联网检索未完成：${web.error}`
+    else if (assistant.sources.some(source => source.kind === 'web')) assistant.note = `已联网检索（${web.fetched_at || '刚刚'}）`
   } catch (error) {
     if (controller.signal.aborted) {
       assistant.stopped = true
@@ -893,6 +967,7 @@ async function restartDesktop() {
 
 onMounted(async () => {
   void loadHealth()
+  void loadWebStatus()
   void loadDesktopInfo()
   await workspace.initialize()
   void loadModelConfig()
@@ -902,7 +977,7 @@ onMounted(async () => {
   if (workspace.view === 'knowledge') void loadDocuments()
   if (workspace.view === 'plugins') void loadPlugins()
   if (workspace.view === 'plugins') void loadCuratedPlugins()
-  if (workspace.view === 'settings') { void loadModelConfig(); void loadLocalModels(); void loadCampusSources() }
+  if (workspace.view === 'settings') { void loadModelConfig(); void loadLocalModels(); void loadCampusSources(); void loadWebStatus() }
 })
 
 onUnmounted(() => {
@@ -970,13 +1045,13 @@ onUnmounted(() => {
               <div class="message-avatar"><template v-if="message.role === 'user'">我</template><img v-else :src="mensLogo" alt="" /></div>
               <div class="message-body"><div class="message-author">{{ message.role === 'user' ? '你' : 'Mens' }}<span v-if="message.demo" class="inline-demo">演示回答</span><span v-if="message.error" class="inline-demo">请求失败</span><span v-if="message.stopped" class="inline-demo">已停止</span></div><div class="message-text">{{ message.text }}<span v-if="message.streaming && message.text" class="stream-caret" /></div><p v-if="message.note" class="message-note">{{ message.note }}</p>
                 <div v-if="message.tools?.length" class="tool-note"><el-icon><Connection /></el-icon> 已调用 {{ message.tools.join('、') }}</div>
-                <div v-if="message.sources?.length" class="source-list"><div class="source-label">参考来源</div><div v-for="(source, sourceIndex) in message.sources" :key="sourceIndex" class="source-item"><el-icon><Document /></el-icon><div><strong>{{ source.title || source.source }}</strong><small v-if="source.snippet">{{ source.snippet }}</small></div></div></div>
+                <div v-if="message.sources?.length" class="source-list"><div class="source-label">{{ message.sources.some(source => source.kind === 'web') ? '参考来源（含联网检索）' : '参考来源' }}</div><div v-for="(source, sourceIndex) in message.sources" :key="sourceIndex" class="source-item"><el-icon><Link v-if="source.kind === 'web'" /><Document v-else /></el-icon><div><strong>{{ source.title || source.source }}</strong><small v-if="source.snippet">{{ source.snippet }}</small><small v-if="source.url" class="source-url"><a v-if="!desktop" :href="source.url" target="_blank" rel="noopener noreferrer">{{ sourceHost(source.url) }} ↗</a><button v-else type="button" class="link-button" @click="openSourceUrl(source.url)">{{ sourceHost(source.url) }} ↗</button></small></div></div></div>
               </div>
             </div>
             <div v-if="chatBusy && !streamingMessage?.text" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
             <div ref="chatEnd" />
           </div>
-          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" placeholder="输入问题..." aria-label="输入问题" @keydown="onChatKeydown" /><div class="composer-bottom"><span>回答仅供参考，请核对学校正式通知</span><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">停止生成</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">发送</el-button></div></div></div>
+          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" placeholder="输入问题..." aria-label="输入问题" @keydown="onChatKeydown" /><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>联网搜索</span></label></el-tooltip><span>回答仅供参考，请核对学校正式通知</span><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">停止生成</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">发送</el-button></div></div></div>
             </div>
           </div>
         </section>
@@ -1059,6 +1134,7 @@ onUnmounted(() => {
           </div>
           <div class="settings-section"><div class="settings-copy"><h2>备份与恢复</h2><p>导出包含知识库、对话记录、模型与校园接口配置的 zip 备份；其中的密钥和令牌属于敏感数据，请妥善保管。导入会覆盖当前数据<template v-if="desktop">，重启应用后完全生效</template>。</p><p v-if="backupInfo" class="backup-info" aria-live="polite">{{ backupInfo }}</p><el-alert v-if="backupError" class="alert" :title="backupError" type="error" show-icon :closable="false" /></div><div class="backup-actions"><el-button :icon="Download" :loading="backupAction === 'export'" :disabled="Boolean(backupAction) || !workspace.ready" @click="exportBackup">导出备份</el-button><el-button :icon="Upload" :loading="backupAction === 'import'" :disabled="Boolean(backupAction) || !workspace.ready" @click="importBackup">导入备份</el-button><input v-if="!desktop" ref="backupInput" class="hidden-input" type="file" accept=".zip" @change="onBackupFile" /></div></div>
           <div v-if="!desktop" class="settings-section"><div class="settings-copy"><h2>管理员令牌</h2><p>用于文档与插件管理，仅保存在当前浏览器会话。</p></div><el-input :model-value="adminToken" type="password" show-password placeholder="输入后端 ADMIN_TOKEN" style="max-width: 280px" @update:model-value="saveAdminToken(String($event))" /></div>
+          <div class="settings-section"><div class="settings-copy"><h2>联网搜索</h2><p>开启后聊天窗口可逐条选择是否联网检索，回答会引用网页链接。默认使用免密钥的 Bing 网页搜索（中国大陆可直连），也可配置 Tavily 或博查 API Key。<template v-if="webStatus"> 当前生效：{{ webStatus.providers.find(item => item.id === webStatus?.provider)?.label || webStatus.provider }}<template v-if="webStatus.available">（{{ webStatus.resolved_provider }}）</template><template v-else>（缺少 API Key）</template>。</template></p><p v-if="webSaved" class="backup-info" aria-live="polite">{{ webSaved }}</p><el-alert v-if="webError" class="alert" :title="webError" type="warning" show-icon :closable="false" /></div><div class="web-form"><div class="web-form-row"><label class="field field-inline"><el-switch v-model="webForm.enabled" /><span>启用联网搜索</span></label><label class="field"><span>搜索服务</span><el-select v-model="webForm.provider"><el-option v-for="item in webStatus?.providers || []" :key="item.id" :value="item.id" :label="item.label" /></el-select></label></div><div class="web-form-row"><label class="field"><span>API Key</span><el-input v-model="webForm.apiKey" type="password" autocomplete="off" placeholder="Bing 免密钥；Tavily/博查需填写" /></label><label class="field field-narrow"><span>返回结果数</span><el-input-number v-model="webForm.maxResults" :min="1" :max="webStatus?.max_results_limit || 8" :precision="0" /></label><label class="field field-narrow"><span>读取网页数</span><el-input-number v-model="webForm.fetchPages" :min="0" :max="webStatus?.max_fetch_pages || 3" :precision="0" /></label></div></div><div class="backup-actions"><el-button type="primary" :loading="webSaving" @click="saveWebConfig">保存联网设置</el-button></div></div>
           <div class="settings-section"><div class="settings-copy"><h2>版本与更新</h2><p>当前版本 {{ desktop ? (desktopInfo?.version ? `v${desktopInfo.version}` : '读取中…') : `v${frontendVersion}` }}。<template v-if="updateInfo"> {{ updateInfo }}</template><template v-else>更新清单地址由管理员在 .env（UPDATE_MANIFEST_URL）中配置，未配置时不联网检查。</template></p><el-alert v-if="updateError" class="alert" :title="updateError" type="warning" show-icon :closable="false" /></div><div class="backup-actions"><el-button :icon="Refresh" :loading="updateBusy" @click="checkUpdates">检查更新</el-button><el-button v-if="updateUrl" type="primary" :icon="Download" @click="openUpdateUrl">打开下载页</el-button></div></div>
           <div class="settings-section"><div class="settings-copy"><h2>服务状态</h2><p>{{ healthLabel }}<template v-if="health"> · {{ health.rag_degraded ? '向量检索故障，已降级关键词检索' : health.rag_enabled ? '向量检索已启用' : '本地关键词检索' }} · {{ health.demo_services ? '校务服务为演示数据' : '已配置部分校务接口' }}</template></p></div><el-button :icon="Refresh" :loading="healthBusy" @click="loadHealth">刷新状态</el-button></div>
           <el-alert v-if="healthError" :title="healthError" type="error" show-icon :closable="false" />

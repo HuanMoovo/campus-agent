@@ -121,7 +121,7 @@ def test_chat_model_switch_is_request_scoped_and_preserves_history():
     with TestClient(app) as client:
         seen = []
 
-        def answer(db, question, history, model, local_model=None):
+        def answer(db, question, history, model, local_model=None, use_web=False):
             seen.append((model, local_model, history))
             return {"answer": local_model, "mode": "llm", "sources": []}
 

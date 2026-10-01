@@ -6,7 +6,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { startBackend } = require('./lib/backend.cjs')
-const { isOwnUrl, BACKUP_LIMIT, validateBackupBytes, validateBackupName, validateUpdateUrl, validateWorkspace } = require('./lib/policy.cjs')
+const { isOwnUrl, BACKUP_LIMIT, validateBackupBytes, validateBackupName, validateExternalUrl, validateWorkspace } = require('./lib/policy.cjs')
 
 app.setName('Mens')
 // Keep the established data path so upgrades retain the existing database and settings.
@@ -211,9 +211,9 @@ function bindIPC() {
     }
   })
 
-  ipcMain.handle('campus:open-update-page', async (event, url) => {
+  ipcMain.handle('campus:open-external-https', async (event, url) => {
     assertSender(event)
-    await shell.openExternal(validateUpdateUrl(url))
+    await shell.openExternal(validateExternalUrl(url))
   })
 }
 

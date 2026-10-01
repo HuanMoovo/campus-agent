@@ -156,12 +156,12 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   assert.equal(log.available, true)
   assert.ok(log.text.includes('Application startup complete.'))
   assert.ok(log.text.includes('第一行日志'))
-  await handlers.get('campus:open-update-page')(valid, 'https://example.edu/mens/download')
+  await handlers.get('campus:open-external-https')(valid, 'https://example.edu/mens/download')
   assert.equal(externalUrl, 'https://example.edu/mens/download')
-  await assert.rejects(handlers.get('campus:open-update-page')(valid, 'http://example.edu/mens'))
-  await assert.rejects(handlers.get('campus:open-update-page')(valid, 'file:///C:/Windows/System32/cmd.exe'))
-  await assert.rejects(handlers.get('campus:open-update-page')(valid, 'https://user:secret@example.edu/mens'))
-  await assert.rejects(handlers.get('campus:open-update-page')({ sender: web, senderFrame: { url: 'https://evil.example' } }, 'https://example.edu/mens'))
+  await assert.rejects(handlers.get('campus:open-external-https')(valid, 'http://example.edu/mens'))
+  await assert.rejects(handlers.get('campus:open-external-https')(valid, 'file:///C:/Windows/System32/cmd.exe'))
+  await assert.rejects(handlers.get('campus:open-external-https')(valid, 'https://user:secret@example.edu/mens'))
+  await assert.rejects(handlers.get('campus:open-external-https')({ sender: web, senderFrame: { url: 'https://evil.example' } }, 'https://example.edu/mens'))
   activeWindow.emit('close')
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'window.json'), 'utf8')),
     { x: 40, y: 30, width: 1300, height: 900, maximized: false })
@@ -214,7 +214,7 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   assert.equal(processQuit, true)
 })
 
-test('preload exposes narrow browser actions without a general external URL capability', async () => {
+test('preload exposes a frozen narrow surface with a single validated HTTPS opener', async () => {
   let exposed
   const calls = []
   vm.runInNewContext(fs.readFileSync(path.resolve(__dirname, '..', 'preload.cjs'), 'utf8'), {
@@ -227,8 +227,13 @@ test('preload exposes narrow browser actions without a general external URL capa
     },
   })
   assert.equal(Object.isFrozen(exposed), true)
-  assert.equal('openExternal' in exposed, false)
+  assert.deepEqual(Object.keys(exposed).sort(), [
+    'getInfo', 'isDesktop', 'loadWorkspace', 'openBaike', 'openDataFolder', 'openExternal',
+    'openOllamaDownload', 'pickBackup', 'readLog', 'restart', 'saveBackup', 'saveWorkspace',
+  ])
   await exposed.openBaike('大学')
   await exposed.openOllamaDownload('https://evil.example')
-  assert.deepEqual(calls, [['campus:open-baike', '大学'], ['campus:open-ollama-download']])
+  await exposed.openExternal('https://example.edu/notice/1')
+  assert.deepEqual(calls, [['campus:open-baike', '大学'], ['campus:open-ollama-download'],
+                           ['campus:open-external-https', 'https://example.edu/notice/1']])
 })

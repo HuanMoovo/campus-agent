@@ -14,5 +14,5 @@ contextBridge.exposeInMainWorld('campusDesktop', Object.freeze({
   saveBackup: (name, bytes) => ipcRenderer.invoke('campus:save-backup', { name, bytes }),
   pickBackup: () => ipcRenderer.invoke('campus:pick-backup'),
   readLog: () => ipcRenderer.invoke('campus:read-log'),
-  openUpdatePage: url => ipcRenderer.invoke('campus:open-update-page', url),
+  openExternal: url => ipcRenderer.invoke('campus:open-external-https', url),
 }))

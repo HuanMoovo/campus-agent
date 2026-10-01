@@ -177,6 +177,16 @@ button { cursor: pointer; }
 .source-item div { min-width: 0; }
 .source-item strong { display: block; color: var(--text-secondary); font-weight: 600; overflow-wrap: anywhere; }
 .source-item small { display: block; color: var(--text-muted); margin-top: 4px; font-size: 11px; line-height: 1.5; }
+.source-item .source-url { color: var(--accent-text); }
+.source-item .source-url a { color: inherit; text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; }
+.link-button { background: none; border: 0; padding: 0; color: var(--accent-text); font: inherit; font-size: 11px; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; overflow-wrap: anywhere; }
+.link-button:hover { opacity: .8; }
+.web-toggle { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); font-size: 11px; white-space: nowrap; cursor: pointer; }
+.web-form { display: flex; flex-direction: column; gap: 12px; min-width: min(430px, 100%); }
+.web-form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.web-form .field { min-width: 150px; }
+.web-form .field-inline { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; }
+.web-form .field-narrow { min-width: 120px; }
 .typing { display: flex; gap: 4px; padding: 11px 0; }
 .typing span { width: 5px; height: 5px; background: var(--accent-text); border-radius: 50%; animation: pulse 1s ease-in-out infinite; }
 .typing span:nth-child(2) { animation-delay: .15s; }.typing span:nth-child(3) { animation-delay: .3s; }

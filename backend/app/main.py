@@ -23,7 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from .agent import prepare_stream_state, run_agent, stream_model
-from . import campus_data
+from . import campus_data, web_search
 from .config import get_settings
 from .desktop_runtime import desktop_enabled, install_desktop_routes
 from .db import Base, SessionLocal, engine, ensure_conversation_client_id, get_db
@@ -32,7 +32,7 @@ from .model_runtime import configuration as model_configuration, update_provider
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
 from .plugin_catalog import catalog_list, install_curated_plugin
 from .rag import knowledge_index
-from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull
+from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
 from .seed import seed_demo_documents
 from . import services
 
@@ -102,6 +102,8 @@ def persist_stream_exchange(conversation_id: str, question: str, text: str, fina
             if text.strip():
                 data = {"sources": (final or {}).get("sources", []), "tool_calls": (final or {}).get("tool_calls", [])}
                 data["mode"] = final.get("mode", "demo") if final is not None else ("llm" if streamed_from_model else "demo")
+                if final and final.get("web"):
+                    data["web"] = final["web"]
                 if final is None or error:
                     data["partial"] = True
                 rows.append(Message(conversation_id=conversation_id, role="assistant", content=text, result_data=data))
@@ -109,6 +111,11 @@ def persist_stream_exchange(conversation_id: str, question: str, text: str, fina
             db.commit()
     except Exception:
         logger.warning("Failed to persist streamed exchange for conversation %s", conversation_id, exc_info=True)
+
+
+def public_sources(rows) -> list[dict]:
+    """Normalize agent source rows for responses and storage (drops fetched page text)."""
+    return [Source(**row).model_dump() for row in (rows or [])]
 
 
 @app.get("/api/health")
@@ -143,14 +150,15 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
     past = db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(8)).all()
     history = [{"role": item.role, "content": item.content} for item in reversed(past)]
     try:
-        result = run_agent(db, body.message.strip(), history, model, local_model=local_model)
+        result = run_agent(db, body.message.strip(), history, model, local_model=local_model, use_web=body.web)
     except LocalModelError as exc:
         db.rollback()
         raise HTTPException(exc.status_code, str(exc)) from exc
-    response_data = {"sources": result.get("sources", []), "tool_calls": result.get("tool_calls", []), "mode": result.get("mode", "demo")}
+    response_data = {"sources": public_sources(result.get("sources", [])), "tool_calls": result.get("tool_calls", []),
+                     "mode": result.get("mode", "demo"), "web": result.get("web", {})}
     db.add_all([Message(conversation_id=conversation.id, role="user", content=body.message.strip()), Message(conversation_id=conversation.id, role="assistant", content=result["answer"], result_data=response_data)])
     db.commit()
-    return ChatResponse(conversation_id=conversation.id, answer=result["answer"], sources=result.get("sources", []), tool_calls=result.get("tool_calls", []), mode=result.get("mode", "demo"))
+    return ChatResponse(conversation_id=conversation.id, answer=result["answer"], sources=response_data["sources"], tool_calls=result.get("tool_calls", []), mode=result.get("mode", "demo"), web=result.get("web", {}))
 
 
 @app.post("/api/chat/stream")
@@ -192,7 +200,7 @@ async def chat_stream(body: ChatRequest):
         yield sse_event("meta", {"conversation_id": conversation_id})
         try:
             with SessionLocal() as db:
-                prepared = await run_in_threadpool(prepare_stream_state, db, question, history, model, local_model)
+                prepared = await run_in_threadpool(prepare_stream_state, db, question, history, model, local_model, body.web)
                 if "direct" in prepared:
                     final = dict(prepared["direct"])
                     parts.append(final["answer"])
@@ -208,10 +216,12 @@ async def chat_stream(body: ChatRequest):
                     if not error:
                         text = "".join(parts)
                         if text.strip():
-                            final = {"answer": text, "sources": prepared["sources"], "tool_calls": [], "mode": "llm"}
+                            final = {"answer": text, "sources": public_sources(prepared["sources"]), "tool_calls": [],
+                                     "mode": "llm", "web": prepared.get("web", {})}
                         else:
                             fallback = prepared["fallback"]
-                            final = {**fallback, "sources": prepared["sources"], "tool_calls": []}
+                            final = {**fallback, "sources": public_sources(prepared["sources"]), "tool_calls": [],
+                                     "web": prepared.get("web", {})}
                             parts.append(fallback["answer"])
                             yield sse_event("delta", {"text": fallback["answer"]})
         except Exception:
@@ -532,6 +542,20 @@ def update_ui_settings(body: SettingsUpdate):
     return get_ui_settings()
 
 
+@app.get("/api/web/status")
+def web_status():
+    """Whether live web search is available for chat; safe for any client to read."""
+    return web_search.status()
+
+
+@app.put("/api/web/config", dependencies=[Depends(require_admin)])
+def update_web_config(body: WebSearchConfigUpdate):
+    try:
+        return web_search.update_config(body.model_dump(exclude_unset=True))
+    except (ValueError, OSError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 @app.get("/api/models/config")
 def get_model_config():
     return model_configuration()
@@ -580,7 +604,7 @@ def cancel_local_model_job(job_id: str):
 
 
 BACKUP_FORMAT = 1
-BACKUP_CONFIG_FILES = ("workspace.json", "model-providers.json", "campus-sources.json", ".env")
+BACKUP_CONFIG_FILES = ("workspace.json", "model-providers.json", "campus-sources.json", "web-search.json", ".env")
 BACKUP_MAX_BYTES = 200_000_000
 
 

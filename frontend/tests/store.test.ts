@@ -44,6 +44,19 @@ describe('workspace store', () => {
     expect(store.accentColor).toBe('#a1b2c3')
   })
 
+  it('remembers the per-user web search preference', async () => {
+    const store = freshStore()
+    expect(store.webSearch).toBe(false)
+    store.setWebSearch(true)
+    await store.flushWorkspace()
+    expect(localStorage.getItem('campus-agent-web-search')).toBe('1')
+    store.setWebSearch(false)
+    await store.flushWorkspace()
+    expect(localStorage.getItem('campus-agent-web-search')).toBe('0')
+    localStorage.setItem('campus-agent-web-search', '1')
+    expect(freshStore().webSearch).toBe(true)
+  })
+
   it('ignores local model names that would break the api contract', () => {
     const store = freshStore()
     store.setLocalModel('bad\nname')

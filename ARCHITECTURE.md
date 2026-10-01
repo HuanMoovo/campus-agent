@@ -42,6 +42,8 @@ flowchart TD
 | POST | /api/services/repairs | location、issue、contact 表单提交 |
 | GET | /api/services/repairs | 本机报修记录（含联系方式，需管理员；桌面模式由桌面令牌自动授权） |
 | GET | /api/update/check | 读取管理员配置的 HTTPS 更新清单（`UPDATE_MANIFEST_URL`）并比较版本；未配置时不联网 |
+| GET | /api/web/status | 联网搜索是否启用、所选服务与可用性（聊天开关据此显示） |
+| PUT | /api/web/config | 管理员启用/关闭联网搜索、切换 Bing/Tavily/博查、保存 API Key（DPAPI 加密） |
 | GET/POST | /api/plugins | 插件列表 / JSON 清单直接登记 |
 | POST | /api/plugins/install | 从 source HTTPS 清单地址安装 |
 | PATCH/DELETE | /api/plugins/{id} | 启停或说明更新 / 卸载 |
@@ -55,3 +57,5 @@ flowchart TD
 文档数据库是权威数据源。索引用正文与标题的哈希区分版本，检索校验数据库中的最新内容，避免返回已删除或过期分段。SQL 保存后索引失败返回成功保存及 `index_status=pending`，不会误导客户端重复上传。
 
 默认每次请求的自动工具上限为一个，只能选择注册的四种只读校园查询；模型返回的任意其他工具名称不能被执行。报修通过表单提交，插件通过显式管理接口调用。
+
+联网搜索默认关闭，由管理员在设置中开启（也可用 `.env` 的 `WEB_SEARCH_*`），聊天窗口再按每条消息选择是否联网。开启后检索结果与知识库资料一起编号注入提示词（网页条目带链接与检索时间，模型被要求给出来源链接），知识库无依据时也会因网页资料而不再直接放弃回答。出站请求与插件同一套约束：仅 HTTPS、连接固定到校验过的公网地址（保留 SNI/主机名校验，防 DNS 重绑定）、禁止跳转、大小与超时上限；页面正文用标准库 HTMLParser 提取，单个网页最多保留 2000 字，API Key 用 DPAPI 加密保存在数据目录的 `web-search.json`。

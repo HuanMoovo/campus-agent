@@ -8,6 +8,7 @@ export interface DesktopWorkspace {
   localModel: string
   appearance: AppearanceMode
   accentColor: string
+  webSearch: boolean
 }
 
 export interface DesktopInfo {
@@ -27,7 +28,7 @@ export interface CampusDesktop {
   saveBackup(name: string, bytes: Uint8Array): Promise<{ saved: boolean; path?: string }>
   pickBackup(): Promise<{ picked: boolean; name?: string; bytes?: Uint8Array }>
   readLog(): Promise<{ available: boolean; path: string; text: string }>
-  openUpdatePage(url: string): Promise<void>
+  openExternal(url: string): Promise<void>
 }
 
 declare global {

@@ -88,6 +88,19 @@ class AgentTests(unittest.TestCase):
         self.assertNotIn("repairs", [tool["function"]["name"] for tool in agent.TOOLS])
         self.assertEqual(agent.plan(self.state("帮我报修灯泡"))["intent"], "knowledge")
 
+    def test_web_sources_add_link_citation_instructions(self):
+        state = {"question": "选课什么时候开放？", "web": {"fetched_at": "2026-10-01 20:00"},
+                 "sources": [{"title": "知识库条目", "snippet": "本校选课安排", "kind": "knowledge"},
+                             {"title": "选课通知", "url": "https://www.example.edu.cn/notice/1",
+                              "snippet": "9月1日开放", "kind": "web"}]}
+        prompt = agent.knowledge_messages(state)[0]["content"]
+        self.assertIn("https://www.example.edu.cn/notice/1", prompt)
+        self.assertIn("2026-10-01 20:00", prompt)
+        self.assertIn("实时网页检索", prompt)
+        self.assertIn("知识库", prompt)
+        fallback = agent.knowledge_fallback(state)["answer"]
+        self.assertIn("https://www.example.edu.cn/notice/1", fallback)
+
     def test_model_routing_respects_explicit_choice_and_configuration(self):
         with patch.object(settings, "qwen_api_key", "q"), patch.object(settings, "deepseek_api_key", "d"):
             self.assertEqual(agent.choose_model("auto", "分析比较两个政策")[0], "deepseek")
