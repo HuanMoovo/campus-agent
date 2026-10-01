@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" content="Mens 校园助手：Windows/macOS/Linux 桌面应用与可安装网页版，提供校园政策问答、本地知识库、校园服务与可选的联网搜索。状态、限制与验证记录均如实列出。" />
+<meta name="theme-color" content="#0e7c74" />
+<title>Mens 校园助手 · 项目介绍</title>
+<style>
+  :root {
+    --accent: #0e7c74;
+    --accent-soft: #14a39a;
+    --ink: #10201f;
+    --muted: #5c6f6d;
+    --line: #d8e3e2;
+    --card: rgba(255, 255, 255, .72);
+    --page: #eef4f3;
+    --glow: rgba(20, 163, 154, .18);
+    --code: #0f1f1e;
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #3ecfc4;
+      --accent-soft: #6ee7de;
+      --ink: #e8f4f2;
+      --muted: #9fb6b3;
+      --line: #23383a;
+      --card: rgba(20, 34, 35, .72);
+      --page: #0b1717;
+      --glow: rgba(62, 207, 196, .16);
+      --code: #071313;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1100px 520px at 12% -8%, var(--glow), transparent 60%),
+      radial-gradient(900px 480px at 92% 4%, var(--glow), transparent 62%),
+      var(--page);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px 72px; }
+
+  header.hero { padding: 64px 0 34px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand img { width: 54px; height: 54px; border-radius: 13px; box-shadow: 0 10px 30px var(--glow); }
+  .brand strong { font-size: 19px; letter-spacing: .3px; }
+  .brand small { display: block; color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: .12em; }
+  h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.25; margin: 26px 0 12px; letter-spacing: -.01em; }
+  h1 span { color: var(--accent); }
+  .lead { font-size: 17px; color: var(--muted); max-width: 62ch; margin: 0 0 22px; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 24px; }
+  .badge {
+    font-size: 12px; padding: 5px 11px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    backdrop-filter: blur(10px);
+  }
+  .badge.ok { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 42%, transparent); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; }
+  .button {
+    display: inline-block; padding: 11px 18px; border-radius: 11px; text-decoration: none;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); font-weight: 600; font-size: 14px;
+    backdrop-filter: blur(10px); transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .button:hover { transform: translateY(-1px); box-shadow: 0 12px 26px var(--glow); }
+  .button.primary { background: linear-gradient(140deg, var(--accent), var(--accent-soft)); color: #f2fffe; border-color: transparent; }
+
+  section { margin: 46px 0 0; }
+  h2 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+  h2 + p.sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 18px 16px; backdrop-filter: blur(12px);
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .card .tag { display: inline-block; font-size: 11px; color: var(--accent); margin-bottom: 8px; letter-spacing: .08em; }
+
+  figure { margin: 0; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+  .shots img { width: 100%; border-radius: 12px; border: 1px solid var(--line); display: block; }
+  figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--card); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 11px 13px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 12.5px; }
+  tr:last-child td { border-bottom: 0; }
+  .state { white-space: nowrap; font-weight: 600; }
+  .state.yes { color: var(--accent); }
+  .state.wip { color: #b7791f; }
+  .state.no { color: var(--muted); }
+  @media (prefers-color-scheme: dark) { .state.wip { color: #e3b341; } }
+
+  pre {
+    background: var(--code); color: #dff5f3; padding: 15px 16px; border-radius: 12px;
+    overflow-x: auto; font-size: 13px; line-height: 1.6; border: 1px solid var(--line);
+  }
+  code { font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace; }
+  ul.plain { padding-left: 20px; margin: 10px 0 0; }
+  ul.plain li { margin: 6px 0; color: var(--muted); }
+  ul.plain li b { color: var(--ink); font-weight: 600; }
+
+  footer { margin-top: 54px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  footer a { color: var(--accent); }
+  .links { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div class="brand">
+      <img src="./img/icon-192.png" alt="Mens 图标" onerror="this.style.display='none'" />
+      <span><strong>Mens 校园助手</strong><small>MENS CAMPUS ASSISTANT</small></span>
+    </div>
+    <h1>把校园政策问答、<span>知识库与办事服务</span>放进一个本地优先的桌面应用</h1>
+    <p class="lead">
+      Mens 是一个面向院校场景的问答工作台：知识库文档（PDF / Markdown / TXT / Word）在本机检索，
+      校园服务（成绩、课表、学分、空教室、报修）通过可配置的 HTTPS 接口接入，
+      聊天支持流式回答、可停止生成、历史会话隔离，并可按需开启联网搜索引用网页来源。
+      文档、数据和密钥都留在本机，模型可接 Qwen3 / DeepSeek 云端 API，也可用 Ollama 跑本地模型。
+    </p>
+    <div class="badges">
+      <span class="badge">版本 1.2.0</span>
+      <span class="badge ok">Windows 已构建并验收</span>
+      <span class="badge">macOS / Linux：CI 构建，未真机验收</span>
+      <span class="badge">Android / iOS：可安装网页版</span>
+      <span class="badge">本地 SQLite · 无需外部数据库</span>
+    </div>
+    <div class="actions">
+      <a class="button primary" href="https://github.com/HuanMoovo/campus-agent">查看仓库</a>
+      <a class="button" href="#platforms">平台支持</a>
+      <a class="button" href="#limits">已知限制</a>
+      <a class="button" href="#start">快速开始</a>
+    </div>
+  </header>
+
+  <section id="features">
+    <h2>能做什么</h2>
+    <p class="sub">以下功能均已在开发副本中实现并有验证记录，具体证据见仓库中的 VERIFICATION.md。</p>
+    <div class="grid">
+      <div class="card">
+        <span class="tag">问答</span>
+        <h3>流式回答与停止生成</h3>
+        <p>逐字输出，可随时中断；已生成的内容会连同“已停止”标记一起保存，历史记录不会伪造完整答案。</p>
+      </div>
+      <div class="card">
+        <span class="tag">检索</span>
+        <h3>本地知识库</h3>
+        <p>PDF、Markdown、TXT、Word (.docx) 上传后在数据库与（可选的）向量索引中检索；文档数据库是权威数据源，索引过期不会返回旧内容。</p>
+      </div>
+      <div class="card">
+        <span class="tag">联网</span>
+        <h3>可选的实时联网搜索</h3>
+        <p>按每条消息开启。默认使用免密钥的 Bing 网页搜索（中国大陆可直连），也可配置 Tavily 或博查；网页结果带链接与检索时间，未启用时应用完全不联网检索。</p>
+      </div>
+      <div class="card">
+        <span class="tag">服务</span>
+        <h3>校园数据接口</h3>
+        <p>九类校园 HTTPS JSON 接口可配置（成绩、课表、学分、空教室、报修等）。未配置时使用明确标注的演示数据，不会假装已接入学校系统。</p>
+      </div>
+      <div class="card">
+        <span class="tag">模型</span>
+        <h3>云端或本地模型</h3>
+        <p>Qwen3 / DeepSeek 走各自的 API Key；本地模型由 Ollama 提供，内置模型下载支持断点续传与 SHA-256 校验。</p>
+      </div>
+      <div class="card">
+        <span class="tag">桌面</span>
+        <h3>单机运行的桌面应用</h3>
+        <p>内置 Python 运行时，双击即用，无需另装 Python/Node/数据库。备份可导出为 zip，包含知识库、会话与配置（含密钥，需妥善保管）。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="screens">
+    <h2>界面</h2>
+    <p class="sub">截图为真实运行界面（开发副本，浅色主题）。</p>
+    <div class="shots">
+      <figure>
+        <img src="./img/chat-web-search.png" alt="聊天界面：联网搜索结果与来源链接" />
+        <figcaption>聊天页：开启联网搜索后，回答下方列出带链接的网页来源与检索时间。</figcaption>
+      </figure>
+      <figure>
+        <img src="./img/settings-web-search.png" alt="设置页：联网搜索配置" />
+        <figcaption>设置页：管理员可启用联网搜索、选择服务商（Bing 免密钥 / Tavily / 博查）并配置 Key。</figcaption>
+      </figure>
+      <figure>
+        <img src="./img/campus-services.png" alt="校园服务页：报修与本机记录" />
+        <figcaption>校园服务页：报修表单提交后，本机记录按时间倒序列出，便于确认提交结果。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="platforms">
+    <h2>平台支持</h2>
+    <p class="sub">“已验收”指在对应系统上真实安装、启动并完成界面检查；“CI 构建”指由 GitHub Actions 生成产物但尚未真机运行。</p>
+    <table>
+      <thead>
+        <tr><th>平台</th><th>状态</th><th>交付物与说明</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Windows 10/11 x64</td>
+          <td class="state yes">已构建并验收</td>
+          <td>NSIS 安装包，用户级安装（<code>%LOCALAPPDATA%\Programs\Mens</code>），数据在 <code>%APPDATA%\CampusAgent</code></td>
+        </tr>
+        <tr>
+          <td>macOS 12+（Intel / Apple silicon）</td>
+          <td class="state wip">CI 构建，未真机验收</td>
+          <td>dmg + zip；未签名、未公证，首次打开需右键“打开”或在系统设置中允许</td>
+        </tr>
+        <tr>
+          <td>Linux x64</td>
+          <td class="state wip">CI 构建，未真机验收</td>
+          <td>AppImage（免安装）与 deb；数据在 <code>~/.config/CampusAgent</code></td>
+        </tr>
+        <tr>
+          <td>Android / iOS</td>
+          <td class="state no">不提供原生应用</td>
+          <td>使用可安装网页版（PWA）：手机浏览器打开部署好的站点 → 添加到主屏幕；推理由服务端完成</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section id="start">
+    <h2>快速开始</h2>
+    <p class="sub">Windows 安装包开箱即用；其他平台从源码构建，或使用网页版。</p>
+    <p><b>Windows：</b>下载 Release 中的 <code>Mens-Setup-&lt;版本&gt;-x64.exe</code>，双击安装，从开始菜单或桌面启动。</p>
+    <p><b>从源码构建（三个平台同一脚本）：</b></p>
+    <pre><code># Windows
+python scripts\build_desktop.py
+
+# macOS（Intel 用 --arch x64）
+python scripts/build_desktop.py --os mac --arch arm64
+
+# Linux
+python scripts/build_desktop.py --os linux --arch x64</code></pre>
+    <p><b>从源码开发运行：</b></p>
+    <pre><code>python scripts/install.py          # 安装依赖
+# 后端（终端一）
+start-backend.cmd                  # Windows；其他平台见 DESKTOP.md
+# 前端（终端二）
+start-frontend.cmd                 # 访问 http://localhost:5173</code></pre>
+    <p><b>手机 / 平板：</b>部署后端（见仓库 README 的服务器部署小节），手机浏览器打开站点后“添加到主屏幕”，即可获得全屏、独立图标的类应用体验。</p>
+  </section>
+
+  <section id="architecture">
+    <h2>架构与安全边界</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>技术栈</h3>
+        <p>Vue 3 + TypeScript + Vite + Element Plus + Pinia 前端；FastAPI + SQLAlchemy + LangGraph 后端；
+          Electron 外壳内置 PyInstaller 冻结的 CPython；SQLite 单文件数据库（可选 PostgreSQL）。</p>
+      </div>
+      <div class="card">
+        <h3>本机优先</h3>
+        <p>后端只监听 127.0.0.1 的随机端口，使用一次性令牌；桌面外壳注入额外请求头，外部页面无法拿到这些接口。</p>
+      </div>
+      <div class="card">
+        <h3>出站请求约束</h3>
+        <p>插件、联网搜索与更新检查只允许 HTTPS、固定到校验过的公网地址（保留 SNI，防 DNS 重绑定）、禁止跳转、有大小与超时上限；解析到内网地址直接拒绝。</p>
+      </div>
+      <div class="card">
+        <h3>密钥存储</h3>
+        <p>Windows 用 DPAPI 加密保存 API Key；macOS / Linux 无等价系统接口，改为 <code>0600</code> 权限的明文文件（同一用户可读）。这一点在 PLATFORMS.md 中明确写出。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="limits">
+    <h2>已知限制</h2>
+    <p class="sub">以下内容尚未验证或尚未实现，如实列出。</p>
+    <ul class="plain">
+      <li><b>macOS / Linux 产物未真机验收</b>：由 CI 构建，尚未在真机上安装运行过。</li>
+      <li><b>未签名、未公证</b>：没有发行者证书，Windows/macOS 首次打开可能出现系统提示；正式分发前应配置签名。</li>
+      <li><b>校园接口与统一登录</b>：项目不附带任何真实学校接口、统一身份认证或模型密钥；生产部署需学校提供已授权接口并验收。</li>
+      <li><b>云端模型与联网搜索</b>：需要各自的 API Key（联网搜索的 Bing 通道免密钥）；搜索结果的服务端可用性受网络环境限制。</li>
+      <li><b>原生 Android / iOS 应用</b>：不在本项目范围，原因见 PLATFORMS.md（Python 后端无法随应用上架移动平台）。</li>
+      <li><b>一键更新</b>：更新检查只提示版本差异并打开下载页，不做自动下载与静默安装。</li>
+    </ul>
+  </section>
+
+  <footer>
+    <div class="links">
+      <a href="https://github.com/HuanMoovo/campus-agent">GitHub 仓库</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/README.md">README</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/PLATFORMS.md">平台支持与构建</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/VERIFICATION.md">验证记录</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/DESKTOP.md">桌面版说明</a>
+    </div>
+    <p>Mens 校园助手 · 页面内容与仓库状态同步维护；功能描述以仓库中的验证记录为准。本页面不收集任何数据。</p>
+  </footer>
+</div>
+</body>
+</html>

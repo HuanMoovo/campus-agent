@@ -381,3 +381,11 @@ button { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* Installed web client on phones/tablets: keep the shell clear of system bars. */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .app-shell { min-height: 100dvh; }
+  .composer-wrap { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  .sidebar { padding-left: env(safe-area-inset-left); }
+  .main-shell { padding-right: env(safe-area-inset-right); }
+}

@@ -62,10 +62,13 @@ def test_update_check_without_configuration_never_calls_the_network(monkeypatch)
 
 def test_update_check_reports_a_newer_manifest(monkeypatch):
     seen = []
+    # Derive the "next" version from the running app so the test survives version bumps.
+    major, minor, *_ = (int(part) for part in app.version.split('.'))
+    newer = f'{major}.{minor + 1}.0'
 
     def fake_get(url, **kwargs):
         seen.append((url, kwargs))
-        return httpx.Response(200, json={"version": "1.2.0", "url": "https://example.edu/mens-1.2.0.exe",
+        return httpx.Response(200, json={"version": newer, "url": f"https://example.edu/mens-{newer}.exe",
                                          "notes": "修复与改进"}, request=httpx.Request("GET", url))
 
     monkeypatch.setattr(main_module, "get_settings", lambda: configured_settings("https://example.edu/mens.json"))
@@ -73,8 +76,8 @@ def test_update_check_reports_a_newer_manifest(monkeypatch):
     with TestClient(app) as client:
         result = client.get("/api/update/check", headers=HEADERS).json()
     assert result["update_available"] is True
-    assert result["latest"] == "1.2.0"
-    assert result["url"] == "https://example.edu/mens-1.2.0.exe"
+    assert result["latest"] == newer
+    assert result["url"] == f"https://example.edu/mens-{newer}.exe"
     assert result["notes"] == "修复与改进"
     assert result["current"] == app.version
     assert seen and seen[0][1]["trust_env"] is False and seen[0][1]["follow_redirects"] is False

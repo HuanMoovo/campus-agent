@@ -1,8 +1,23 @@
 # Mens 验证记录
 
-1.0.0 的构建与安装验证记录于 2026-09-30；**1.1.0 于 2026-10-01 重新构建并完成安装验证**。1.1.0 在 1.0.0 基础上加入流式回答（可停止生成）、按客户端隔离的历史会话、Word (.docx) 知识库上传、模型下载断点续传、数据备份导出/导入、本机报修记录、窗口位置记忆、后端日志查看、前端单元测试与构建分包、可选的更新检查。校园统一登录仍未实现。
+1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
-## 开发副本第六批改进：联网搜索（2026-10-01，未发布）
+## Mens 1.2.0：跨平台构建、联网搜索与可安装网页版（2026-10-01）
+
+Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe`（126,396,099 字节，SHA-256 `bdd5b80c7d58e913f2e7e9c650d4e07744c5e42ebefe555b7eac7264065a9de5`）由跨平台构建脚本 `scripts/build_desktop.py` 完整重建；macOS 与 Linux 产物由 CI 构建（见下）。
+
+- 跨平台构建：单一脚本支持 `--os win|mac|linux` 与 `--arch x64|arm64`；因为 PyInstaller 无法交叉编译，指定非当前平台会被明确拒绝；虚拟环境解释器（`Scripts/python.exe` 与 `bin/python`）、npm 命令、图标与打包目标均按平台选择；macOS 构建自动设置 `CSC_IDENTITY_AUTO_DISCOVERY=false` 以跳过未配置的签名身份。打包目标：Windows NSIS、macOS dmg+zip、Linux AppImage+deb。
+- 图标：`scripts/create_icon.py` 在装有 Pillow 时跨平台生成，缺失 Pillow 时仅在 Windows 回退到原有 PowerShell 缩放。本机校验生成结果：`.icns` 容器 7 个条目（icp4/5/6、ic07/08/09/10，负载均为有效 PNG），`.ico` 9 档（16–256），PWA 图标 192/512/180 尺寸精确。
+- 跨平台代码：桌面启动器按 `process.platform` 选择 `campus-backend(.exe)` 与虚拟环境解释器；冻结后端集成测试同样按平台解析路径；数据目录沿用 Electron 的 appData 规则（macOS `~/Library/Application Support/CampusAgent`，Linux `~/.config/CampusAgent`）。凭据存储：Windows 用 DPAPI，macOS/Linux 为 `0600` 明文文件（已在 PLATFORMS.md 标明这不是加密）。
+- 可安装网页版（PWA）：Web App Manifest、离线外壳 Service Worker（仅缓存界面资源，`/api` 一律走网络）、iOS 安全区适配；构建产物包含 `manifest.webmanifest`、`sw.js`、`icon-192/512.png`、`apple-touch-icon.png`。
+- 持续集成：`.github/workflows/build-desktop.yml` 在 windows-latest、macos-13（x64）、macos-latest（arm64）、ubuntu-latest 上分别执行同一套构建脚本并上传产物，推送 `v*` 标签时自动创建 Release 并附加安装包。
+- 测试：后端 260 passed（65 subtests）、前端 13 passed、桌面 8/8；构建脚本内部的冻结后端真实集成测试同样通过。
+- Windows 安装验收：静默升级安装退出码 0；`Mens.exe` 文件版本 1.2.0；卸载项显示“Mens 1.2.0”；桌面与开始菜单快捷方式指向 `%LOCALAPPDATA%\Programs\Mens`。
+- 安装版界面验收（CDP 驱动安装后的应用，无控制台错误与失败请求）：侧栏显示 v1.2.0；设置页可通过界面启用「联网搜索」并保存（返回“已保存：自动选择。”，状态显示“当前生效：自动选择（bing）”）；聊天窗口开关可开启，开启后提问返回 5 条真实网页结果与可点击链接（`baike.baidu.com` 等），并提示“已联网检索（刚刚）”。
+- 未验证：**macOS 与 Linux 产物未在真机安装运行**；**CI 流水线尚未实际执行**（仓库首次推送后才会运行）；移动端 PWA 仅在桌面浏览器验证，未在真机 Android/iOS 上安装；安装包未签名、未公证；Tavily 与博查仅按文档结构解析（无 Key），实测的免密钥通道为 Bing；真实云端模型对联网资料的引用质量仍以 mock 模型验证链路。
+- 脚本与截图：`.tmp/qa-batch6/`；安装验收脚本 `check_installed_120.py` 与截图 `installed-1.2.0-chat.png`（位于验证用临时目录）。
+
+## 开发副本第六批改进：联网搜索（2026-10-01，已包含在 1.2.0 安装包）
 
 新增可选的实时联网搜索与网页读取，聊天窗口可按消息开关。**安装包尚未重新构建**（`release/` 中仍为 1.1.0）。
 

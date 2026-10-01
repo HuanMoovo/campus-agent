@@ -51,7 +51,8 @@ test('desktop backend supports authenticated knowledge, chat history and clean s
     backend = startBackend({
       projectRoot, dataDir, packaged, resourcesPath: path.join(projectRoot, 'build'),
       frontendDirectory: path.join(projectRoot, 'frontend', 'dist'),
-      backendExecutable: packaged ? path.join(projectRoot, 'build', 'backend', 'campus-backend', 'campus-backend.exe') : undefined,
+      backendExecutable: packaged ? path.join(projectRoot, 'build', 'backend', 'campus-backend',
+        process.platform === 'win32' ? 'campus-backend.exe' : 'campus-backend') : undefined,
       onExit: () => { unexpectedExit = true }, timeout: 40000,
     })
   } finally {

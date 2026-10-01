@@ -1,0 +1,4 @@
+# Build-time only dependencies (icon generation, packaging helpers).
+# The application itself never imports these; they are installed by build-desktop.cmd
+# and by the GitHub Actions workflow on every platform.
+pillow>=10.0

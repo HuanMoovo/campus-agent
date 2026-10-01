@@ -1,0 +1,92 @@
+name: Build desktop packages
+
+# Builds the Windows installer, the macOS app (Intel + Apple silicon) and the Linux
+# AppImage/deb. PyInstaller cannot cross-compile the bundled Python backend, so every
+# platform (and every architecture) is built on its own runner.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'desktop/**'
+      - 'scripts/**'
+      - '.github/workflows/build-desktop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64 (NSIS installer)
+            runner: windows-latest
+            target_os: win
+            arch: x64
+            args: --win nsis --x64
+          - label: macOS x64 (dmg + zip)
+            runner: macos-13
+            target_os: mac
+            arch: x64
+            args: --mac dmg zip --x64
+          - label: macOS arm64 (dmg + zip)
+            runner: macos-latest
+            target_os: mac
+            arch: arm64
+            args: --mac dmg zip --arm64
+          - label: Linux x64 (AppImage + deb)
+            runner: ubuntu-latest
+            target_os: linux
+            arch: x64
+            args: --linux AppImage deb --x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Build (install dependencies, run all suites, freeze backend, package)
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt
+          python scripts/build_desktop.py --os ${{ matrix.target_os }} --arch ${{ matrix.arch }}
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: mens-${{ matrix.target_os }}-${{ matrix.arch }}
+          path: |
+            release/*.exe
+            release/*.blockmap
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Attach packages to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --title "Mens ${GITHUB_REF_NAME}" --notes "见 VERIFICATION.md 的构建与验收记录。"
+          for file in release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb; do
+            [ -f "$file" ] && gh release upload "${GITHUB_REF_NAME}" "$file" --clobber
+          done

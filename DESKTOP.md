@@ -2,11 +2,13 @@
 
 桌面版采用 Electron 独立窗口，保留 Vue 界面和 FastAPI 功能；安装包包含冻结后的 Python 后端。用户安装后无需再安装 Python、Node.js、数据库或打开两个终端。启动应用时自动启动本机后端，退出时关闭；重复打开会聚焦已有窗口。
 
-**当前版本为 Mens 1.1.0。** 安装包已经重新构建、升级安装并逐项验收；安装、构建和界面验收的实际结果见 `VERIFICATION.md`。
+**当前版本为 Mens 1.2.0。** Windows 安装包已经重新构建、升级安装并逐项验收；macOS 与 Linux 产物由 CI 构建（未真机验收）。平台矩阵、安装位置与构建方式见 `PLATFORMS.md`，实际结果见 `VERIFICATION.md`。
 
 ## 直接使用
 
-双击桌面或开始菜单中的“Mens”。安装目录默认为 `%LOCALAPPDATA%\Programs\Mens`（1.0.0 曾使用 `Programs\CampusAgent`，升级后旧目录会残留，可手动删除；用户数据始终在 `%APPDATA%\CampusAgent`，升级不丢失）；安装器允许另选目录。可运行 `release/Mens-Setup-1.1.0-x64.exe`，无需先安装 Python 或 Node.js。
+双击桌面或开始菜单中的“Mens”。安装目录默认为 `%LOCALAPPDATA%\Programs\Mens`（1.0.0 曾使用 `Programs\CampusAgent`，升级后旧目录会残留，可手动删除；用户数据始终在 `%APPDATA%\CampusAgent`，升级不丢失）；安装器允许另选目录。可运行 `release/Mens-Setup-1.2.0-x64.exe`，无需先安装 Python 或 Node.js。
+
+macOS 与 Linux 安装包由 CI 构建：macOS 为 `Mens-<版本>-<架构>.dmg`（Intel 用 x64，Apple silicon 用 arm64；未签名未公证，首次打开需右键“打开”或在系统设置中允许），数据目录为 `~/Library/Application Support/CampusAgent`；Linux 为 AppImage（`chmod +x` 后直接运行）与 deb 包，数据目录为 `~/.config/CampusAgent`。这两个平台的产物尚未在真机上运行过，详见 `PLATFORMS.md`。
 
 ## 外观与聊天模型
 
@@ -39,7 +41,7 @@ build-desktop.cmd
 成功后输出：
 
 ```text
-release/Mens-Setup-1.1.0-x64.exe
+release/Mens-Setup-1.2.0-x64.exe
 release/win-unpacked/Mens.exe
 ```
 

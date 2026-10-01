@@ -27,9 +27,10 @@ function request(origin, route, token, method = 'GET', timeout = 3000) {
 function startBackend({ packaged, resourcesPath, projectRoot, dataDir, onExit, timeout = 90000, backendExecutable, frontendDirectory }) {
   const token = randomBytes(32).toString('hex')
   const nonce = randomBytes(24).toString('hex')
+  const isWindows = process.platform === 'win32'
   const frontendDir = frontendDirectory || (packaged ? path.join(resourcesPath, 'frontend') : path.join(projectRoot, 'frontend', 'dist'))
-  const command = backendExecutable || (packaged ? path.join(resourcesPath, 'backend', 'campus-backend.exe')
-    : path.join(projectRoot, 'backend', '.venv', 'Scripts', 'python.exe'))
+  const command = backendExecutable || (packaged ? path.join(resourcesPath, 'backend', isWindows ? 'campus-backend.exe' : 'campus-backend')
+    : path.join(projectRoot, 'backend', '.venv', ...(isWindows ? ['Scripts', 'python.exe'] : ['bin', 'python'])))
   const args = packaged ? ['--desktop'] : [path.join(projectRoot, 'backend', 'desktop_entry.py'), '--desktop']
   if (!fs.existsSync(command)) throw new Error('后端运行环境不存在，请先运行桌面安装或构建脚本。')
   if (!fs.existsSync(path.join(frontendDir, 'index.html'))) throw new Error('前端尚未编译，请先运行桌面构建脚本。')

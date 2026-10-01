@@ -1,6 +1,6 @@
 {
   "name": "mens-desktop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Mens 桌面校园助手",
   "author": "Mens",
   "private": true,
@@ -8,8 +8,11 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test tests/*.test.cjs",
-    "pack": "electron-builder --win --x64 --dir",
-    "dist": "electron-builder --win nsis --x64"
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis --x64",
+    "dist:mac": "electron-builder --mac dmg zip",
+    "dist:linux": "electron-builder --linux AppImage deb --x64"
   },
   "devDependencies": {
     "electron": "^41.0.0",
@@ -30,6 +33,20 @@
     "win": {
       "icon": "assets/mens.ico",
       "target": [ { "target": "nsis", "arch": ["x64"] } ]
+    },
+    "mac": {
+      "icon": "assets/mens.icns",
+      "category": "public.app-category.education",
+      "identity": null,
+      "artifactName": "Mens-${version}-${arch}.${ext}",
+      "target": [ { "target": "dmg", "arch": ["x64", "arm64"] }, { "target": "zip", "arch": ["x64", "arm64"] } ]
+    },
+    "linux": {
+      "icon": "assets/mens.png",
+      "category": "Education",
+      "maintainer": "HuanMoovo <HuanMoovo@users.noreply.github.com>",
+      "artifactName": "Mens-${version}-${arch}.${ext}",
+      "target": [ { "target": "AppImage", "arch": ["x64"] }, { "target": "deb", "arch": ["x64"] } ]
     },
     "nsis": {
       "oneClick": false,
