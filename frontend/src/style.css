@@ -342,6 +342,9 @@ button { cursor: pointer; }
 .accent-hex { width: 100px; min-height: 34px; padding: 6px 9px; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 5px; font: 12px/1.5 Consolas, monospace; }
 .accent-hex[aria-invalid="true"] { border-color: var(--danger-text); }
 .accent-error { width: 100%; margin: 0; color: var(--danger-text); font-size: 12px; }
+.language-row { grid-template-columns: 100px minmax(0, 1fr); align-items: start; }
+.appearance-hint { grid-column: 2; margin: 8px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.6; }
+@media (max-width: 900px) { .appearance-hint { grid-column: 1; } }
 
 @media (max-width: 900px) {
   .sidebar { width: 190px; flex-basis: 190px; }

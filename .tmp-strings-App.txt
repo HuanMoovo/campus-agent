@@ -1,0 +1,313 @@
+${friendlyError(error)} 可以重试恢复或开始新对话。
+${plugin.name} 启用状态
+&& item !== null ? item as Record<string, unknown> : { 结果: item })   const list = value.items || value.results || value.data || value.grades || value.schedule || value.classrooms   if (Array.isArray(list)) return list as Record<string, unknown>[]   return [Object.fromEntries(Object.entries(value).filter(([key]) => key !==
+(null)
+const chatSuggestions = ['补办校园一卡通需要什么材料？', '查询我的本周课表', '学校的报修流程是什么？']
+
+const activeService = ref
+)       link.href = url       link.download = name       link.click()       URL.revokeObjectURL(url)       backupInfo.value = `已开始下载 ${name}。`     }   } catch (error) {     backupError.value = `导出失败：${friendlyError(error)}`   } finally {     backupAction.value =
+)} 未能写入` :
+, maxResults: 5, fetchPages: 2 }) const webAvailable = computed(() => Boolean(webStatus.value?.enabled && webStatus.value?.available)) const webSwitch = computed({   get: () => workspace.webSearch,   set: value => workspace.setWebSearch(Boolean(value)), }) const webToggleHint = computed(() => webAvailable.value   ? `开启后会把问题发送到${webStatus.value?.resolved_provider ===
+, picked.bytes)   } catch (error) {     backupError.value = `导入失败：${friendlyError(error)}`   } finally {     backupAction.value =
+/></div>               <h2>今天需要办理什么？</h2>               <div class=
+/><span>启用联网搜索</span></label><label class=
+/><span>联网搜索</span></label></el-tooltip><span>回答仅供参考，请核对学校正式通知</span><el-button v-if=
+> {{ updateInfo }}</template><template v-else>更新清单地址由管理员在 .env（UPDATE_MANIFEST_URL）中配置，未配置时不联网检查。</template></p><el-alert v-if=
+> · {{ health.rag_degraded ? '向量检索故障，已降级关键词检索' : health.rag_enabled ? '向量检索已启用' : '本地关键词检索' }} · {{ health.demo_services ? '校务服务为演示数据' : '已配置部分校务接口' }}</template></p></div><el-button :icon=
+> 当前生效：{{ webStatus.providers.find(item => item.id === webStatus?.provider)?.label || webStatus.provider }}<template v-if=
+><div><h2>安装插件</h2><p>输入 HTTPS 插件清单地址；主机需在后端白名单中。</p></div><div class=
+><div><h2>开源本地模型</h2><p>通过本机 Ollama 运行。模型文件可能占用数 GB 空间。</p></div><el-button text :icon=
+><div><span>{{ download.status === 'completed' ? '下载完成' : download.status === 'failed' ? '下载失败' : download.status === 'cancelled' ? '已取消' : download.detail || '正在下载模型…' }}</span></div><el-progress :percentage=
+><div><strong>{{ plugin.name }}</strong></div><p>{{ plugin.description || plugin.url || '自定义插件' }}</p></div><el-switch :model-value=
+><div><strong>已安装插件</strong><span>{{ plugins.length }} 个</span></div><el-button text :icon=
+><div><strong>推荐插件</strong><span>按需安装</span></div><el-button text :icon=
+><div><strong>文档列表</strong><span>{{ documents.length }} 份文档</span></div><el-button text :icon=
+><el-icon><Connection /></el-icon> 已调用 {{ message.tools.join('、') }}</div>                 <div v-if=
+><h2>Mens 桌面版</h2><p>版本 {{ desktopInfo?.version || '读取中…' }} · 启动应用时自动运行本机服务。</p></div><el-button :icon=
+><h2>{{ serviceNames[activeService] }}</h2><p>{{ activeService === 'repair' ? '未接入学校报修接口时，工单仅保存在本机。' : '已配置的数据从学校接口读取；未配置的类型显示演示数据。' }}</p></div>               <div class=
+><h2>云端模型 API</h2><p>填写提供商信息并保存后测试连接。留空 API Key 会保留现有密钥。</p></div>             <div class=
+><h2>后端日志</h2><p>最近的后端诊断输出（最多 200 KB），完整日志位于数据目录的 <code>logs/backend.log</code>。</p><el-alert v-if=
+><h2>备份与恢复</h2><p>导出包含知识库、对话记录、模型与校园接口配置的 zip 备份；其中的密钥和令牌属于敏感数据，请妥善保管。导入会覆盖当前数据<template v-if=
+><h2>当前模型</h2><p>选择已配置的云端模型或本机运行的开源模型。</p></div><el-radio-group :model-value=
+><h2>服务状态</h2><p>{{ healthLabel }}<template v-if=
+><h2>本机数据</h2><p>知识库、对话记录和应用配置保存在以下位置。</p><code v-if=
+><h2>校园数据接口</h2><p>按数据类型连接学校的 HTTPS JSON 接口。令牌仅保存在本机，不会显示在页面上。</p></div>             <div class=
+><h2>版本与更新</h2><p>当前版本 {{ desktop ? (desktopInfo?.version ? `v${desktopInfo.version}` : '读取中…') : `v${frontendVersion}` }}。<template v-if=
+><h2>管理员令牌</h2><p>用于文档与插件管理，仅保存在当前浏览器会话。</p></div><el-input :model-value=
+><h2>联网搜索</h2><p>开启后聊天窗口可逐条选择是否联网检索，回答会引用网页链接。默认使用免密钥的 Bing 网页搜索（中国大陆可直连），也可配置 Tavily 或博查 API Key。<template v-if=
+><h3>{{ activeService === 'repair' ? '提交结果' : '查询结果' }}</h3><span v-if=
+><h3>已安装模型</h3><p v-if=
+><h3>本机报修记录</h3><el-button text :icon=
+><h3>测试插件：{{ testPlugin.name }}</h3></div><p v-if=
+><span>API 地址</span><el-input v-model=
+><span>Bearer 令牌</span><el-input v-model=
+><span>JSON 参数</span><el-input v-model=
+><span>JSON 结果路径</span><el-input v-model=
+><span>下载模型</span><el-select v-model=
+><span>下载源 / 镜像</span><el-select v-model=
+><span>报修地点</span><el-input v-model=
+><span>接入状态</span><span class=
+><span>接口地址</span><el-input v-model=
+><span>搜索服务</span><el-select v-model=
+><span>教学楼</span><el-input v-model=
+><span>数据类型</span><el-select v-model=
+><span>最少座位数</span><el-input-number v-model=
+><span>模型名称</span><el-input v-model=
+><span>联系方式</span><el-input v-model=
+><span>读取网页数</span><el-input-number v-model=
+><span>返回结果数</span><el-input-number v-model=
+><span>问题描述</span><el-input v-model=
+><strong>{{ item.title }}</strong><small>{{ item.message_count }} 条消息 · {{ chatTime(item.updated_at) }}</small></div>                   <el-dropdown class=
+><strong>历史对话</strong><span class=
+><summary>查看参数定义</summary><pre>{{ JSON.stringify(testPlugin.parameters, null, 2) }}</pre></details><label class=
+>KNOWLEDGE BASE</div><h1>知识库</h1><p>维护政策文件与办事指南，更新后可重建检索索引。</p></div><div class=
+>MENS ASSISTANT</div><h1>智能问答</h1></div><div class=
+>MENS EXTENSIONS</div><h1>插件</h1><p>按需安装和管理可用工具。</p></div></div>           <div class=
+>MENS SERVICES</div><h1>校园服务</h1><p>查询教务信息，查找教室，提交后勤报修。</p></div></div>           <div class=
+>PREFERENCES</div><h1>设置</h1><p>{{ desktop ? '管理桌面应用与模型偏好，查看本机服务状态。' : '选择当前浏览器的模型偏好，查看后端服务状态。' }}</p></div></div>           <AppearanceSettings :mode=
+>{{ activeCampusSource?.configured ? '已配置' : '演示数据' }}</span></label>               <label class=
+>{{ activeService === 'repair' ? '提交报修' : '查询' }}</el-button></div>               <el-alert v-if=
+>{{ desktop ? '输入词条关键词，搜索结果将在系统浏览器中打开。' : '输入词条关键词，生成链接后点击打开百度百科搜索结果。' }}</p><p v-else>参数将由后端发送至已注册服务 {{ testPlugin.url }}。</p><details v-if=
+>{{ desktop ? (desktopInfo ? `v${desktopInfo.version}` : '桌面版') : `v${frontendVersion}` }}</span>       </div>     </aside>      <div class=
+>{{ message.role === 'user' ? '你' : 'Mens' }}<span v-if=
+>{{ message.sources.some(source => source.kind === 'web') ? '参考来源（含联网检索）' : '参考来源' }}</div><div v-for=
+>{{ modelConfig?.providers[provider]?.configured ? 'API Key 已配置' : '未配置 API Key' }}</span></div>             <div class=
+>{{ testPlugin.name === 'baidu_baike_search' ? '搜索词条' : '发送测试请求' }}</el-button><el-button :disabled=
+>{{ workspace.model === 'ollama' && currentLocalModel === item.name ? '已选择' : '使用模型' }}</el-button></div></div>           </div>           <div class=
+>上传文档</el-button><input ref=
+>下载模型</el-button></div>             <div v-if=
+>保存接口</el-button><el-button :disabled=
+>保存联网设置</el-button></div></div>           <div class=
+>保存配置</el-button><el-button :loading=
+>停止生成</el-button><el-button v-else type=
+>关闭</el-button></div><el-alert v-if=
+>删除</el-button></template></el-table-column></el-table></div>         </section>          <section v-else-if=
+>刷新</el-button></div>             <el-alert v-if=
+>刷新</el-button></div>           <el-alert v-if=
+>刷新状态</el-button></div>           <el-alert v-if=
+>刷新记录</el-button></div>                 <el-alert v-if=
+>前往 Ollama 官方下载页</a></el-alert>             <div class=
+>前往 Ollama 官方下载页</el-button><a v-else href=
+>卸载</el-button></div></div>           <div v-if=
+>历史记录</el-button><el-button :icon=
+>发送</el-button></div></div></div>             </div>           </div>         </section>          <section v-else-if=
+>取消下载</el-button></div>             <el-alert v-if=
+>后端演示数据</span></div><el-empty v-if=
+>填写管理员令牌</el-button></el-alert>                 <el-empty v-else-if=
+>安装</el-button></div></div>           <div class=
+>安装、启停和测试调用需在「设置」填写管理员令牌。</p>           <div class=
+>导入备份</el-button><input v-if=
+>导入网页</el-button><el-button type=
+>导出 JSON</el-dropdown-item>                       </el-dropdown-menu>                     </template>                   </el-dropdown>                   <el-button class=
+>导出 Markdown</el-dropdown-item>                         <el-dropdown-item command=
+>导出备份</el-button><el-button :icon=
+>已停止</span></div><div class=
+>已安装</span><el-button v-else type=
+>我</template><img v-else :src=
+>打开下载页</el-button></div></div>           <div class=
+>打开数据文件夹</el-button></div>             <div class=
+>打开文件夹</el-button></div></div>             <el-alert v-if=
+>打开百度百科搜索结果</a><pre v-if=
+>支持 PDF、Markdown、TXT、Word (.docx)，最大 5 MB。<template v-if=
+>新对话</el-button></div></div>           <div class=
+>暂无历史对话。<br />发送第一条消息后会自动保存。</p>                 <div v-for=
+>暂无可用的本地模型。</p><div v-for=
+>更新<input type=
+>未接入学校报修接口，以上记录仅保存在本机。</p></template>               </div>             </div></div>         </section>          <section v-else-if=
+>本地模型</el-radio-button></el-radio-group></div>           <div class=
+>检查更新</el-button><el-button v-if=
+>模型设置</el-button></el-alert>             <div v-if=
+>正在恢复对话…</div>             <div v-if=
+>测试已保存配置</el-button><el-button text type=
+>测试读取</el-button><el-button text type=
+>测试调用</el-button><el-button link type=
+>清空</el-button></div>               <p v-if=
+>清除密钥</el-button></div>             <el-alert v-if=
+>演示回答</span><span v-if=
+>移除接口</el-button></div>             <el-alert v-if=
+>管理操作需在「设置」填写管理员令牌。</template><template v-else>文档保存在本机应用数据目录。</template></p>           <div class=
+>自动路由</el-radio-button><el-radio-button value=
+>请求失败</span><span v-if=
+>读取日志</el-button><el-button :icon=
+>重启应用</el-button></div>             <div class=
+>重建索引</el-button><el-button :icon=
+>重试</el-button></el-alert>           </template>           <el-alert v-if=
+>重试保存</el-button></el-alert>           <div class=
+>重试恢复</el-button></el-alert>             <el-alert v-if=
+>（{{ webStatus.resolved_provider }}）</template><template v-else>（缺少 API Key）</template>。</template></p><p v-if=
+>，重启应用后完全生效</template>。</p><p v-if=
+API 地址
+Bearer 令牌
+JSON 参数
+JSON 结果路径
+Mens 桌面版
+Ollama 未连接
+await restoreConversation() }  async function deleteConversation(item: ConversationSummary) {   if (chatBusy.value) return   try {     await ElMessageBox.confirm(`删除“${item.title}”后无法恢复，确定删除？`,
+healthBusy.value ? '检查中' : health.value?.status === 'ok' ? '后端已连接' : '后端未连接')
+
+const messages = ref
+if (!installedLocalModel.value) return `本地模型 ${currentLocalModel.value} 未安装`   return
+if (!status.enabled || !status.available) workspace.setWebSearch(false)   } catch (error) {     webError.value = `保存失败：${friendlyError(error)}`   } finally {     webSaving.value = false   } }  async function loadHealth() {   healthBusy.value = true   healthError.value =
+try {     await finishImport(file.name, new Uint8Array(await file.arrayBuffer()))   } catch (error) {     backupError.value = `导入失败：${friendlyError(error)}`   } finally {     backupAction.value =
+try {     const blob = await api.exportBackup()     const name = `mens-backup-${new Date().toISOString().slice(0, 10)}.zip`     if (desktop) {       const bytes = new Uint8Array(await blob.arrayBuffer())       const result = await desktop.saveBackup(name, bytes)       backupInfo.value = result.saved ? `备份已保存：${result.path || name}` :
+try {     const imported = await api.importDocumentUrl(value)     await loadDocuments()     ElMessage.success(`已导入：${imported.filename}`)   } catch (error) { ElMessage.error(`导入失败：${friendlyError(error)}`) }   finally { docAction.value =
+try {     const result = await api.checkUpdate()     updateInfo.value = [result.message, result.notes ? `更新说明：${result.notes}` :
+try {     const result = await api.reindex()     await loadDocuments()     ElMessage.success(health.value?.rag_enabled ? `向量索引已重建，共处理 ${result.indexed} 份文档` : `当前使用关键词检索，共 ${result.indexed} 份文档；向量检索未启用`)   } catch (error) { ElMessage.error(friendlyError(error)) }   finally { docAction.value =
+try {     const { blob, name } = await api.exportConversation(item.id, kind)     if (desktop) {       const bytes = new Uint8Array(await blob.arrayBuffer())       const result = await desktop.saveExport(name, bytes)       if (result.saved) ElMessage.success(`对话已导出：${result.path || name}`)       else ElMessage.info(
+try { await desktop.openDataFolder() }   catch (error) { desktopError.value = `无法打开数据文件夹：${friendlyError(error)}`; ElMessage.error(desktopError.value) }   finally { desktopAction.value =
+try { desktopInfo.value = await desktop.getInfo() }   catch (error) { desktopError.value = `无法读取桌面应用信息：${friendlyError(error)}` } }  async function openDataFolder() {   if (!desktop || desktopAction.value) return   desktopAction.value =
+webSaved.value = status.enabled       ? `已保存：${status.providers.find(item => item.id === status.provider)?.label || status.provider}${status.available ?
+} catch (error) {     logError.value = `无法读取日志：${friendlyError(error)}`   } finally {     logBusy.value = false   } }  async function checkUpdates() {   if (updateBusy.value) return   updateBusy.value = true   updateError.value =
+} }  async function deleteDocument(item: KnowledgeDocument) {   if (docAction.value) return   try { await ElMessageBox.confirm(`确定删除「${item.filename}」？`,
+} }  async function finishImport(name: string, bytes: Uint8Array) {   const result = await api.importBackup(bytes, name)   backupInfo.value = `已恢复：${result.restored.join(
+} }  async function openSourceUrl(url?: string) {   if (!url) return   if (desktop) {     try { await desktop.openExternal(url) }     catch (error) { ElMessage.warning(`无法打开链接：${friendlyError(error)}`) }     return   }   window.open(url,
+} }  async function removePlugin(item: Plugin) {   if (pluginAction.value || testBusy.value) return   try { await ElMessageBox.confirm(`确定卸载「${item.name}」？`,
+} }  async function selectInstalledModel(name: string) {   if (chatBusy.value) return   workspace.setLocalModel(name)   ElMessage.success(`已选择 ${name}`) }  function selectChatModel(value: string) {   if (chatBusy.value) return   if (value.startsWith(
+})     await restartDesktop()   } catch { /* 用户选择稍后重启 */ } }  async function loadLog() {   if (!desktop || logBusy.value) return   logBusy.value = true   logError.value =
+}并引用网页结果`   :
+上传失败——${problems.join('；')}
+上传文档
+下载模型
+下载源 / 镜像
+云端模型 API
+人工智能
+今天需要办理什么？
+仍有操作正在进行，重启会中断操作。确定现在重启？
+保存接口
+保存联网设置
+保存配置
+停止生成
+关闭
+删除
+删除对话：${item.title}
+刷新
+刷新状态
+刷新记录
+前往 Ollama 官方下载页
+卸载
+历史对话
+历史记录
+发送
+发送第一条消息后会自动保存。
+取消
+取消下载
+可选
+后端日志
+后端演示数据
+启用联网搜索
+回答仅供参考，请核对学校正式通知
+图书馆
+填写提供商信息并保存后测试连接。留空 API Key 会保留现有密钥。
+填写管理员令牌
+备份与恢复
+安装
+安装、启停和测试调用需在「设置」填写管理员令牌。
+安装插件
+导入备份
+导入网页
+导出 JSON
+导出 Markdown
+导出包含知识库、对话记录、模型与校园接口配置的 zip 备份；其中的密钥和令牌属于敏感数据，请妥善保管。导入会覆盖当前数据
+导出备份
+导出失败：${friendlyError(error)}
+导出对话：${item.title}
+将删除全部 ${conversations.value.length} 条历史对话，且无法恢复。确定清空？
+尚未提交的输入将在重启后清空。确定现在重启？
+已上传 ${uploaded} 份文档
+已上传 ${uploaded} 份；其余失败——${problems.join('；')}
+已停止
+已停止生成。
+已安装
+已安装插件
+已安装模型
+已开始下载 ${name}
+已联网检索（${web.fetched_at || '刚刚'}）
+已配置，留空保留原令牌
+开启后聊天窗口可逐条选择是否联网检索，回答会引用网页链接。默认使用免密钥的 Bing 网页搜索（中国大陆可直连），也可配置 Tavily 或博查 API Key。
+开源本地模型
+当前模型
+我
+打开下载页
+打开数据文件夹
+打开文件夹
+打开百度百科搜索结果
+报修地点
+按数据类型连接学校的 HTTPS JSON 接口。令牌仅保存在本机，不会显示在页面上。
+按需安装
+按需安装和管理可用工具。
+接入状态
+接口地址
+推荐插件
+插件
+搜索服务
+支持 PDF、Markdown、TXT、Word (.docx)，最大 5 MB。
+教学楼
+数据类型
+文档保存在本机应用数据目录。
+文档列表
+文档已上传
+新对话
+无法打开 Ollama 下载页：${friendlyError(error)}
+无法打开下载页：${friendlyError(error)}
+无法读取历史对话：${friendlyError(error)}
+智能问答
+暂无历史对话。
+暂无可用的本地模型。
+暂无已安装模型
+更新
+更新清单地址由管理员在 .env（UPDATE_MANIFEST_URL）中配置，未配置时不联网检查。
+最少座位数
+最近的后端诊断输出（最多 200 KB），完整日志位于数据目录的
+服务状态
+未接入学校报修接口，以上记录仅保存在本机。
+本地偏好未保存成功，请先重试保存后再重启。
+本地模型
+本机报修记录
+本机数据
+查看参数定义
+查询教务信息，查找教室，提交后勤报修。
+校园数据接口
+校园服务
+检查更新
+检查更新失败：${friendlyError(error)}
+模型名称
+模型设置
+正在恢复对话…
+正在检测…
+测试已保存配置
+测试读取
+测试调用
+清空
+清空历史对话
+清除密钥
+演示回答
+版本与更新
+用于文档与插件管理，仅保存在当前浏览器会话。
+知识库
+知识库、对话记录和应用配置保存在以下位置。
+移除接口
+管理员令牌
+管理操作需在「设置」填写管理员令牌。
+维护政策文件与办事指南，更新后可重建检索索引。
+联系方式
+联网搜索
+联网检索未完成：${web.error}
+自动路由
+设置
+请求失败
+读取日志
+读取网页数
+输入 HTTPS 插件清单地址；主机需在后端白名单中。
+返回结果数
+选择已配置的云端模型或本机运行的开源模型。
+通过本机 Ollama 运行。模型文件可能占用数 GB 空间。
+重启
+重启 Mens
+重启应用
+重建索引
+重试
+重试保存
+重试恢复
+问题描述
+（缺少 API Key）
+，重启应用后完全生效

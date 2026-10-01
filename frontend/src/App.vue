@@ -7,6 +7,7 @@ import {
 } from '@element-plus/icons-vue'
 import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source, type WebStatus } from './api'
 import { useWorkspaceStore, type Model, type View } from './store'
+import { applyLocale, t } from './i18n'
 import { desktop, type DesktopInfo } from './desktop'
 import mensLogo from './assets/mens.png'
 import AppearanceSettings from './components/AppearanceSettings.vue'
@@ -20,15 +21,16 @@ const workspace = useWorkspaceStore()
 const desktopInfo = ref<DesktopInfo | null>(null)
 const desktopError = ref('')
 const desktopAction = ref('')
-const nav: { key: View; label: string; icon: typeof ChatLineRound; section: string }[] = [
-  { key: 'chat', label: '智能问答', icon: ChatLineRound, section: '工作区' },
-  { key: 'services', label: '校园服务', icon: Grid, section: '工作区' },
-  { key: 'knowledge', label: '知识库', icon: FolderOpened, section: '管理' },
-  { key: 'plugins', label: '插件', icon: Connection, section: '管理' },
-  { key: 'settings', label: '设置', icon: Setting, section: '管理' },
+const nav: { key: View; labelKey: string; icon: typeof ChatLineRound; section: string }[] = [
+  { key: 'chat', labelKey: 'nav.chat', icon: ChatLineRound, section: 'workspace' },
+  { key: 'services', labelKey: 'nav.services', icon: Grid, section: 'workspace' },
+  { key: 'knowledge', labelKey: 'nav.knowledge', icon: FolderOpened, section: 'admin' },
+  { key: 'plugins', labelKey: 'nav.plugins', icon: Connection, section: 'admin' },
+  { key: 'settings', labelKey: 'nav.settings', icon: Setting, section: 'admin' },
 ]
-const viewLabel = computed(() => nav.find(item => item.key === workspace.view)?.label || '')
-const modelLabel = computed(() => workspace.model === 'ollama' ? currentLocalModel.value || '本地模型' : ({ auto: '自动路由', qwen3: 'Qwen3', deepseek: 'DeepSeek' })[workspace.model])
+const navSections = ['workspace', 'admin']
+const viewLabel = computed(() => t(nav.find(item => item.key === workspace.view)?.labelKey || ''))
+const modelLabel = computed(() => workspace.model === 'ollama' ? currentLocalModel.value || t('app.model.local') : ({ auto: t('app.model.auto'), qwen3: 'Qwen3', deepseek: 'DeepSeek' })[workspace.model])
 const mobileNavOpen = ref(false)
 const adminToken = ref(desktop ? '' : sessionStorage.getItem('campus-agent-admin-token') || '')
 const health = ref<Health | null>(null)
@@ -36,7 +38,7 @@ const healthBusy = ref(false)
 const healthError = ref('')
 const historyError = ref('')
 const historyBusy = ref(false)
-const healthLabel = computed(() => healthBusy.value ? '检查中' : health.value?.status === 'ok' ? '后端已连接' : '后端未连接')
+const healthLabel = computed(() => healthBusy.value ? t('app.backend.checking') : health.value?.status === 'ok' ? t('app.backend.connected') : t('app.backend.disconnected'))
 
 const messages = ref<Message[]>([])
 const prompt = ref('')
@@ -51,7 +53,7 @@ const streamingMessage = computed(() => {
   return last && last.role === 'assistant' && last.streaming ? last : null
 })
 const chatEnd = ref<HTMLElement | null>(null)
-const chatSuggestions = ['补办校园一卡通需要什么材料？', '查询我的本周课表', '学校的报修流程是什么？']
+const chatSuggestions = computed(() => [t('chat.suggestion.card'), t('chat.suggestion.schedule'), t('chat.suggestion.repair')])
 
 const activeService = ref<ServiceKey>('grades')
 const serviceBusy = ref(false)
@@ -348,7 +350,7 @@ async function loadConversations() {
   try {
     conversations.value = await api.conversations(workspace.clientId)
   } catch (error) {
-    conversationsError.value = `无法读取历史对话：${friendlyError(error)}`
+    conversationsError.value = t('history.loadError', { error: friendlyError(error) })
   } finally {
     conversationsBusy.value = false
   }
@@ -365,7 +367,7 @@ async function openConversation(id: string) {
 async function deleteConversation(item: ConversationSummary) {
   if (chatBusy.value) return
   try {
-    await ElMessageBox.confirm(`删除“${item.title}”后无法恢复，确定删除？`, '删除历史对话', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+    await ElMessageBox.confirm(t('history.confirmDelete', { title: item.title }), t('history.confirmDeleteTitle'), { type: 'warning', confirmButtonText: t('common.delete'), cancelButtonText: t('common.cancel') })
   } catch { return }
   try {
     await api.deleteConversation(item.id, workspace.clientId)
@@ -379,7 +381,7 @@ async function deleteConversation(item: ConversationSummary) {
 async function clearConversations() {
   if (chatBusy.value || !conversations.value.length) return
   try {
-    await ElMessageBox.confirm(`将删除全部 ${conversations.value.length} 条历史对话，且无法恢复。确定清空？`, '清空历史对话', { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' })
+    await ElMessageBox.confirm(t('history.confirmClear', { count: conversations.value.length }), t('history.confirmClearTitle'), { type: 'warning', confirmButtonText: t('history.clear'), cancelButtonText: t('common.cancel') })
   } catch { return }
   try {
     await api.clearConversations(workspace.clientId)
@@ -587,7 +589,7 @@ async function restoreConversation() {
     const result = await api.conversation(workspace.conversationId)
     messages.value = result.messages.map(message => ({ role: message.role, text: message.content, sources: message.sources, tools: message.tool_calls?.map(call => call.name), demo: message.mode === 'demo', stopped: Boolean(message.partial) }))
     scrollChat()
-  } catch (error) { historyError.value = `${friendlyError(error)} 可以重试恢复或开始新对话。` }
+  } catch (error) { historyError.value = t('history.loadErrorHint', { error: friendlyError(error) }) }
   finally { historyBusy.value = false }
 }
 
@@ -625,7 +627,7 @@ async function sendChat(value = prompt.value) {
     if (controller.signal.aborted) {
       assistant.stopped = true
       if (!assistant.text.trim()) {
-        assistant.text = '已停止生成。'
+        assistant.text = t('chat.stopped')
         if (!prompt.value.trim()) prompt.value = text
       }
     } else if (error instanceof ChatStreamError) {
@@ -802,8 +804,8 @@ async function exportConversation(item: ConversationSummary, format: string) {
     if (desktop) {
       const bytes = new Uint8Array(await blob.arrayBuffer())
       const result = await desktop.saveExport(name, bytes)
-      if (result.saved) ElMessage.success(`对话已导出：${result.path || name}`)
-      else ElMessage.info('已取消导出。')
+      if (result.saved) ElMessage.success(t('history.exported', { path: result.path || name }))
+      else ElMessage.info(t('history.exportCancelled'))
     } else {
       const url = URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -811,9 +813,9 @@ async function exportConversation(item: ConversationSummary, format: string) {
       link.download = name
       link.click()
       URL.revokeObjectURL(url)
-      ElMessage.success(`已开始下载 ${name}`)
+      ElMessage.success(t('history.downloadStarted', { name }))
     }
-  } catch (error) { ElMessage.error(`导出失败：${friendlyError(error)}`) }
+  } catch (error) { ElMessage.error(t('history.exportFailed', { error: friendlyError(error) })) }
   finally { historyBusy.value = false }
 }
 
@@ -1022,6 +1024,7 @@ async function restartDesktop() {
 }
 
 onMounted(async () => {
+  applyLocale()
   void loadHealth()
   void loadWebStatus()
   void loadDesktopInfo()
@@ -1048,75 +1051,75 @@ onUnmounted(() => {
     <aside class="sidebar" :class="{ 'sidebar-open': mobileNavOpen }">
       <div class="brand">
         <img class="brand-mark" :src="mensLogo" alt="" />
-        <span><strong>Mens</strong><small>{{ desktop ? '桌面智能办事工作台' : '智能办事工作台' }}</small></span>
+        <span><strong>Mens</strong><small>{{ desktop ? t('app.tagline.desktop') : t('app.tagline.web') }}</small></span>
       </div>
       <div class="side-content">
-        <template v-for="section in ['工作区', '管理']" :key="section">
-          <div class="nav-section">{{ section }}</div>
+        <template v-for="section in navSections" :key="section">
+          <div class="nav-section">{{ t('nav.' + section) }}</div>
           <button v-for="item in nav.filter(entry => entry.section === section)" :key="item.key" class="nav-item" :class="{ active: workspace.view === item.key }" @click="selectView(item.key)">
-            <el-icon :size="18"><component :is="item.icon" /></el-icon><span>{{ item.label }}</span>
+            <el-icon :size="18"><component :is="item.icon" /></el-icon><span>{{ t(item.labelKey) }}</span>
           </button>
         </template>
       </div>
       <div class="side-footer">
         <div class="connection-dot" :class="{ demo: !health }" />
         <span>{{ healthLabel }}</span>
-        <span class="side-version">{{ desktop ? (desktopInfo ? `v${desktopInfo.version}` : '桌面版') : `v${frontendVersion}` }}</span>
+        <span class="side-version">{{ desktop ? (desktopInfo ? `v${desktopInfo.version}` : t('app.version.desktop')) : `v${frontendVersion}` }}</span>
       </div>
     </aside>
 
     <div class="main-shell">
       <header class="topbar">
-        <button class="mobile-menu icon-button" aria-label="打开导航" @click="mobileNavOpen = true"><el-icon :size="20"><Grid /></el-icon></button>
+        <button class="mobile-menu icon-button" :aria-label="t('app.menu')" @click="mobileNavOpen = true"><el-icon :size="20"><Grid /></el-icon></button>
         <div class="breadcrumb"><span>Mens</span><el-icon><ArrowRight /></el-icon><strong>{{ viewLabel }}</strong></div>
         <div class="top-actions"><span class="mode-chip" :class="{ demo: !health }">{{ healthLabel }}</span><span class="model-chip" :title="modelLabel">{{ modelLabel }}</span></div>
       </header>
 
       <main class="main-content" :class="{ 'chat-main': workspace.view === 'chat' }">
         <section v-if="workspace.view === 'chat'" class="chat-view">
-          <div class="page-heading chat-heading"><div><div class="eyebrow">MENS ASSISTANT</div><h1>智能问答</h1></div><div class="chat-actions"><div class="chat-model-picker"><el-select :model-value="chatModel" aria-label="聊天模型" :disabled="!workspace.ready || chatBusy" @update:model-value="selectChatModel" @visible-change="($event: boolean) => { if ($event) loadLocalModels() }"><el-option-group label="云端与自动路由"><el-option value="auto" label="自动路由" /><el-option value="qwen3" label="Qwen3" /><el-option value="deepseek" label="DeepSeek" /></el-option-group><el-option-group label="本地 Ollama"><el-option v-if="workspace.model === 'ollama' && !installedLocalModel" :value="`local:${currentLocalModel}`" :label="currentLocalModel || '本地模型'" disabled /><el-option v-for="item in localModels?.installed || []" :key="item.name" :value="`local:${item.name}`" :label="item.name" :disabled="!localModels?.running" /><el-option v-if="!localModels?.installed.length && workspace.model !== 'ollama'" value="unavailable" :label="localBusy ? '正在检测…' : localModels?.running ? '暂无已安装模型' : 'Ollama 未连接'" disabled /></el-option-group></el-select><el-tooltip content="刷新本地模型"><el-button :icon="Refresh" :loading="localBusy" :disabled="chatBusy" aria-label="刷新本地模型" @click="loadLocalModels" /></el-tooltip></div><el-button :icon="Clock" :type="historyOpen ? 'primary' : 'default'" plain :aria-pressed="historyOpen" @click="historyOpen = !historyOpen">历史记录</el-button><el-button :icon="Plus" :disabled="!workspace.ready || chatBusy || historyBusy" @click="newConversation">新对话</el-button></div></div>
+          <div class="page-heading chat-heading"><div><div class="eyebrow">MENS ASSISTANT</div><h1>{{ t('nav.chat') }}</h1></div><div class="chat-actions"><div class="chat-model-picker"><el-select :model-value="chatModel" :aria-label="t('chat.modelPicker')" :disabled="!workspace.ready || chatBusy" @update:model-value="selectChatModel" @visible-change="($event: boolean) => { if ($event) loadLocalModels() }"><el-option-group :label="t('chat.modelCloud')"><el-option value="auto" label="自动路由" /><el-option value="qwen3" label="Qwen3" /><el-option value="deepseek" label="DeepSeek" /></el-option-group><el-option-group :label="t('chat.modelLocal')"><el-option v-if="workspace.model === 'ollama' && !installedLocalModel" :value="`local:${currentLocalModel}`" :label="currentLocalModel || t('app.model.local')" disabled /><el-option v-for="item in localModels?.installed || []" :key="item.name" :value="`local:${item.name}`" :label="item.name" :disabled="!localModels?.running" /><el-option v-if="!localModels?.installed.length && workspace.model !== 'ollama'" value="unavailable" :label="localBusy ? t('chat.localChecking') : localModels?.running ? t('chat.localNone') : t('chat.ollamaOffline')" disabled /></el-option-group></el-select><el-tooltip :content="t('chat.refreshLocal')"><el-button :icon="Refresh" :loading="localBusy" :disabled="chatBusy" :aria-label="t('chat.refreshLocal')" @click="loadLocalModels" /></el-tooltip></div><el-button :icon="Clock" :type="historyOpen ? 'primary' : 'default'" plain :aria-pressed="historyOpen" @click="historyOpen = !historyOpen">{{ t('chat.history') }}</el-button><el-button :icon="Plus" :disabled="!workspace.ready || chatBusy || historyBusy" @click="newConversation">{{ t('chat.new') }}</el-button></div></div>
           <div class="chat-body">
-            <aside v-show="historyOpen" class="history-panel" aria-label="历史对话">
-              <div class="history-head"><strong>历史对话</strong><span class="history-count">{{ conversations.length }}</span><el-button text :icon="Refresh" :loading="conversationsBusy" aria-label="刷新历史对话" @click="loadConversations" /><el-button text :disabled="!conversations.length || chatBusy" @click="clearConversations">清空</el-button></div>
+            <aside v-show="historyOpen" class="history-panel" :aria-label="t('history.title')">
+              <div class="history-head"><strong>{{ t('history.title') }}</strong><span class="history-count">{{ conversations.length }}</span><el-button text :icon="Refresh" :loading="conversationsBusy" :aria-label="t('history.refresh')" @click="loadConversations" /><el-button text :disabled="!conversations.length || chatBusy" @click="clearConversations">{{ t('history.clear') }}</el-button></div>
               <p v-if="conversationsError" class="history-error">{{ conversationsError }}</p>
               <div class="history-list" v-loading="conversationsBusy">
-                <p v-if="!conversationsBusy && !conversationsError && conversations.length === 0" class="history-empty">暂无历史对话。<br />发送第一条消息后会自动保存。</p>
+                <p v-if="!conversationsBusy && !conversationsError && conversations.length === 0" class="history-empty">{{ t('history.empty') }}<br />{{ t('history.emptyHint') }}</p>
                 <div v-for="item in conversations" :key="item.id" class="history-item" :class="{ active: item.id === workspace.conversationId, disabled: chatBusy }" role="button" tabindex="0" :aria-disabled="chatBusy" @click="openConversation(item.id)" @keydown.enter="openConversation(item.id)">
-                  <div class="history-item-main"><strong>{{ item.title }}</strong><small>{{ item.message_count }} 条消息 · {{ chatTime(item.updated_at) }}</small></div>
+                  <div class="history-item-main"><strong>{{ item.title }}</strong><small>{{ t('history.count', { count: item.message_count }) }} · {{ chatTime(item.updated_at) }}</small></div>
                   <el-dropdown class="history-export-menu" trigger="click" @command="(format: string) => exportConversation(item, format)" @click.stop>
-                    <el-button class="history-export" text :icon="Download" :disabled="chatBusy" :aria-label="`导出对话：${item.title}`" />
+                    <el-button class="history-export" text :icon="Download" :disabled="chatBusy" :aria-label="t('history.export', { title: item.title })" />
                     <template #dropdown>
                       <el-dropdown-menu>
-                        <el-dropdown-item command="md">导出 Markdown</el-dropdown-item>
-                        <el-dropdown-item command="json">导出 JSON</el-dropdown-item>
+                        <el-dropdown-item command="md">{{ t('history.exportMarkdown') }}</el-dropdown-item>
+                        <el-dropdown-item command="json">{{ t('history.exportJson') }}</el-dropdown-item>
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
-                  <el-button class="history-delete" text type="danger" :icon="Delete" :disabled="chatBusy" :aria-label="`删除对话：${item.title}`" @click.stop="deleteConversation(item)" />
+                  <el-button class="history-delete" text type="danger" :icon="Delete" :disabled="chatBusy" :aria-label="t('history.delete', { title: item.title })" @click.stop="deleteConversation(item)" />
                 </div>
               </div>
             </aside>
             <div class="chat-column">
           <div class="conversation" aria-live="polite">
-            <el-alert v-if="historyError" :title="historyError" type="error" show-icon :closable="false"><el-button text @click="restoreConversation">重试恢复</el-button></el-alert>
-            <el-alert v-if="localChatProblem" :title="localChatProblem" type="warning" show-icon :closable="false"><el-button text @click="selectView('settings')">模型设置</el-button></el-alert>
-            <div v-if="!workspace.ready || historyBusy" class="history-loading">正在恢复对话…</div>
+            <el-alert v-if="historyError" :title="historyError" type="error" show-icon :closable="false"><el-button text @click="restoreConversation">{{ t('chat.retry') }}</el-button></el-alert>
+            <el-alert v-if="localChatProblem" :title="localChatProblem" type="warning" show-icon :closable="false"><el-button text @click="selectView('settings')">{{ t('chat.modelSettings') }}</el-button></el-alert>
+            <div v-if="!workspace.ready || historyBusy" class="history-loading">{{ t('chat.restoring') }}</div>
             <div v-if="workspace.ready && messages.length === 0 && !historyBusy && !historyError" class="chat-empty">
               <div class="empty-symbol"><img :src="mensLogo" alt="Mens" /></div>
-              <h2>今天需要办理什么？</h2>
+              <h2>{{ t('chat.title') }}</h2>
               <div class="suggestions"><button v-for="suggestion in chatSuggestions" :key="suggestion" @click="sendChat(suggestion)">{{ suggestion }}<el-icon><ArrowRight /></el-icon></button></div>
             </div>
             <div v-for="(message, index) in messages" :key="index" class="message-row" :class="message.role">
               <div class="message-avatar"><template v-if="message.role === 'user'">我</template><img v-else :src="mensLogo" alt="" /></div>
               <div class="message-body"><div class="message-author">{{ message.role === 'user' ? '你' : 'Mens' }}<span v-if="message.demo" class="inline-demo">演示回答</span><span v-if="message.error" class="inline-demo">请求失败</span><span v-if="message.stopped" class="inline-demo">已停止</span></div><div class="message-text">{{ message.text }}<span v-if="message.streaming && message.text" class="stream-caret" /></div><p v-if="message.note" class="message-note">{{ message.note }}</p>
                 <div v-if="message.tools?.length" class="tool-note"><el-icon><Connection /></el-icon> 已调用 {{ message.tools.join('、') }}</div>
-                <div v-if="message.sources?.length" class="source-list"><div class="source-label">{{ message.sources.some(source => source.kind === 'web') ? '参考来源（含联网检索）' : '参考来源' }}</div><div v-for="(source, sourceIndex) in message.sources" :key="sourceIndex" class="source-item"><el-icon><Link v-if="source.kind === 'web'" /><Document v-else /></el-icon><div><strong>{{ source.title || source.source }}</strong><small v-if="source.snippet">{{ source.snippet }}</small><small v-if="source.url" class="source-url"><a v-if="!desktop" :href="source.url" target="_blank" rel="noopener noreferrer">{{ sourceHost(source.url) }} ↗</a><button v-else type="button" class="link-button" @click="openSourceUrl(source.url)">{{ sourceHost(source.url) }} ↗</button></small></div></div></div>
+                <div v-if="message.sources?.length" class="source-list"><div class="source-label">{{ message.sources.some(source => source.kind === 'web') ? t('chat.sourceLabelWeb') : t('chat.sourceLabel') }}</div><div v-for="(source, sourceIndex) in message.sources" :key="sourceIndex" class="source-item"><el-icon><Link v-if="source.kind === 'web'" /><Document v-else /></el-icon><div><strong>{{ source.title || source.source }}</strong><small v-if="source.snippet">{{ source.snippet }}</small><small v-if="source.url" class="source-url"><a v-if="!desktop" :href="source.url" target="_blank" rel="noopener noreferrer">{{ sourceHost(source.url) }} ↗</a><button v-else type="button" class="link-button" @click="openSourceUrl(source.url)">{{ sourceHost(source.url) }} ↗</button></small></div></div></div>
               </div>
             </div>
             <div v-if="chatBusy && !streamingMessage?.text" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
             <div ref="chatEnd" />
           </div>
-          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" placeholder="输入问题..." aria-label="输入问题" @keydown="onChatKeydown" /><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>联网搜索</span></label></el-tooltip><span>回答仅供参考，请核对学校正式通知</span><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">停止生成</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">发送</el-button></div></div></div>
+          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" :placeholder="t('chat.placeholder')" :aria-label="t('chat.placeholder')" @keydown="onChatKeydown" /><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>{{ t('chat.webToggle') }}</span></label></el-tooltip><span>{{ t('chat.disclaimer') }}</span><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">{{ t('chat.stop') }}</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">{{ t('chat.send') }}</el-button></div></div></div>
             </div>
           </div>
         </section>
@@ -1201,7 +1204,7 @@ onUnmounted(() => {
           <div v-if="!desktop" class="settings-section"><div class="settings-copy"><h2>管理员令牌</h2><p>用于文档与插件管理，仅保存在当前浏览器会话。</p></div><el-input :model-value="adminToken" type="password" show-password placeholder="输入后端 ADMIN_TOKEN" style="max-width: 280px" @update:model-value="saveAdminToken(String($event))" /></div>
           <div class="settings-section"><div class="settings-copy"><h2>联网搜索</h2><p>开启后聊天窗口可逐条选择是否联网检索，回答会引用网页链接。默认使用免密钥的 Bing 网页搜索（中国大陆可直连），也可配置 Tavily 或博查 API Key。<template v-if="webStatus"> 当前生效：{{ webStatus.providers.find(item => item.id === webStatus?.provider)?.label || webStatus.provider }}<template v-if="webStatus.available">（{{ webStatus.resolved_provider }}）</template><template v-else>（缺少 API Key）</template>。</template></p><p v-if="webSaved" class="backup-info" aria-live="polite">{{ webSaved }}</p><el-alert v-if="webError" class="alert" :title="webError" type="warning" show-icon :closable="false" /></div><div class="web-form"><div class="web-form-row"><label class="field field-inline"><el-switch v-model="webForm.enabled" /><span>启用联网搜索</span></label><label class="field"><span>搜索服务</span><el-select v-model="webForm.provider"><el-option v-for="item in webStatus?.providers || []" :key="item.id" :value="item.id" :label="item.label" /></el-select></label></div><div class="web-form-row"><label class="field"><span>API Key</span><el-input v-model="webForm.apiKey" type="password" autocomplete="off" placeholder="Bing 免密钥；Tavily/博查需填写" /></label><label class="field field-narrow"><span>返回结果数</span><el-input-number v-model="webForm.maxResults" :min="1" :max="webStatus?.max_results_limit || 8" :precision="0" /></label><label class="field field-narrow"><span>读取网页数</span><el-input-number v-model="webForm.fetchPages" :min="0" :max="webStatus?.max_fetch_pages || 3" :precision="0" /></label></div></div><div class="backup-actions"><el-button type="primary" :loading="webSaving" @click="saveWebConfig">保存联网设置</el-button></div></div>
           <div class="settings-section"><div class="settings-copy"><h2>版本与更新</h2><p>当前版本 {{ desktop ? (desktopInfo?.version ? `v${desktopInfo.version}` : '读取中…') : `v${frontendVersion}` }}。<template v-if="updateInfo"> {{ updateInfo }}</template><template v-else>更新清单地址由管理员在 .env（UPDATE_MANIFEST_URL）中配置，未配置时不联网检查。</template></p><el-alert v-if="updateError" class="alert" :title="updateError" type="warning" show-icon :closable="false" /></div><div class="backup-actions"><el-button :icon="Refresh" :loading="updateBusy" @click="checkUpdates">检查更新</el-button><el-button v-if="updateUrl" type="primary" :icon="Download" @click="openUpdateUrl">打开下载页</el-button></div></div>
-          <div class="settings-section"><div class="settings-copy"><h2>服务状态</h2><p>{{ healthLabel }}<template v-if="health"> · {{ health.rag_degraded ? '向量检索故障，已降级关键词检索' : health.rag_enabled ? '向量检索已启用' : '本地关键词检索' }} · {{ health.demo_services ? '校务服务为演示数据' : '已配置部分校务接口' }}</template></p></div><el-button :icon="Refresh" :loading="healthBusy" @click="loadHealth">刷新状态</el-button></div>
+          <div class="settings-section"><div class="settings-copy"><h2>服务状态</h2><p>{{ healthLabel }}<template v-if="health"> · {{ health.rag_degraded ? t('chat.retrieval.degraded') : health.rag_enabled ? t('chat.retrieval.vector') : t('chat.retrieval.keyword') }} · {{ health.demo_services ? '校务服务为演示数据' : '已配置部分校务接口' }}</template></p></div><el-button :icon="Refresh" :loading="healthBusy" @click="loadHealth">刷新状态</el-button></div>
           <el-alert v-if="healthError" :title="healthError" type="error" show-icon :closable="false" />
         </section>
       </main>

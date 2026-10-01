@@ -2,6 +2,13 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 功能批次：界面三语与离线外壳版本注入（2026-10-01）
+
+- **前端 17 passed（+4）**：新增 `frontend/tests/i18n.test.ts` 校验三语字典键完全一致、无空值、参数插值、缺失键回退（先中文后键名）以及选择持久化与 `document.lang`。
+- 真实浏览器（Edge，dev 栈）：设置 → 外观 → 语言依次切换 English / 日本語，侧栏显示 `Chat / Campus services / Knowledge base / Plugins / Settings`、顶栏 `Backend connected`、问答页 `Chat` 与 `What can I help you with today?`、输入框占位符 `Type a question…`；日语下侧栏为 `質問応答 / 学内サービス / ナレッジベース / プラグイン / 設定`；刷新后语言保持（localStorage `ja`，`html lang=ja`），零页面错误。
+- 离线外壳：`npm run build` 后 `dist/sw.js` 的缓存名为 `mens-shell-1.2.0`（构建时从 package.json 注入），占位符无残留；把占位符改掉后构建以非零退出（负向检查）。
+- 覆盖范围：应用外壳、问答页与外观设置为三语；服务、知识库、插件、设置内的其余面板仍为中文，属下一批工作。
+
 ## 功能批次：会话导出、网页导入、批量上传与工程化（2026-10-01）
 
 - **后端 266 passed（+6）、前端 13 passed 且 `vue-tsc`/Vite 构建干净、桌面外壳 9 passed（+1）**。

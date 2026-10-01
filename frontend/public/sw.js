@@ -3,7 +3,7 @@
  * Only same-origin GET requests are cached; API traffic always goes to the network so the
  * question-answering flow can never be served from a stale cache. The desktop app never
  * registers this worker (main.ts skips it when the Electron bridge is present). */
-const CACHE = 'mens-shell-v1'
+const CACHE = 'mens-shell-__MENS_VERSION__'
 const SHELL = ['./', './index.html', './favicon.png', './icon-192.png', './icon-512.png', './manifest.webmanifest']
 
 self.addEventListener('install', event => {
