@@ -2,6 +2,18 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 软件批次：聊天首页 3D 场景与排版令牌（2026-10-02）
+
+- **测试**：前端 `npm test` **22 passed**（新增 5 条场景工具测试：像素比上限、阻尼、拖拽角度限幅、
+  缩放限幅、能力探测）；构建通过，主包 105.47 kB（three 单独成块 746.95 kB，按需加载）；
+  后端 266、桌面 9 不受影响。
+- **浏览器验收**（dev 栈，Edge + Playwright）：空状态 `data-scene="ready"`；双栏 `429px 395px`；
+  建议卡片序号 `01 / 02 / 03`；拖拽后 `data-rotation` 由 `0.18,-0.24` 变为 `0.97,0.16`；
+  切深色后 `document.documentElement.dataset.theme === "dark"` 且场景换色；
+  **模拟 `prefers-reduced-motion: reduce` 时场景状态为 `static`**（静态回退生效）；
+  零 console 错误，且此前 three.js 的 `Clock` 弃用告警已消除（改用 `performance.now()`）。
+- **未验证**：Windows 安装包尚未重建（本批未发版）；macOS/Linux 未真机运行。
+
 ## 网站批次：3D hero、主题切换与排版升级（2026-10-02）
 
 - **本地静态服务验收**（`python -m http.server` 于 127.0.0.1:8899 提供 `docs/`，Edge + Playwright）：
