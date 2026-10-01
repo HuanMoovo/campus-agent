@@ -12,7 +12,7 @@
   </p>
 </div>
 
-[项目介绍页](https://HuanMoovo.github.io/campus-agent/) · [平台支持与构建](PLATFORMS.md) · [桌面版说明](DESKTOP.md) · [验证记录](VERIFICATION.md) · [下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest) · [开源协议](LICENSE) · [第三方组件](THIRD-PARTY-NOTICES.md)
+[项目介绍页](https://HuanMoovo.github.io/campus-agent/)（中文 / English / 日本語） · [平台支持与构建](PLATFORMS.md) · [桌面版说明](DESKTOP.md) · [验证记录](VERIFICATION.md) · [下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest) · [开源协议](LICENSE) · [第三方组件](THIRD-PARTY-NOTICES.md)
 
 **Windows 桌面版 Mens 1.2.0。** Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe` 已重新构建、升级安装并逐项验收；macOS（Intel/Apple silicon）与 Linux（AppImage/deb）的产物由 GitHub Actions 构建，尚未真机验收；Android/iOS 使用可安装网页版（PWA）。平台矩阵、构建方式与限制见 [平台支持说明](PLATFORMS.md)，实际结果和验收范围见 [验证记录](VERIFICATION.md)。以下保留网页开发/服务器部署的使用说明。
 
