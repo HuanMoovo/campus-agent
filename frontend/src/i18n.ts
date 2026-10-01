@@ -65,9 +65,6 @@ const zh = {
   'chat.refreshLocal': '刷新本地模型',
   'chat.sourceLabel': '参考来源',
   'chat.sourceLabelWeb': '参考来源（含联网检索）',
-  'chat.hero.lead': '一个基于本地知识库的校园办事助手：资料、会话与检索都在本机完成。',
-  'chat.hero.hint': '拖动旋转 · 滚轮缩放',
-  'chat.suggestions.title': '试试这样问',
   'chat.webUnavailableHint': '联网搜索当前不可用，请让管理员在设置中启用。',
   'chat.demo': '演示数据',
 
@@ -163,9 +160,6 @@ const en: Record<keyof typeof zh, string> = {
   'chat.refreshLocal': 'Refresh local models',
   'chat.sourceLabel': 'Sources',
   'chat.sourceLabelWeb': 'Sources (including web search)',
-  'chat.hero.lead': 'A campus assistant grounded in your local knowledge base: documents, conversations and retrieval all stay on this machine.',
-  'chat.hero.hint': 'Drag to rotate · scroll to zoom',
-  'chat.suggestions.title': 'Try asking',
   'chat.webUnavailableHint': 'Web search is unavailable right now; ask an administrator to enable it in Settings.',
   'chat.demo': 'Demo data',
 
@@ -261,9 +255,6 @@ const ja: Record<keyof typeof zh, string> = {
   'chat.refreshLocal': 'ローカルモデルを更新',
   'chat.sourceLabel': '参照元',
   'chat.sourceLabelWeb': '参照元（ウェブ検索を含む）',
-  'chat.hero.lead': 'ローカルのナレッジベースに基づくキャンパスアシスタント。資料・会話・検索はすべてこの端末で完結します。',
-  'chat.hero.hint': 'ドラッグで回転・スクロールでズーム',
-  'chat.suggestions.title': 'こんな質問はいかがですか',
   'chat.webUnavailableHint': '現在ウェブ検索を利用できません。管理者が設定で有効にしてください。',
   'chat.demo': 'デモデータ',
 
