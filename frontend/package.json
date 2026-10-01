@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite --configLoader runner --host 127.0.0.1",
     "build": "vue-tsc --noEmit && vite build --configLoader runner",
+    "test": "vitest run",
     "preview": "vite preview --configLoader runner --host 127.0.0.1"
   },
   "dependencies": {
@@ -17,8 +18,10 @@
   "devDependencies": {
     "@types/node": "^22.13.10",
     "@vitejs/plugin-vue": "^5.2.3",
+    "happy-dom": "^20.14.5",
     "typescript": "^5.8.3",
     "vite": "^6.2.5",
+    "vitest": "^5.0.3",
     "vue-tsc": "^2.2.8"
   }
 }

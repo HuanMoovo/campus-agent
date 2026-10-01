@@ -37,6 +37,16 @@
 - 未验证：安装包内的窗口记忆与日志查看（需重建安装包后人工确认；Electron 侧已由 vm 单元测试覆盖）。
 - 脚本与截图：`.tmp/qa-batch3/`（ui_check3.py、check_repairs.py、界面截图）。
 
+## 开发副本第四批改进验证（未发布，2026-10-01）
+
+新增前端单元测试与构建分包，安装包仍未重新构建。
+
+- 改动范围：`frontend/tests/`（SSE 帧解析、外观推导、工作区存储与 client_id 校验，共 12 项，`npm test`）；`frontend/vitest.config.ts`；`vite.config.ts` 手动分包（vendor-vue / vendor-element）并调整体积阈值；`scripts/build_desktop.py` 在编译前增加 `npm test` 门禁。
+- 前端测试：12 passed（vitest + happy-dom）。
+- 构建产物：主包 1,105 kB → 71 kB，vendor-vue 86 kB，vendor-element 947 kB，构建警告消失。
+- 浏览器验证（Playwright + 本机 Edge 加载分包后的构建）：控制台无错误、无 4xx/5xx 请求；聊天页模型选择器、设置页「备份与恢复」、校园服务页均正常渲染。
+- 未验证：重建安装包后的整体验收。
+
 ## 1.0 已完成检查
 
 - 桌面与前端 package.json、两份 package-lock.json、FastAPI 版本均为 1.0.0。

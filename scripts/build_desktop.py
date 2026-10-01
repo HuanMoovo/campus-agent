@@ -47,6 +47,7 @@ def main():
     run([python, '-c', 'import PyInstaller; from langgraph.graph import StateGraph; print("Packaging dependencies verified")'], backend)
     run([python, '-m', 'pytest', '-q'], backend)
     run([sys.executable, ROOT/'scripts'/'create_icon.py'])
+    run([npm, 'test'], frontend)
     run([npm, 'run', 'build'], frontend)
     run([npm, 'test'], desktop)
     run([node, '--test', 'tests/backend.integration.cjs'], desktop)
