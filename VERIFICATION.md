@@ -4,7 +4,9 @@
 
 ## Mens 1.2.0：跨平台构建、联网搜索与可安装网页版（2026-10-01）
 
-Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe`（126,396,099 字节，SHA-256 `bdd5b80c7d58e913f2e7e9c650d4e07744c5e42ebefe555b7eac7264065a9de5`）由跨平台构建脚本 `scripts/build_desktop.py` 完整重建；macOS 与 Linux 产物由 CI 构建（见下）。
+Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe`（126,409,143 字节，SHA-256 `c45d37e38d898e73068170d7aa9567d2c7d5ccc7f8316172d90861f926298303`）由跨平台构建脚本 `scripts/build_desktop.py` 完整重建；macOS 与 Linux 产物由 CI 构建（见下）。
+
+- 许可证：项目以 **AGPL-3.0** 发布（仓库根目录 `LICENSE`，另见 `THIRD-PARTY-NOTICES.md` 的第三方组件清单）。安装包通过 electron-builder 的 `extraResources` 把 `LICENSE` 与 `THIRD-PARTY-NOTICES.md` 放进 `resources/`，安装后可在 `%LOCALAPPDATA%\Programs\Mens\resources\` 核对（本机已确认两者分别存在，35,996 与 2,367 字节）。
 
 - 跨平台构建：单一脚本支持 `--os win|mac|linux` 与 `--arch x64|arm64`；因为 PyInstaller 无法交叉编译，指定非当前平台会被明确拒绝；虚拟环境解释器（`Scripts/python.exe` 与 `bin/python`）、npm 命令、图标与打包目标均按平台选择；macOS 构建自动设置 `CSC_IDENTITY_AUTO_DISCOVERY=false` 以跳过未配置的签名身份。打包目标：Windows NSIS、macOS dmg+zip、Linux AppImage+deb。
 - 图标：`scripts/create_icon.py` 在装有 Pillow 时跨平台生成，缺失 Pillow 时仅在 Windows 回退到原有 PowerShell 缩放。本机校验生成结果：`.icns` 容器 7 个条目（icp4/5/6、ic07/08/09/10，负载均为有效 PNG），`.ico` 9 档（16–256），PWA 图标 192/512/180 尺寸精确。

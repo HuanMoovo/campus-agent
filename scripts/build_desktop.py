@@ -82,7 +82,7 @@ def main():
         python = venv_python(backend)
     if not args.skip_install:
         run([python, '-m', 'pip', 'install', '-r', 'requirements-desktop.txt', '--no-cache-dir', '--disable-pip-version-check'], backend)
-        run([python, '-m', 'pip', 'install', '-r', 'requirements-build.txt', '--no-cache-dir', '--disable-pip-version-check'], backend)
+        run([python, '-m', 'pip', 'install', '-r', str(ROOT / 'requirements-build.txt'), '--no-cache-dir', '--disable-pip-version-check'], backend)
         if args.full_rag:
             run([python, '-m', 'pip', 'install', '-r', 'requirements-ai.txt', '--no-cache-dir', '--disable-pip-version-check'], backend)
         for directory in (frontend, desktop):

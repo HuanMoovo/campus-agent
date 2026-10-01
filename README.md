@@ -1,12 +1,27 @@
 # Mens 校园助手
 
-[项目介绍页](https://HuanMoovo.github.io/campus-agent/) · [平台支持与构建](PLATFORMS.md) · [桌面版说明](DESKTOP.md) · [验证记录](VERIFICATION.md) · [下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest)
+<div align="center">
+  <img src="docs/img/logo.png" alt="Mens" width="104" height="104" />
+  <p><b>本地优先的校园问答工作台</b> · Electron + Vue 3 + FastAPI</p>
+  <p>
+    <a href="https://github.com/HuanMoovo/campus-agent/releases/latest">下载 Windows 安装包</a> ·
+    <a href="https://HuanMoovo.github.io/campus-agent/">项目介绍页</a> ·
+    <a href="PLATFORMS.md">平台支持</a> ·
+    <a href="VERIFICATION.md">验证记录</a> ·
+    <a href="LICENSE">AGPL-3.0</a>
+  </p>
+</div>
+
+[项目介绍页](https://HuanMoovo.github.io/campus-agent/) · [平台支持与构建](PLATFORMS.md) · [桌面版说明](DESKTOP.md) · [验证记录](VERIFICATION.md) · [下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest) · [开源协议](LICENSE) · [第三方组件](THIRD-PARTY-NOTICES.md)
 
 **Windows 桌面版 Mens 1.2.0。** Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe` 已重新构建、升级安装并逐项验收；macOS（Intel/Apple silicon）与 Linux（AppImage/deb）的产物由 GitHub Actions 构建，尚未真机验收；Android/iOS 使用可安装网页版（PWA）。平台矩阵、构建方式与限制见 [平台支持说明](PLATFORMS.md)，实际结果和验收范围见 [验证记录](VERIFICATION.md)。以下保留网页开发/服务器部署的使用说明。
 
 1.0 基于 0.4.1 验证版本，包含圆角透明 Logo、可定制外观、校园服务和数据接口、可选择的插件，以及聊天窗口中的本地 Ollama 模型切换。0.4.x 已验证模型不可用时会明确报错，不会自动转发给云端；模型权重需在本机单独下载。**1.1.0 统一了 Mens 桌面应用、网页、安装包配置和 API 的版本号，并包含 1.0.0 之后加入的流式回答（可停止生成）、按浏览器/桌面配置隔离的历史对话、Word (.docx) 知识库上传、模型下载断点续传、数据备份导出/导入、本机报修记录、窗口位置记忆、后端日志查看、前端单元测试与构建分包、可选的更新检查；安装包已重新构建并完成安装验收。** **1.2.0 进一步加入可选的联网搜索（Bing 免密钥 / Tavily / 博查，逐条消息开关，回答引用网页链接）、跨平台构建（Windows NSIS、macOS dmg/zip、Linux AppImage/deb，同一脚本与 CI 矩阵）、可安装网页版（PWA：清单、离线外壳、iOS 安全区）以及 Windows 之外的凭据存储与图标处理。** 校园统一登录仍未实现。
 
 校园政策与办事流程问答、知识库管理、有限工具调用、校园服务和外部插件管理。前端采用 Vue 3 + TypeScript + Vite + Element Plus + Pinia；后端采用 FastAPI + SQLAlchemy + LangGraph，支持 Qwen3 / DeepSeek、BGE-M3 + Chroma 和 PostgreSQL。
+
+**1.2.0 的许可证为 GNU Affero General Public License v3.0**（`LICENSE`）：可以自由使用、修改与分发，包括用于校园内部部署；但如果你修改后把服务通过网络提供给别人使用，必须以同样的许可证公开你的修改版本。安装包内还包含 Electron、CPython、FastAPI 等第三方组件，各自的许可证见 `THIRD-PARTY-NOTICES.md`。
+
 
 **1.0 可配置发布版（现为 1.1.0）。** 设置页可配置模型 API Key、Ollama 开源模型下载和九类校园 HTTPS JSON 数据接口。未配置的校园类型使用明确标识的演示数据；软件不附带真实学校接口、统一身份认证或模型密钥，校园生产部署仍需学校提供已授权的接口并验收。接入格式见 [校园接口说明](CAMPUS-DATA.md)，验证范围见 [验证记录](VERIFICATION.md)。
 
