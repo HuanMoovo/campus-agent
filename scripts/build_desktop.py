@@ -104,8 +104,11 @@ def main():
         # Unsigned local/CI builds must not fail while looking for a signing identity.
         builder_env.setdefault('CSC_IDENTITY_AUTO_DISCOVERY', 'false')
     targets = [] if args.directory else DIST_TARGETS[target_os].split()
+    # The release workflow attaches the artefacts itself, and electron-builder would otherwise
+    # start publishing them on its own the moment a matching tag exists (it then aborts with
+    # "GitHub Personal Access Token is not set"), so publishing stays explicitly off.
     run([npm, 'run', 'pack' if args.directory else 'dist', '--',
-         f'--{target_os}', *targets, f'--{arch}'], desktop, builder_env)
+         f'--{target_os}', *targets, f'--{arch}', '--publish', 'never'], desktop, builder_env)
     print(f'Build completed. Output: {ROOT / "release"}')
     print('The installed program includes Python and launches its local backend automatically.')
 
