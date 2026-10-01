@@ -69,6 +69,8 @@
   .brand img { width: 54px; height: 54px; border-radius: 13px; box-shadow: 0 10px 30px var(--glow); }
   .brand strong { font-size: 19px; letter-spacing: .3px; }
   .brand small { display: block; color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: .12em; }
+  .name-note { color: var(--muted); font-size: 13px; margin: 14px auto 0; max-width: 62ch; }
+  .name-note i { color: var(--ink); font-style: italic; }
   h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.25; margin: 26px auto 12px; letter-spacing: -.01em; }
   h1 span { color: var(--accent); }
   .lead { font-size: 17px; color: var(--muted); max-width: 66ch; margin: 0 auto 22px; }
@@ -144,6 +146,7 @@
       <img src="./img/logo.png" alt="Mens" />
       <span><strong data-i18n="brand.name">Mens 校园助手</strong><small data-i18n="brand.tagline">MENS CAMPUS ASSISTANT</small></span>
     </div>
+    <p class="name-note" data-i18n="hero.nameNote">名字取自拉丁语 <i>mēns</i>（属格 <i>mentis</i>），意为「心智、理性、思维」，与英文单词 men 无关。</p>
     <h1 data-i18n="hero.title">把校园政策问答、<span>知识库与办事服务</span>放进一个本地优先的桌面应用</h1>
     <p class="lead" data-i18n="hero.lead">
       Mens 是一个面向院校场景的问答工作台：知识库文档（PDF / Markdown / TXT / Word）在本机检索，
@@ -390,6 +393,7 @@ start-frontend.cmd</code></pre>
       'page.description': 'Mens Campus Assistant: a Windows/macOS/Linux desktop app and installable web app for campus policy Q&A, a local knowledge base, campus services and optional web search. Status, limitations and verification records are stated as they are.',
       'brand.name': 'Mens Campus Assistant',
       'brand.tagline': 'MENS CAMPUS ASSISTANT',
+      'hero.nameNote': 'The name is Latin <i>mēns</i> (genitive <i>mentis</i>): mind, intellect, reason — not the English word <i>men</i>.',
       'hero.title': 'Campus policy answers, <span>a local knowledge base and student services</span> in one local-first desktop app',
       'hero.lead': 'Mens is a question-answering workbench for schools: knowledge-base documents (PDF / Markdown / TXT / Word) are searched on your own machine, campus services (grades, timetable, credits, free classrooms, repair requests) connect through configurable HTTPS endpoints, and chat supports streaming answers, stopping generation, per-user conversation isolation and optional web search that cites the pages it used. Documents, data and keys stay local, and models run either through the Qwen3 / DeepSeek APIs or locally with Ollama.',
       'badge.version': 'Version 1.2.0',
@@ -489,6 +493,7 @@ start-frontend.cmd</code></pre>
       'page.description': 'Mens キャンパスアシスタント：Windows/macOS/Linux のデスクトップアプリとインストール可能なウェブ版。学内規定の質問応答、ローカルのナレッジベース、学内サービス、任意のウェブ検索を提供します。状態・制限・検証記録は事実のまま記載しています。',
       'brand.name': 'Mens キャンパスアシスタント',
       'brand.tagline': 'MENS CAMPUS ASSISTANT',
+      'hero.nameNote': '名前はラテン語の <i>mēns</i>（属格 <i>mentis</i>）で、心・理性・思考を意味します。英語の <i>men</i> とは関係ありません。',
       'hero.title': '学内規定の質問応答も、<span>ナレッジベースも事務手続きも</span>、ローカル優先のデスクトップアプリに',
       'hero.lead': 'Mens は学校現場向けの質問応答ワークベンチです。ナレッジベースの文書（PDF / Markdown / TXT / Word）は端末内で検索し、学内サービス（成績・時間割・単位数・空き教室・修理申請）は設定可能な HTTPS エンドポイント経由で接続します。チャットはストリーミング回答、生成の停止、履歴の分離に対応し、必要に応じてウェブ検索を有効にして参照元を引用できます。文書・データ・鍵はすべて端末内に留まり、モデルは Qwen3 / DeepSeek の API でも、Ollama によるローカル実行でも構いません。',
       'badge.version': 'バージョン 1.2.0',

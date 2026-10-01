@@ -32,6 +32,14 @@ trying the idea out, evaluating it and building on it; deploying it as a campus 
 system still needs single sign-on, auditing and data-compliance work (see
 [Known limitations](#known-limitations)).
 
+### About the name
+
+**Mens is Latin, not English.** The Latin *mēns* (genitive *mentis*) means **mind, intellect,
+reason** — it is where English gets *mental*, and *dementia* literally means "away from the mind".
+It has nothing to do with the English word *men* (the plural of *man*), and the project carries no
+gender connotation: the name stands for "a tool that helps you think", which is what this campus
+assistant is meant to be.
+
 - **Local first** — knowledge base, conversations, configuration and keys live on your machine (SQLite + a user data directory); no external database is required and Q&A works without any network access.
 - **Stated as it is** — campus endpoints that are not configured return clearly labelled demo data, and when no model is available the app falls back to quoting knowledge-base passages instead of inventing an answer.
 - **Optional web search** — off by default; an administrator enables it in Settings (keyless Bing, or Tavily / Bocha) and it can be toggled per message. Answers cite source links and the search time.
