@@ -4,6 +4,7 @@ export type AppearanceMode = 'light' | 'dark' | 'system'
 export interface DesktopWorkspace {
   model: WorkspaceModel
   conversationId: string
+  clientId: string
   localModel: string
   appearance: AppearanceMode
   accentColor: string

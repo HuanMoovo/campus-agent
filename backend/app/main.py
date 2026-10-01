@@ -1,20 +1,24 @@
 from contextlib import asynccontextmanager
+import json
 import secrets
 import logging
+from datetime import timezone
 from io import BytesIO
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select
+from fastapi.responses import StreamingResponse
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from starlette.concurrency import run_in_threadpool
 
-from .agent import run_agent
+from .agent import prepare_stream_state, run_agent, stream_model
 from . import campus_data
 from .config import get_settings
 from .desktop_runtime import desktop_enabled, install_desktop_routes
-from .db import Base, SessionLocal, engine, get_db
+from .db import Base, SessionLocal, engine, ensure_conversation_client_id, get_db
 from .models import Conversation, Document, Message, Plugin
 from .model_runtime import configuration as model_configuration, update_provider, test_provider, local_models, start_download, get_download, cancel_download, resolve_local_model, LocalModelError
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
@@ -30,6 +34,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    ensure_conversation_client_id()
     with SessionLocal() as db:
         seed_demo_documents(db)
     yield
@@ -70,6 +75,34 @@ def plugin_json(plugin: Plugin) -> dict:
     return {"id": plugin.id, "name": plugin.name, "description": plugin.description, "url": plugin.url, "parameters": plugin.parameters, "enabled": plugin.enabled}
 
 
+def sse_event(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def iso_utc(value) -> str:
+    if value is None:
+        return ""
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
+
+
+def persist_stream_exchange(conversation_id: str, question: str, text: str, final: dict | None, error: str,
+                            streamed_from_model: bool = False) -> None:
+    """Best-effort persistence for streamed answers; stopped or failed streams must not crash cleanup."""
+    try:
+        with SessionLocal() as db:
+            rows = [Message(conversation_id=conversation_id, role="user", content=question)]
+            if text.strip():
+                data = {"sources": (final or {}).get("sources", []), "tool_calls": (final or {}).get("tool_calls", [])}
+                data["mode"] = final.get("mode", "demo") if final is not None else ("llm" if streamed_from_model else "demo")
+                if final is None or error:
+                    data["partial"] = True
+                rows.append(Message(conversation_id=conversation_id, role="assistant", content=text, result_data=data))
+            db.add_all(rows)
+            db.commit()
+    except Exception:
+        logger.warning("Failed to persist streamed exchange for conversation %s", conversation_id, exc_info=True)
+
+
 @app.get("/api/health")
 def health():
     settings = get_settings()
@@ -88,12 +121,15 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
         local_model = resolve_local_model(body.local_model) if model == "ollama" else None
     except LocalModelError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
+    client_id = (body.client_id or "").strip()
     if body.conversation_id:
         conversation = db.get(Conversation, body.conversation_id)
         if conversation is None:
             raise HTTPException(404, "对话不存在")
+        if client_id and not conversation.client_id:
+            conversation.client_id = client_id
     else:
-        conversation = Conversation(id=str(uuid4()))
+        conversation = Conversation(id=str(uuid4()), client_id=client_id)
         db.add(conversation)
         db.flush()
     past = db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(8)).all()
@@ -107,6 +143,123 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
     db.add_all([Message(conversation_id=conversation.id, role="user", content=body.message.strip()), Message(conversation_id=conversation.id, role="assistant", content=result["answer"], result_data=response_data)])
     db.commit()
     return ChatResponse(conversation_id=conversation.id, answer=result["answer"], sources=result.get("sources", []), tool_calls=result.get("tool_calls", []), mode=result.get("mode", "demo"))
+
+
+@app.post("/api/chat/stream")
+async def chat_stream(body: ChatRequest):
+    """Server-sent events: `meta`, repeated `delta`, then `done` (or `error`).
+
+    Stopping the client disconnects the request; whatever was generated is still
+    persisted so history stays honest about what happened.
+    """
+    if body.model not in (None, "auto", "qwen", "deepseek", "ollama"):
+        raise HTTPException(422, "不支持的模型")
+    model = body.model or _selected_model
+    try:
+        local_model = resolve_local_model(body.local_model) if model == "ollama" else None
+    except LocalModelError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from exc
+    question = body.message.strip()
+    client_id = (body.client_id or "").strip()
+    with SessionLocal() as db:
+        if body.conversation_id:
+            conversation = db.get(Conversation, body.conversation_id)
+            if conversation is None:
+                raise HTTPException(404, "对话不存在")
+            if client_id and not conversation.client_id:
+                conversation.client_id = client_id
+            conversation_id = conversation.id
+        else:
+            conversation_id = str(uuid4())
+            db.add(Conversation(id=conversation_id, client_id=client_id))
+        past = db.scalars(select(Message).where(Message.conversation_id == conversation_id).order_by(Message.id.desc()).limit(8)).all()
+        history = [{"role": item.role, "content": item.content} for item in reversed(past)]
+        db.commit()
+
+    async def event_stream():
+        parts: list[str] = []
+        final: dict | None = None
+        error = ""
+        streamed_from_model = False
+        yield sse_event("meta", {"conversation_id": conversation_id})
+        try:
+            with SessionLocal() as db:
+                prepared = await run_in_threadpool(prepare_stream_state, db, question, history, model, local_model)
+                if "direct" in prepared:
+                    final = dict(prepared["direct"])
+                    parts.append(final["answer"])
+                    yield sse_event("delta", {"text": final["answer"]})
+                else:
+                    streamed_from_model = True
+                    try:
+                        async for chunk in stream_model(prepared["messages"], prepared["requested_model"], prepared.get("local_model")):
+                            parts.append(chunk)
+                            yield sse_event("delta", {"text": chunk})
+                    except LocalModelError as exc:
+                        error = str(exc)
+                    if not error:
+                        text = "".join(parts)
+                        if text.strip():
+                            final = {"answer": text, "sources": prepared["sources"], "tool_calls": [], "mode": "llm"}
+                        else:
+                            fallback = prepared["fallback"]
+                            final = {**fallback, "sources": prepared["sources"], "tool_calls": []}
+                            parts.append(fallback["answer"])
+                            yield sse_event("delta", {"text": fallback["answer"]})
+        except Exception:
+            logger.exception("Streamed chat failed for conversation %s", conversation_id)
+            error = error or "生成回答时发生错误，请稍后重试。"
+        finally:
+            persist_stream_exchange(conversation_id, question, "".join(parts), final, error, streamed_from_model)
+        if error:
+            yield sse_event("error", {"message": error, "partial": "".join(parts), "conversation_id": conversation_id})
+        else:
+            yield sse_event("done", {**(final or {"answer": "", "sources": [], "tool_calls": [], "mode": "demo"}),
+                                     "conversation_id": conversation_id})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/conversations")
+def list_conversations(db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64),
+                       limit: int = Query(default=50, ge=1, le=200)):
+    conversations = db.scalars(select(Conversation).where(Conversation.client_id == client_id)).all()
+    items = []
+    for conversation in conversations:
+        rows = db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id)).all()
+        if not rows:
+            continue
+        first_user = next((row for row in rows if row.role == "user" and row.content.strip()), None)
+        items.append({
+            "id": conversation.id,
+            "title": first_user.content.strip().splitlines()[0][:40] if first_user else "新对话",
+            "message_count": len(rows),
+            "updated_at": iso_utc(rows[-1].created_at or conversation.created_at),
+        })
+    items.sort(key=lambda item: item["updated_at"], reverse=True)
+    return items[:limit]
+
+
+@app.delete("/api/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str, db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
+    conversation = db.get(Conversation, conversation_id)
+    if conversation is None or conversation.client_id != client_id:
+        raise HTTPException(404, "对话不存在")
+    db.execute(delete(Message).where(Message.conversation_id == conversation_id))
+    db.delete(conversation)
+    db.commit()
+    return {"deleted": True}
+
+
+@app.delete("/api/conversations")
+def clear_conversations(db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
+    ids = list(db.scalars(select(Conversation.id).where(Conversation.client_id == client_id)).all())
+    if ids:
+        db.execute(delete(Message).where(Message.conversation_id.in_(ids)))
+        db.execute(delete(Conversation).where(Conversation.id.in_(ids)))
+        db.commit()
+    return {"deleted": len(ids)}
 
 
 @app.get("/api/conversations/{conversation_id}")

@@ -12,10 +12,13 @@ function isOwnUrl(url, origin) {
 
 function validateWorkspace(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Invalid workspace settings')
-  if (Object.keys(value).some(key => !['model', 'conversationId', 'localModel', 'appearance', 'accentColor'].includes(key))) throw new TypeError('Unsupported setting')
+  if (Object.keys(value).some(key => !['model', 'conversationId', 'clientId', 'localModel', 'appearance', 'accentColor'].includes(key))) throw new TypeError('Unsupported setting')
   if ('model' in value && !MODELS.has(value.model)) throw new TypeError('Invalid model')
   if ('conversationId' in value && (typeof value.conversationId !== 'string' || !/^[a-zA-Z0-9-]{0,64}$/.test(value.conversationId))) {
     throw new TypeError('Invalid conversation ID')
+  }
+  if ('clientId' in value && (typeof value.clientId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(value.clientId))) {
+    throw new TypeError('Invalid client ID')
   }
   if ('localModel' in value && (typeof value.localModel !== 'string' || value.localModel.length > 128 || /[\x00-\x1f\x7f]/.test(value.localModel))) throw new TypeError('Invalid local model')
   if ('appearance' in value && !['light', 'dark', 'system'].includes(value.appearance)) throw new TypeError('Invalid appearance')

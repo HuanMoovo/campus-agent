@@ -13,6 +13,8 @@ def utcnow() -> datetime:
 class Conversation(Base):
     __tablename__ = "conversations"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # Scopes history listing/deletion to the browser or desktop profile that created it.
+    client_id: Mapped[str] = mapped_column(String(64), default="", server_default="", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

@@ -2,10 +2,10 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowRight, ChatLineRound, Check, Connection, Document, FolderOpened,
+  ArrowRight, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, FolderOpened,
   Grid, Plus, Refresh, Search, Setting, Upload, Download,
 } from '@element-plus/icons-vue'
-import { api, type CampusSource, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type Source } from './api'
+import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type Source } from './api'
 import { useWorkspaceStore, type Model, type View } from './store'
 import { desktop, type DesktopInfo } from './desktop'
 import mensLogo from './assets/mens.png'
@@ -13,7 +13,7 @@ import AppearanceSettings from './components/AppearanceSettings.vue'
 import { applyAppearance } from './appearance'
 import { version as frontendVersion } from '../package.json'
 
-type Message = { role: 'user' | 'assistant'; text: string; sources?: Source[]; tools?: string[]; demo?: boolean; error?: boolean }
+type Message = { role: 'user' | 'assistant'; text: string; sources?: Source[]; tools?: string[]; demo?: boolean; error?: boolean; streaming?: boolean; stopped?: boolean; note?: string }
 type ServiceKey = 'grades' | 'schedule' | 'credits' | 'classrooms' | 'repair' | 'notices' | 'library' | 'dining' | 'shuttle'
 
 const workspace = useWorkspaceStore()
@@ -41,6 +41,15 @@ const healthLabel = computed(() => healthBusy.value ? '检查中' : health.value
 const messages = ref<Message[]>([])
 const prompt = ref('')
 const chatBusy = ref(false)
+const chatAbort = ref<AbortController | null>(null)
+const conversations = ref<ConversationSummary[]>([])
+const conversationsBusy = ref(false)
+const conversationsError = ref('')
+const historyOpen = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 900px)').matches)
+const streamingMessage = computed(() => {
+  const last = messages.value[messages.value.length - 1]
+  return last && last.role === 'assistant' && last.streaming ? last : null
+})
 const chatEnd = ref<HTMLElement | null>(null)
 const chatSuggestions = ['补办校园一卡通需要什么材料？', '查询我的本周课表', '学校的报修流程是什么？']
 
@@ -285,7 +294,7 @@ function selectView(view: View) {
   mobileNavOpen.value = false
   if (view === 'knowledge') void loadDocuments()
   if (view === 'plugins') { void loadPlugins(); void loadCuratedPlugins() }
-  if (view === 'chat') void loadLocalModels()
+  if (view === 'chat') { void loadLocalModels(); void loadConversations() }
   if (view === 'settings') { void loadModelConfig(); void loadLocalModels(); void loadCampusSources() }
 }
 
@@ -295,6 +304,66 @@ function newConversation() {
   workspace.setConversationId('')
   prompt.value = ''
   historyError.value = ''
+}
+
+function chatTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const time = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+  return date.toDateString() === new Date().toDateString() ? time : `${date.getMonth() + 1}/${date.getDate()} ${time}`
+}
+
+async function loadConversations() {
+  if (!workspace.ready) return
+  conversationsBusy.value = true
+  conversationsError.value = ''
+  try {
+    conversations.value = await api.conversations(workspace.clientId)
+  } catch (error) {
+    conversationsError.value = `无法读取历史对话：${friendlyError(error)}`
+  } finally {
+    conversationsBusy.value = false
+  }
+}
+
+async function openConversation(id: string) {
+  if (chatBusy.value || historyBusy.value || id === workspace.conversationId) return
+  workspace.setConversationId(id)
+  messages.value = []
+  historyError.value = ''
+  await restoreConversation()
+}
+
+async function deleteConversation(item: ConversationSummary) {
+  if (chatBusy.value) return
+  try {
+    await ElMessageBox.confirm(`删除“${item.title}”后无法恢复，确定删除？`, '删除历史对话', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    await api.deleteConversation(item.id, workspace.clientId)
+    if (item.id === workspace.conversationId) newConversation()
+    await loadConversations()
+  } catch (error) {
+    ElMessage.error(friendlyError(error))
+  }
+}
+
+async function clearConversations() {
+  if (chatBusy.value || !conversations.value.length) return
+  try {
+    await ElMessageBox.confirm(`将删除全部 ${conversations.value.length} 条历史对话，且无法恢复。确定清空？`, '清空历史对话', { type: 'warning', confirmButtonText: '清空', cancelButtonText: '取消' })
+  } catch { return }
+  try {
+    await api.clearConversations(workspace.clientId)
+    newConversation()
+    await loadConversations()
+  } catch (error) {
+    ElMessage.error(friendlyError(error))
+  }
+}
+
+function stopChat() {
+  chatAbort.value?.abort()
 }
 
 async function loadHealth() {
@@ -311,7 +380,7 @@ async function restoreConversation() {
   historyError.value = ''
   try {
     const result = await api.conversation(workspace.conversationId)
-    messages.value = result.messages.map(message => ({ role: message.role, text: message.content, sources: message.sources, tools: message.tool_calls?.map(call => call.name), demo: message.mode === 'demo' }))
+    messages.value = result.messages.map(message => ({ role: message.role, text: message.content, sources: message.sources, tools: message.tool_calls?.map(call => call.name), demo: message.mode === 'demo', stopped: Boolean(message.partial) }))
     scrollChat()
   } catch (error) { historyError.value = `${friendlyError(error)} 可以重试恢复或开始新对话。` }
   finally { historyBusy.value = false }
@@ -323,21 +392,53 @@ async function sendChat(value = prompt.value) {
   if (localChatProblem.value) { ElMessage.warning(localChatProblem.value); return }
   messages.value.push({ role: 'user', text })
   prompt.value = ''
+  const index = messages.value.push({ role: 'assistant', text: '', streaming: true }) - 1
+  const assistant = messages.value[index]
   chatBusy.value = true
+  const controller = new AbortController()
+  chatAbort.value = controller
   scrollChat()
   try {
-    const answer = await api.chat(text, workspace.conversationId, workspace.model, currentLocalModel.value)
+    const answer = await chatStream(
+      { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId },
+      {
+        onMeta: id => { if (id) workspace.setConversationId(id) },
+        onDelta: chunk => { assistant.text += chunk; scrollChat() },
+      },
+      controller.signal,
+    )
     if (answer.conversation_id) workspace.setConversationId(answer.conversation_id)
-    messages.value.push({
-      role: 'assistant', text: answer.answer, sources: answer.sources || [],
-      tools: answer.tool_calls?.map(call => call.name), demo: answer.mode === 'demo',
-    })
+    if (answer.answer) assistant.text = answer.answer
+    assistant.sources = answer.sources || []
+    assistant.tools = answer.tool_calls?.map(call => call.name)
+    assistant.demo = answer.mode === 'demo'
   } catch (error) {
-    messages.value.push({ role: 'assistant', text: friendlyError(error), error: true })
-    if (!prompt.value.trim()) prompt.value = text
+    if (controller.signal.aborted) {
+      assistant.stopped = true
+      if (!assistant.text.trim()) {
+        assistant.text = '已停止生成。'
+        if (!prompt.value.trim()) prompt.value = text
+      }
+    } else if (error instanceof ChatStreamError) {
+      assistant.error = true
+      assistant.note = error.message
+      if (error.partial) assistant.text = error.partial
+      if (!assistant.text.trim() && !prompt.value.trim()) prompt.value = text
+    } else {
+      const message = friendlyError(error)
+      assistant.error = true
+      if (assistant.text.trim()) assistant.note = message
+      else {
+        assistant.text = message
+        if (!prompt.value.trim()) prompt.value = text
+      }
+    }
   } finally {
+    messages.value[index].streaming = false
     chatBusy.value = false
+    chatAbort.value = null
     scrollChat()
+    void loadConversations()
   }
 }
 
@@ -642,6 +743,7 @@ onMounted(async () => {
   void loadModelConfig()
   void loadLocalModels()
   void restoreConversation()
+  void loadConversations()
   if (workspace.view === 'knowledge') void loadDocuments()
   if (workspace.view === 'plugins') void loadPlugins()
   if (workspace.view === 'plugins') void loadCuratedPlugins()
@@ -686,7 +788,20 @@ onUnmounted(() => {
 
       <main class="main-content" :class="{ 'chat-main': workspace.view === 'chat' }">
         <section v-if="workspace.view === 'chat'" class="chat-view">
-          <div class="page-heading chat-heading"><div><div class="eyebrow">MENS ASSISTANT</div><h1>智能问答</h1></div><div class="chat-actions"><div class="chat-model-picker"><el-select :model-value="chatModel" aria-label="聊天模型" :disabled="!workspace.ready || chatBusy" @update:model-value="selectChatModel" @visible-change="($event: boolean) => { if ($event) loadLocalModels() }"><el-option-group label="云端与自动路由"><el-option value="auto" label="自动路由" /><el-option value="qwen3" label="Qwen3" /><el-option value="deepseek" label="DeepSeek" /></el-option-group><el-option-group label="本地 Ollama"><el-option v-if="workspace.model === 'ollama' && !installedLocalModel" :value="`local:${currentLocalModel}`" :label="currentLocalModel || '本地模型'" disabled /><el-option v-for="item in localModels?.installed || []" :key="item.name" :value="`local:${item.name}`" :label="item.name" :disabled="!localModels?.running" /><el-option v-if="!localModels?.installed.length && workspace.model !== 'ollama'" value="unavailable" :label="localBusy ? '正在检测…' : localModels?.running ? '暂无已安装模型' : 'Ollama 未连接'" disabled /></el-option-group></el-select><el-tooltip content="刷新本地模型"><el-button :icon="Refresh" :loading="localBusy" :disabled="chatBusy" aria-label="刷新本地模型" @click="loadLocalModels" /></el-tooltip></div><el-button :icon="Plus" :disabled="!workspace.ready || chatBusy || historyBusy" @click="newConversation">新对话</el-button></div></div>
+          <div class="page-heading chat-heading"><div><div class="eyebrow">MENS ASSISTANT</div><h1>智能问答</h1></div><div class="chat-actions"><div class="chat-model-picker"><el-select :model-value="chatModel" aria-label="聊天模型" :disabled="!workspace.ready || chatBusy" @update:model-value="selectChatModel" @visible-change="($event: boolean) => { if ($event) loadLocalModels() }"><el-option-group label="云端与自动路由"><el-option value="auto" label="自动路由" /><el-option value="qwen3" label="Qwen3" /><el-option value="deepseek" label="DeepSeek" /></el-option-group><el-option-group label="本地 Ollama"><el-option v-if="workspace.model === 'ollama' && !installedLocalModel" :value="`local:${currentLocalModel}`" :label="currentLocalModel || '本地模型'" disabled /><el-option v-for="item in localModels?.installed || []" :key="item.name" :value="`local:${item.name}`" :label="item.name" :disabled="!localModels?.running" /><el-option v-if="!localModels?.installed.length && workspace.model !== 'ollama'" value="unavailable" :label="localBusy ? '正在检测…' : localModels?.running ? '暂无已安装模型' : 'Ollama 未连接'" disabled /></el-option-group></el-select><el-tooltip content="刷新本地模型"><el-button :icon="Refresh" :loading="localBusy" :disabled="chatBusy" aria-label="刷新本地模型" @click="loadLocalModels" /></el-tooltip></div><el-button :icon="Clock" :type="historyOpen ? 'primary' : 'default'" plain :aria-pressed="historyOpen" @click="historyOpen = !historyOpen">历史记录</el-button><el-button :icon="Plus" :disabled="!workspace.ready || chatBusy || historyBusy" @click="newConversation">新对话</el-button></div></div>
+          <div class="chat-body">
+            <aside v-show="historyOpen" class="history-panel" aria-label="历史对话">
+              <div class="history-head"><strong>历史对话</strong><span class="history-count">{{ conversations.length }}</span><el-button text :icon="Refresh" :loading="conversationsBusy" aria-label="刷新历史对话" @click="loadConversations" /><el-button text :disabled="!conversations.length || chatBusy" @click="clearConversations">清空</el-button></div>
+              <p v-if="conversationsError" class="history-error">{{ conversationsError }}</p>
+              <div class="history-list" v-loading="conversationsBusy">
+                <p v-if="!conversationsBusy && !conversationsError && conversations.length === 0" class="history-empty">暂无历史对话。<br />发送第一条消息后会自动保存。</p>
+                <div v-for="item in conversations" :key="item.id" class="history-item" :class="{ active: item.id === workspace.conversationId, disabled: chatBusy }" role="button" tabindex="0" :aria-disabled="chatBusy" @click="openConversation(item.id)" @keydown.enter="openConversation(item.id)">
+                  <div class="history-item-main"><strong>{{ item.title }}</strong><small>{{ item.message_count }} 条消息 · {{ chatTime(item.updated_at) }}</small></div>
+                  <el-button class="history-delete" text type="danger" :icon="Delete" :disabled="chatBusy" :aria-label="`删除对话：${item.title}`" @click.stop="deleteConversation(item)" />
+                </div>
+              </div>
+            </aside>
+            <div class="chat-column">
           <div class="conversation" aria-live="polite">
             <el-alert v-if="historyError" :title="historyError" type="error" show-icon :closable="false"><el-button text @click="restoreConversation">重试恢复</el-button></el-alert>
             <el-alert v-if="localChatProblem" :title="localChatProblem" type="warning" show-icon :closable="false"><el-button text @click="selectView('settings')">模型设置</el-button></el-alert>
@@ -698,15 +813,17 @@ onUnmounted(() => {
             </div>
             <div v-for="(message, index) in messages" :key="index" class="message-row" :class="message.role">
               <div class="message-avatar"><template v-if="message.role === 'user'">我</template><img v-else :src="mensLogo" alt="" /></div>
-              <div class="message-body"><div class="message-author">{{ message.role === 'user' ? '你' : 'Mens' }}<span v-if="message.demo" class="inline-demo">演示回答</span><span v-if="message.error" class="inline-demo">请求失败</span></div><div class="message-text">{{ message.text }}</div>
+              <div class="message-body"><div class="message-author">{{ message.role === 'user' ? '你' : 'Mens' }}<span v-if="message.demo" class="inline-demo">演示回答</span><span v-if="message.error" class="inline-demo">请求失败</span><span v-if="message.stopped" class="inline-demo">已停止</span></div><div class="message-text">{{ message.text }}<span v-if="message.streaming && message.text" class="stream-caret" /></div><p v-if="message.note" class="message-note">{{ message.note }}</p>
                 <div v-if="message.tools?.length" class="tool-note"><el-icon><Connection /></el-icon> 已调用 {{ message.tools.join('、') }}</div>
                 <div v-if="message.sources?.length" class="source-list"><div class="source-label">参考来源</div><div v-for="(source, sourceIndex) in message.sources" :key="sourceIndex" class="source-item"><el-icon><Document /></el-icon><div><strong>{{ source.title || source.source }}</strong><small v-if="source.snippet">{{ source.snippet }}</small></div></div></div>
               </div>
             </div>
-            <div v-if="chatBusy" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
+            <div v-if="chatBusy && !streamingMessage?.text" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
             <div ref="chatEnd" />
           </div>
-          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" placeholder="输入问题..." aria-label="输入问题" @keydown="onChatKeydown" /><div class="composer-bottom"><span>回答仅供参考，请核对学校正式通知</span><el-button type="primary" :icon="ArrowRight" :loading="chatBusy" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">发送</el-button></div></div></div>
+          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" placeholder="输入问题..." aria-label="输入问题" @keydown="onChatKeydown" /><div class="composer-bottom"><span>回答仅供参考，请核对学校正式通知</span><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">停止生成</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">发送</el-button></div></div></div>
+            </div>
+          </div>
         </section>
 
         <section v-else-if="workspace.view === 'services'" class="content-view">

@@ -10,6 +10,26 @@ function savedValue(key: string) {
   catch { return '' }
 }
 
+function newClientId() {
+  try { return crypto.randomUUID() }
+  catch { return `mens-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}` }
+}
+
+function validClientId(value: unknown): string {
+  return typeof value === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(value) ? value : ''
+}
+
+function initialClientId() {
+  const stored = validClientId(savedValue('mens-client-id'))
+  if (stored) return stored
+  const created = newClientId()
+  if (!desktop) {
+    try { localStorage.setItem('mens-client-id', created) } catch { /* storage unavailable */ }
+    return created
+  }
+  return ''
+}
+
 function savedModel(): Model {
   const value = savedValue('campus-agent-model')
   return value === 'qwen3' || value === 'deepseek' || value === 'ollama' ? value : 'auto'
@@ -35,6 +55,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     view: 'chat' as View,
     model: savedModel(),
     conversationId: savedValue('campus-agent-conversation-id'),
+    clientId: initialClientId(),
     localModel: localModel(savedValue('mens-local-model')),
     appearance: appearanceMode(savedValue('mens-appearance')),
     accentColor: accentColor(savedValue('mens-accent-color')),
@@ -51,20 +72,24 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.localModel = localModel(saved.localModel)
         this.appearance = appearanceMode(saved.appearance)
         this.accentColor = accentColor(saved.accentColor)
+        this.clientId = validClientId(saved.clientId) || newClientId()
       } catch (error) {
         this.persistenceError = `无法恢复本地偏好和对话：${error instanceof Error ? error.message : '读取失败'}`
       } finally {
         this.ready = true
+        if (!validClientId(this.clientId)) this.clientId = newClientId()
+        void this.persistWorkspace()
       }
     },
     persistWorkspace() {
-      const snapshot = { model: this.model, conversationId: this.conversationId, localModel: this.localModel, appearance: this.appearance, accentColor: this.accentColor }
+      const snapshot = { model: this.model, conversationId: this.conversationId, clientId: this.clientId, localModel: this.localModel, appearance: this.appearance, accentColor: this.accentColor }
       pendingWrites = pendingWrites.then(async () => {
         try {
           if (desktop) await desktop.saveWorkspace(snapshot)
           else {
             localStorage.setItem('campus-agent-model', snapshot.model)
             localStorage.setItem('campus-agent-conversation-id', snapshot.conversationId)
+            localStorage.setItem('mens-client-id', snapshot.clientId)
             localStorage.setItem('mens-local-model', snapshot.localModel)
             localStorage.setItem('mens-appearance', snapshot.appearance)
             localStorage.setItem('mens-accent-color', snapshot.accentColor)

@@ -1,6 +1,7 @@
 'use strict'
 
 const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell } = require('electron')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
@@ -19,7 +20,7 @@ let backendOrigin = null
 let backendToken = null
 let quitting = false
 let shutdownComplete = false
-let workspace = { model: 'auto', conversationId: '', localModel: '', appearance: 'system', accentColor: '#147b75' }
+let workspace = { model: 'auto', conversationId: '', clientId: '', localModel: '', appearance: 'system', accentColor: '#147b75' }
 const dataDir = app.getPath('userData')
 const workspacePath = path.join(dataDir, 'workspace.json')
 
@@ -62,6 +63,13 @@ async function openDataDirectory() {
   return dataDir
 }
 
+function writeWorkspaceFile(value) {
+  // Two short synchronous filesystem operations serialize updates across IPC calls.
+  const temporary = `${workspacePath}.tmp`
+  fs.writeFileSync(temporary, JSON.stringify(value, null, 2), { encoding: 'utf8', mode: 0o600 })
+  fs.renameSync(temporary, workspacePath)
+}
+
 function bindIPC() {
   ipcMain.handle('campus:info', event => {
     assertSender(event)
@@ -74,10 +82,7 @@ function bindIPC() {
   ipcMain.handle('campus:save-workspace', (event, value) => {
     assertSender(event)
     const updated = { ...workspace, ...validateWorkspace(value) }
-    // Two short synchronous filesystem operations serialize updates across IPC calls.
-    const temporary = `${workspacePath}.tmp`
-    fs.writeFileSync(temporary, JSON.stringify(updated, null, 2), { encoding: 'utf8', mode: 0o600 })
-    fs.renameSync(temporary, workspacePath)
+    writeWorkspaceFile(updated)
     workspace = updated
     nativeTheme.themeSource = workspace.appearance
     return { ...workspace }
@@ -140,6 +145,10 @@ async function start() {
   if (fs.existsSync(workspacePath)) {
     try { workspace = { ...workspace, ...validateWorkspace(JSON.parse(fs.readFileSync(workspacePath, 'utf8'))) } }
     catch { /* Corrupt preferences must not prevent startup; do not touch the database. */ }
+  }
+  if (!workspace.clientId) {
+    workspace.clientId = crypto.randomUUID()
+    try { writeWorkspaceFile(workspace) } catch { /* the generated ID still scopes this session */ }
   }
   bindIPC()
   nativeTheme.themeSource = workspace.appearance

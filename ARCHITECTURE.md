@@ -25,6 +25,10 @@ flowchart TD
 | --- | --- | --- |
 | GET | /api/health | 后端与模型配置状态 |
 | POST | /api/chat | message、可选 conversation_id/model；返回 answer/sources/tool_calls/mode |
+| POST | /api/chat/stream | 流式问答（SSE）：meta、delta、done、error；客户端中断时保存已生成内容并标记 partial |
+| GET | /api/conversations | 历史会话列表（title/message_count/updated_at，按 client_id 隔离） |
+| DELETE | /api/conversations/{id} | 删除单个会话（client_id 必须匹配） |
+| DELETE | /api/conversations | 清空该 client_id 的全部会话 |
 | GET | /api/conversations/{id} | 历史内容及来源和演示标识 |
 | GET/POST | /api/documents | 列表 / JSON 正文创建 |
 | POST | /api/documents/upload | multipart file 上传 |
@@ -41,6 +45,8 @@ flowchart TD
 | GET/PUT | /api/settings | 读取 / 修改本进程默认模型偏好 |
 
 文档和插件写入、插件调用及设置更新需要 `X-Admin-Token`。前端模型偏好随每次问答发送，不修改服务器默认设置。启动后 `/docs` 为完整请求/响应模型的权威说明。
+
+会话按 `client_id` 隔离：桌面版由主进程生成并保存在 `workspace.json`，网页版保存在浏览器本地存储；列表、删除与清空都要求匹配的 `client_id`，无 `client_id` 的历史会话会在下一次发言时归入请求方。流式接口的规划与检索在 `run_in_threadpool` 中同步执行，模型输出用异步 httpx 逐段转发，客户端断开后立即停止上游请求，并将已生成内容落库（`result_data.partial=true`）。
 
 文档数据库是权威数据源。索引用正文与标题的哈希区分版本，检索校验数据库中的最新内容，避免返回已删除或过期分段。SQL 保存后索引失败返回成功保存及 `index_status=pending`，不会误导客户端重复上传。
 

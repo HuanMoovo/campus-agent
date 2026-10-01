@@ -112,6 +112,8 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   assert.throws(() => handlers.get('campus:info')({ sender: web, senderFrame: { url: 'http://127.0.0.1:53321' } }))
   handlers.get('campus:save-workspace')(valid, { model: 'deepseek', conversationId: 'c-123' })
   assert.equal(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8')).conversationId, 'c-123')
+  assert.match(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8')).clientId, /^[0-9a-f-]{36}$/)
+  assert.throws(() => handlers.get('campus:save-workspace')(valid, { clientId: '../escape' }))
   handlers.get('campus:save-workspace')(valid, { appearance: 'dark', accentColor: '#123abc', localModel: 'qwen3:1.7b' })
   assert.equal(mockElectron.nativeTheme.themeSource, 'dark')
   const savedWorkspace = JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8'))

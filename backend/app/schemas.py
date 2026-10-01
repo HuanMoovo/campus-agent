@@ -59,6 +59,7 @@ class RequestModel(BaseModel):
 class ChatRequest(RequestModel):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
+    client_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]*$")
     model: Literal["auto", "qwen", "deepseek", "ollama"] | None = None
     local_model: str | None = Field(default=None, min_length=1, max_length=128,
                                     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")

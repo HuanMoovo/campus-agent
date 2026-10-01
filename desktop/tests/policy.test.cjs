@@ -18,10 +18,12 @@ test('workspace IPC cannot write arbitrary keys or invalid values', () => {
   assert.deepEqual(validateWorkspace({ conversationId: '' }), { conversationId: '' })
   const appearance = { appearance: 'system', accentColor: '#A1b2c3', localModel: 'hf.co/user/model:Q4_K_M' }
   assert.deepEqual(validateWorkspace(appearance), appearance)
+  assert.deepEqual(validateWorkspace({ clientId: '7f3a4b2c-9d1e-4f5a-8b6c-0d1e2f3a4b5c' }), { clientId: '7f3a4b2c-9d1e-4f5a-8b6c-0d1e2f3a4b5c' })
   for (const value of [null, [], 'abc', { model: 'other' }, { filename: '../config' }, { conversationId: '../config' },
     { conversationId: 'a'.repeat(65) }, { conversationId: 12 }, { appearance: 'unknown' }, { accentColor: 'red' },
     { accentColor: '#fff; color:red' }, { accentColor: null }, { localModel: 12 }, { localModel: 'a'.repeat(129) },
-    { localModel: 'bad\nmodel' }]) assert.throws(() => validateWorkspace(value))
+    { localModel: 'bad\nmodel' }, { clientId: '' }, { clientId: '../escape' }, { clientId: 'a'.repeat(65) },
+    { clientId: 'bad id' }, { clientId: 12 }]) assert.throws(() => validateWorkspace(value))
 })
 
 test('startup accepts only a matching nonce and valid loopback port', () => {

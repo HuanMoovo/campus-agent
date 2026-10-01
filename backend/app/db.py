@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import get_settings
@@ -24,3 +24,19 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 def get_db():
     with SessionLocal() as session:
         yield session
+
+
+def ensure_conversation_client_id() -> None:
+    """Add conversations.client_id to databases created before this column existed.
+
+    SQLite and PostgreSQL both accept ADD COLUMN with a constant default, so no
+    migration framework is needed for the single additive column.
+    """
+    inspector = inspect(engine)
+    if "conversations" not in inspector.get_table_names():
+        return
+    if any(column["name"] == "client_id" for column in inspector.get_columns("conversations")):
+        return
+    with engine.begin() as connection:
+        connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN client_id VARCHAR(64) NOT NULL DEFAULT ''")
+        connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_conversations_client_id ON conversations (client_id)")
