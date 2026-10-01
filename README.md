@@ -8,7 +8,7 @@
 Electron 桌面外壳 + Vue 3 界面 + FastAPI 后端，可在单机上离线运行
 
 <a href="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml"><img src="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml/badge.svg" alt="桌面构建状态" /></a>
-<img src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-1.2.0-0e7c74" alt="版本 1.2.0" />
+<img src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-1.2.0-0e7c74" alt="版本 1.2.1" />
 <img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="平台" />
 
@@ -258,7 +258,7 @@ docker compose logs -f backend
 | `WEB_SEARCH_API_KEY` | 空 | Tavily 或博查的密钥 |
 | `WEB_SEARCH_MAX_RESULTS` | `5` | 每次检索返回的结果条数 |
 | `WEB_SEARCH_FETCH_PAGES` | `2` | 抓取正文的网页数（最多 3） |
-| `UPDATE_MANIFEST_URL` | 空 | 可选的 HTTPS 更新清单，例如 `{"version":"1.2.0","url":"https://…","notes":"…"}`；留空则不做更新检查 |
+| `UPDATE_MANIFEST_URL` | 空 | 可选的 HTTPS 更新清单，例如 `{"version":"1.2.1","url":"https://…","notes":"…"}`；留空则不做更新检查 |
 
 桌面版由外壳注入 `CAMPUS_DESKTOP_MODE`、`CAMPUS_DESKTOP_TOKEN`、`CAMPUS_DESKTOP_NONCE`、
 `CAMPUS_DATA_DIR`、`CAMPUS_FRONTEND_DIR`、`CAMPUS_CONFIG_FILE`（无需手填；仅接受绝对路径）。

@@ -2,11 +2,11 @@
 
 桌面版采用 Electron 独立窗口，保留 Vue 界面和 FastAPI 功能；安装包包含冻结后的 Python 后端。用户安装后无需再安装 Python、Node.js、数据库或打开两个终端。启动应用时自动启动本机后端，退出时关闭；重复打开会聚焦已有窗口。
 
-**当前版本为 Mens 1.2.0。** Windows 安装包已经重新构建、升级安装并逐项验收；macOS 与 Linux 产物由 CI 构建（未真机验收）。平台矩阵、安装位置与构建方式见 `PLATFORMS.md`，实际结果见 `VERIFICATION.md`。
+**当前版本为 Mens 1.2.1。** Windows 安装包已经重新构建、升级安装并逐项验收；macOS 与 Linux 产物由 CI 构建（未真机验收）。平台矩阵、安装位置与构建方式见 `PLATFORMS.md`，实际结果见 `VERIFICATION.md`。
 
 ## 直接使用
 
-双击桌面或开始菜单中的“Mens”。安装目录默认为 `%LOCALAPPDATA%\Programs\Mens`（1.0.0 曾使用 `Programs\CampusAgent`，升级后旧目录会残留，可手动删除；用户数据始终在 `%APPDATA%\CampusAgent`，升级不丢失）；安装器允许另选目录。可运行 `release/Mens-Setup-1.2.0-x64.exe`，无需先安装 Python 或 Node.js。
+双击桌面或开始菜单中的“Mens”。安装目录默认为 `%LOCALAPPDATA%\Programs\Mens`（1.0.0 曾使用 `Programs\CampusAgent`，升级后旧目录会残留，可手动删除；用户数据始终在 `%APPDATA%\CampusAgent`，升级不丢失）；安装器允许另选目录。可运行 `release/Mens-Setup-1.2.1-x64.exe`，无需先安装 Python 或 Node.js。
 
 macOS 与 Linux 安装包由 CI 构建：macOS 为 `Mens-<版本>-<架构>.dmg`（Intel 用 x64，Apple silicon 用 arm64；未签名未公证，首次打开需右键“打开”或在系统设置中允许），数据目录为 `~/Library/Application Support/CampusAgent`；Linux 为 AppImage（`chmod +x` 后直接运行）与 deb 包，数据目录为 `~/.config/CampusAgent`。这两个平台的产物尚未在真机上运行过，详见 `PLATFORMS.md`。
 
@@ -22,7 +22,7 @@ macOS 与 Linux 安装包由 CI 构建：macOS 为 `Mens-<版本>-<架构>.dmg`�
 
 设置页「备份与恢复」可将知识库、对话记录和配置导出为 zip（SQLite 通过 `VACUUM INTO` 生成一致性快照，含各文件的 SHA-256 清单），也可导入恢复；导出内容包含 API Key 与校园接口令牌等敏感数据，请妥善保管。桌面版通过系统保存/打开对话框读写备份文件；导入后重启应用完全生效。知识库现支持 PDF、Markdown、TXT 和 Word (.docx)，单个文件最大 5 MB。桌面版设置页还提供「后端日志」查看（最近 200 KB）与「打开数据文件夹」；窗口大小与位置会在退出时记住并在重启后恢复（多显示器拔除后越界坐标自动忽略）。校园服务页的报修申请下方会列出保存在本机的报修记录（含提交时间、地点、问题与状态）。
 
-设置页「版本与更新」显示当前版本，并提供可选的更新检查：管理员在 `.env` 中设置 `UPDATE_MANIFEST_URL` 指向一个 HTTPS JSON 清单（`{"version": "1.2.0", "url": "<下载页>", "notes": "…"}`）后，点击「检查更新」会读取该清单并比较版本，发现新版本时可打开下载页（桌面端只允许 HTTPS 链接交给系统浏览器打开）。未配置该项时应用完全不联网检查。
+设置页「版本与更新」显示当前版本，并提供可选的更新检查：管理员在 `.env` 中设置 `UPDATE_MANIFEST_URL` 指向一个 HTTPS JSON 清单（`{"version": "1.2.1", "url": "<下载页>", "notes": "…"}`）后，点击「检查更新」会读取该清单并比较版本，发现新版本时可打开下载页（桌面端只允许 HTTPS 链接交给系统浏览器打开）。未配置该项时应用完全不联网检查。
 
 聊天窗口底部有「联网搜索」开关（管理员启用后可用，逐条消息生效，偏好会记住）。开启后应用会用 Bing 网页搜索（免密钥，中国大陆可直连；也可在设置中改用 Tavily 或博查并填写 API Key）检索当次问题，必要时抓取前 1–3 个网页正文，回答里引用网页链接；参考来源会标注「含联网检索」，网页条目显示域名并可点击用系统浏览器打开。查询内容会发送给所选搜索服务，涉密问题请勿开启。
 
@@ -41,7 +41,7 @@ build-desktop.cmd
 成功后输出：
 
 ```text
-release/Mens-Setup-1.2.0-x64.exe
+release/Mens-Setup-1.2.1-x64.exe
 release/win-unpacked/Mens.exe
 ```
 

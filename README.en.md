@@ -8,7 +8,7 @@
 Electron desktop shell + Vue 3 interface + FastAPI backend, able to run offline on a single machine
 
 <a href="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml"><img src="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml/badge.svg" alt="Desktop build status" /></a>
-<img src="https://img.shields.io/badge/version-1.2.0-0e7c74" alt="Version 1.2.0" />
+<img src="https://img.shields.io/badge/version-1.2.1-0e7c74" alt="Version 1.2.1" />
 <img src="https://img.shields.io/badge/license-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="Platforms" />
 
@@ -267,7 +267,7 @@ in a phone browser and add it to the home screen for a full-screen, own-icon exp
 | `WEB_SEARCH_API_KEY` | empty | Key for Tavily or Bocha |
 | `WEB_SEARCH_MAX_RESULTS` | `5` | Results per search |
 | `WEB_SEARCH_FETCH_PAGES` | `2` | Pages whose text is fetched (maximum 3) |
-| `UPDATE_MANIFEST_URL` | empty | Optional HTTPS update manifest, e.g. `{"version":"1.2.0","url":"https://…","notes":"…"}`; empty means no update check at all |
+| `UPDATE_MANIFEST_URL` | empty | Optional HTTPS update manifest, e.g. `{"version":"1.2.1","url":"https://…","notes":"…"}`; empty means no update check at all |
 
 The desktop shell injects `CAMPUS_DESKTOP_MODE`, `CAMPUS_DESKTOP_TOKEN`, `CAMPUS_DESKTOP_NONCE`,
 `CAMPUS_DATA_DIR`, `CAMPUS_FRONTEND_DIR` and `CAMPUS_CONFIG_FILE` (nothing to fill in; only

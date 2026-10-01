@@ -2,6 +2,24 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 发布批次：Mens 1.2.1（2026-10-02）
+
+- **版本统一为 1.2.1**：`desktop/package.json`、`frontend/package.json`（含两个 lock 文件的根包）、
+  `backend/app/main.py`、三份 README 徽章、`docs/index.html` 三语徽章、`DESKTOP.md`、issue 模板同步。
+- **测试**：后端 266 passed（65 subtests）、前端 17、桌面 9。
+- **构建**：`scripts/build_desktop.py --skip-install` → `release/Mens-Setup-1.2.1-x64.exe`，
+  **126,409,577 字节，SHA-256 `e2f7fa9dba68f6911f130a8b2c9076562ef0c761dfdac6aa48a75268a8f7b91a`**；
+  包内 `resources/LICENSE`（11,339 B）、`NOTICE`（731 B）、`THIRD-PARTY-NOTICES.md`（2,401 B）；
+  `resources/frontend/sw.js` 的缓存名为 `mens-shell-1.2.1`（构建时注入）。
+- **静默升级安装**：从已安装的 1.2.0 覆盖升级到 1.2.1（安装目录 `%LOCALAPPDATA%\Programs\Mens`，
+  `Mens.exe` 文件版本 1.2.1），升级后许可与清单文件都在。
+- **安装版界面验收（CDP，真机）**：侧栏版本显示 `v1.2.1`；设置 → 外观显示「外观」并有 4 个语言单选项；
+  切到 English 后侧栏为 `Chat / Campus services / Knowledge base / Plugins / Settings`、外观标题 `Appearance`、
+  问答页 `Chat`、输入框占位符 `Type a question…`、模型选择器 `Auto routing`、`html lang=en`；
+  切到日本語 侧栏为 `質問応答 / 学内サービス / ナレッジベース / プラグイン / 設定`；切回中文后 `html lang=zh-CN`。
+  **零控制台错误、零失败请求**。
+- **夹具中性化**：`test_export_and_import.py` 的内网地址夹具由 `192.168.31.7` 改为 `10.255.255.7`。
+
 ## 功能批次：界面三语与离线外壳版本注入（2026-10-01）
 
 - **前端 17 passed（+4）**：新增 `frontend/tests/i18n.test.ts` 校验三语字典键完全一致、无空值、参数插值、缺失键回退（先中文后键名）以及选择持久化与 `document.lang`。

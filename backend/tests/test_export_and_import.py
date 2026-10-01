@@ -101,7 +101,7 @@ def test_import_url_stores_the_page_text_as_a_document():
 def test_import_url_refuses_a_page_that_resolves_to_a_private_address():
     """Drive the real fetch path, so the egress rules are exercised rather than assumed."""
     def private_dns(host, port, *args, **kwargs):
-        return [(2, 1, 6, "", ("192.168.31.7", port))]
+        return [(2, 1, 6, "", ("10.255.255.7", port))]
 
     with TestClient(app) as client:
         before = len(client.get("/api/documents").json())
