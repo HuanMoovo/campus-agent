@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     admin_token: str = ""
     plugin_allowed_hosts: str = ""
     cors_origins: str = "http://localhost:5173"
+    update_manifest_url: str = ""
 
     @property
     def allowed_plugin_hosts(self) -> set[str]:

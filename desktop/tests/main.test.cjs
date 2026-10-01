@@ -32,7 +32,7 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   Object.assign(app, {
     setName() {}, setAppUserModelId() {}, setPath(_key, value) { userData = value },
     getPath(key) { return key === 'appData' ? temporary : userData },
-    getVersion() { return '1.0.0' }, requestSingleInstanceLock() { return true },
+    getVersion() { return require('../package.json').version }, requestSingleInstanceLock() { return true },
     isPackaged: true,
     whenReady() { return { then(callback) { startup = Promise.resolve().then(callback); return startup } } },
     quit() {
@@ -126,7 +126,7 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   requests.headers({ url: 'https://untrusted.example/', webContentsId: 17, requestHeaders: {} }, value => { headers = value.requestHeaders })
   assert.equal(headers['X-Campus-Desktop-Token'], undefined)
   const info = handlers.get('campus:info')(valid)
-  assert.equal(info.version, '1.0.0')
+  assert.equal(info.version, require('../package.json').version)
   assert.equal(info.dataPath, path.join(temporary, 'CampusAgent'))
   assert.equal('token' in info, false)
   assert.throws(() => handlers.get('campus:info')({ sender: web, senderFrame: { url: 'http://127.0.0.1:53321' } }))
@@ -156,6 +156,12 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   assert.equal(log.available, true)
   assert.ok(log.text.includes('Application startup complete.'))
   assert.ok(log.text.includes('第一行日志'))
+  await handlers.get('campus:open-update-page')(valid, 'https://example.edu/mens/download')
+  assert.equal(externalUrl, 'https://example.edu/mens/download')
+  await assert.rejects(handlers.get('campus:open-update-page')(valid, 'http://example.edu/mens'))
+  await assert.rejects(handlers.get('campus:open-update-page')(valid, 'file:///C:/Windows/System32/cmd.exe'))
+  await assert.rejects(handlers.get('campus:open-update-page')(valid, 'https://user:secret@example.edu/mens'))
+  await assert.rejects(handlers.get('campus:open-update-page')({ sender: web, senderFrame: { url: 'https://evil.example' } }, 'https://example.edu/mens'))
   activeWindow.emit('close')
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'window.json'), 'utf8')),
     { x: 40, y: 30, width: 1300, height: 900, maximized: false })

@@ -1,7 +1,7 @@
 'use strict'
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { isOwnUrl, validateBackupBytes, validateBackupName, validateWorkspace, parseReadyLine } = require('../lib/policy.cjs')
+const { isOwnUrl, validateBackupBytes, validateBackupName, validateUpdateUrl, validateWorkspace, parseReadyLine } = require('../lib/policy.cjs')
 
 test('only the exact loopback origin receives desktop privileges', () => {
   const origin = 'http://127.0.0.1:53212'
@@ -36,6 +36,15 @@ test('backup payloads are bounded and file names sanitized', () => {
   assert.equal(validateBackupBytes(new Uint8Array(16), 32), 16)
   for (const value of [null, 'abc', 12, {}, new Uint8Array(33)]) {
     assert.throws(() => validateBackupBytes(value, value instanceof Uint8Array ? 32 : undefined))
+  }
+})
+
+test('update download links must be plain HTTPS URLs', () => {
+  assert.equal(validateUpdateUrl('https://example.edu/mens/download'), 'https://example.edu/mens/download')
+  assert.equal(validateUpdateUrl('https://example.edu:8443/a?b=1#c'), 'https://example.edu:8443/a?b=1#c')
+  for (const value of ['http://example.edu/mens', 'file:///C:/Windows/System32/cmd.exe', 'javascript:alert(1)',
+    'https://user:secret@example.edu/mens', 'https://', '', 42, null, undefined, `https://example.edu/${'a'.repeat(2100)}`]) {
+    assert.throws(() => validateUpdateUrl(value), TypeError, String(value))
   }
 })
 

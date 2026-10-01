@@ -153,6 +153,17 @@ export interface RepairRecord {
   created_at: string
 }
 
+export interface UpdateCheck {
+  configured: boolean
+  current: string
+  latest?: string
+  update_available: boolean
+  url?: string
+  notes?: string
+  message?: string
+  error?: string
+}
+
 const base = desktop ? '/api' : import.meta.env.VITE_API_BASE_URL || '/api'
 
 async function request<T>(path: string, init?: RequestInit, admin = false): Promise<T> {
@@ -331,6 +342,7 @@ export const api = {
   repair: (payload: { location: string; description: string; contact: string }) =>
     request<unknown>('/services/repairs', json('POST', { location: payload.location, issue: payload.description, contact: payload.contact })),
   repairs: () => request<{ demo: boolean; items: RepairRecord[] }>('/services/repairs', undefined, true),
+  checkUpdate: () => request<UpdateCheck>('/update/check', undefined, true),
   exportBackup: async () => {
     const headers = new Headers()
     if (!desktop) headers.set('X-Admin-Token', sessionStorage.getItem('campus-agent-admin-token') || '')

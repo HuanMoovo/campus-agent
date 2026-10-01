@@ -126,6 +126,10 @@ const backupInput = ref<HTMLInputElement | null>(null)
 const logText = ref('')
 const logBusy = ref(false)
 const logError = ref('')
+const updateBusy = ref(false)
+const updateInfo = ref('')
+const updateError = ref('')
+const updateUrl = ref('')
 let downloadTimer: ReturnType<typeof setTimeout> | undefined
 
 function fileSize(bytes?: number) {
@@ -467,6 +471,34 @@ async function loadLog() {
   } finally {
     logBusy.value = false
   }
+}
+
+async function checkUpdates() {
+  if (updateBusy.value) return
+  updateBusy.value = true
+  updateError.value = ''
+  updateInfo.value = ''
+  updateUrl.value = ''
+  try {
+    const result = await api.checkUpdate()
+    updateInfo.value = [result.message, result.notes ? `更新说明：${result.notes}` : ''].filter(Boolean).join(' ')
+    if (result.error) updateError.value = result.error
+    if (result.update_available && result.url) updateUrl.value = result.url
+  } catch (error) {
+    updateError.value = `检查更新失败：${friendlyError(error)}`
+  } finally {
+    updateBusy.value = false
+  }
+}
+
+async function openUpdateUrl() {
+  if (!updateUrl.value) return
+  if (desktop) {
+    try { await desktop.openUpdatePage(updateUrl.value) }
+    catch (error) { updateError.value = `无法打开下载页：${friendlyError(error)}` }
+    return
+  }
+  window.open(updateUrl.value, '_blank', 'noopener,noreferrer')
 }
 
 async function loadHealth() {
@@ -1027,6 +1059,7 @@ onUnmounted(() => {
           </div>
           <div class="settings-section"><div class="settings-copy"><h2>备份与恢复</h2><p>导出包含知识库、对话记录、模型与校园接口配置的 zip 备份；其中的密钥和令牌属于敏感数据，请妥善保管。导入会覆盖当前数据<template v-if="desktop">，重启应用后完全生效</template>。</p><p v-if="backupInfo" class="backup-info" aria-live="polite">{{ backupInfo }}</p><el-alert v-if="backupError" class="alert" :title="backupError" type="error" show-icon :closable="false" /></div><div class="backup-actions"><el-button :icon="Download" :loading="backupAction === 'export'" :disabled="Boolean(backupAction) || !workspace.ready" @click="exportBackup">导出备份</el-button><el-button :icon="Upload" :loading="backupAction === 'import'" :disabled="Boolean(backupAction) || !workspace.ready" @click="importBackup">导入备份</el-button><input v-if="!desktop" ref="backupInput" class="hidden-input" type="file" accept=".zip" @change="onBackupFile" /></div></div>
           <div v-if="!desktop" class="settings-section"><div class="settings-copy"><h2>管理员令牌</h2><p>用于文档与插件管理，仅保存在当前浏览器会话。</p></div><el-input :model-value="adminToken" type="password" show-password placeholder="输入后端 ADMIN_TOKEN" style="max-width: 280px" @update:model-value="saveAdminToken(String($event))" /></div>
+          <div class="settings-section"><div class="settings-copy"><h2>版本与更新</h2><p>当前版本 {{ desktop ? (desktopInfo?.version ? `v${desktopInfo.version}` : '读取中…') : `v${frontendVersion}` }}。<template v-if="updateInfo"> {{ updateInfo }}</template><template v-else>更新清单地址由管理员在 .env（UPDATE_MANIFEST_URL）中配置，未配置时不联网检查。</template></p><el-alert v-if="updateError" class="alert" :title="updateError" type="warning" show-icon :closable="false" /></div><div class="backup-actions"><el-button :icon="Refresh" :loading="updateBusy" @click="checkUpdates">检查更新</el-button><el-button v-if="updateUrl" type="primary" :icon="Download" @click="openUpdateUrl">打开下载页</el-button></div></div>
           <div class="settings-section"><div class="settings-copy"><h2>服务状态</h2><p>{{ healthLabel }}<template v-if="health"> · {{ health.rag_degraded ? '向量检索故障，已降级关键词检索' : health.rag_enabled ? '向量检索已启用' : '本地关键词检索' }} · {{ health.demo_services ? '校务服务为演示数据' : '已配置部分校务接口' }}</template></p></div><el-button :icon="Refresh" :loading="healthBusy" @click="loadHealth">刷新状态</el-button></div>
           <el-alert v-if="healthError" :title="healthError" type="error" show-icon :closable="false" />
         </section>

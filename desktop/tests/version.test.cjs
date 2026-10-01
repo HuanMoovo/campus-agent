@@ -13,7 +13,7 @@ test('desktop, frontend and backend report the same release version', () => {
   const frontendLock = require('../../frontend/package-lock.json')
   const backend = fs.readFileSync(path.join(root, 'backend/app/main.py'), 'utf8')
   const backendVersion = backend.match(/FastAPI\(title="Mens API", version="([^"]+)"/)?.[1]
-  assert.equal(desktop.version, '1.0.0')
+  assert.match(desktop.version, /^\d+\.\d+\.\d+$/)
   assert.equal(desktopLock.version, desktop.version)
   assert.equal(desktopLock.packages[''].version, desktop.version)
   assert.equal(frontend.version, desktop.version)

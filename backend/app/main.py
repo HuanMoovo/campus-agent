@@ -3,14 +3,17 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import sqlite3
 import logging
 from datetime import datetime, timezone
 from io import BytesIO
+from urllib.parse import urlsplit
 from uuid import uuid4
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
+import httpx
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -45,7 +48,7 @@ async def lifespan(_app: FastAPI):
     yield
 
 
-app = FastAPI(title="Mens API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Mens API", version="1.1.0", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in get_settings().cors_origins.split(",") if origin.strip()], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 
@@ -579,6 +582,44 @@ def cancel_local_model_job(job_id: str):
 BACKUP_FORMAT = 1
 BACKUP_CONFIG_FILES = ("workspace.json", "model-providers.json", "campus-sources.json", ".env")
 BACKUP_MAX_BYTES = 200_000_000
+
+
+def version_tuple(value: str) -> tuple[int, ...] | None:
+    match = re.fullmatch(r"(\d+(?:\.\d+){0,3})", (value or "").strip().lstrip("vV"))
+    return tuple(int(part) for part in match.group(1).split(".")) if match else None
+
+
+@app.get("/api/update/check", dependencies=[Depends(require_admin)])
+def check_update():
+    """Optional update check; only runs when an administrator configured an HTTPS manifest."""
+    current = app.version
+    url = (get_settings().update_manifest_url or "").strip()
+    if not url:
+        return {"configured": False, "current": current, "update_available": False,
+                "message": "未配置更新清单地址（.env 中的 UPDATE_MANIFEST_URL），不联网检查。"}
+    try:
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+            raise ValueError("update manifest must be a plain HTTPS URL")
+        response = httpx.get(url, timeout=10, follow_redirects=False, trust_env=False, headers={"Accept": "application/json"})
+        response.raise_for_status()
+        if len(response.content) > 64_000:
+            raise ValueError("update manifest is too large")
+        manifest = response.json()
+    except (httpx.HTTPError, ValueError):
+        return {"configured": True, "current": current, "update_available": False,
+                "error": "无法读取更新清单，请检查地址与网络后重试。"}
+    latest = manifest.get("version") if isinstance(manifest, dict) else None
+    latest_tuple, current_tuple = version_tuple(str(latest or "")), version_tuple(current)
+    if latest_tuple is None or current_tuple is None:
+        return {"configured": True, "current": current, "update_available": False,
+                "error": "更新清单缺少有效的版本号。"}
+    available = latest_tuple > current_tuple
+    download = manifest.get("url") if isinstance(manifest.get("url"), str) else ""
+    notes = manifest.get("notes") if isinstance(manifest.get("notes"), str) else ""
+    return {"configured": True, "current": current, "latest": str(latest), "update_available": available,
+            "url": download if download.startswith("https://") else "", "notes": notes[:500],
+            "message": f"发现新版本 {latest}。" if available else "已是最新版本。"}
 
 
 def sqlite_database_path() -> Path | None:

@@ -51,4 +51,14 @@ function validateBackupBytes(bytes, limit = BACKUP_LIMIT) {
   return size
 }
 
-module.exports = { isOwnUrl, BACKUP_LIMIT, validateWorkspace, parseReadyLine, validateBackupName, validateBackupBytes }
+function validateUpdateUrl(url) {
+  if (typeof url !== 'string' || url.length > 2048) throw new TypeError('Invalid update URL')
+  let parsed
+  try { parsed = new URL(url) } catch { throw new TypeError('Invalid update URL') }
+  if (parsed.protocol !== 'https:' || !parsed.hostname || parsed.username || parsed.password) {
+    throw new TypeError('Invalid update URL')
+  }
+  return parsed.href
+}
+
+module.exports = { isOwnUrl, BACKUP_LIMIT, validateWorkspace, parseReadyLine, validateBackupName, validateBackupBytes, validateUpdateUrl }
