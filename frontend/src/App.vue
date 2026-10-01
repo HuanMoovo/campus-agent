@@ -11,6 +11,7 @@ import { applyLocale, t } from './i18n'
 import { desktop, type DesktopInfo } from './desktop'
 import mensLogo from './assets/mens.png'
 import AppearanceSettings from './components/AppearanceSettings.vue'
+import HeroScene from './components/HeroScene.vue'
 import { applyAppearance } from './appearance'
 import { version as frontendVersion } from '../package.json'
 
@@ -1105,9 +1106,22 @@ onUnmounted(() => {
             <el-alert v-if="localChatProblem" :title="localChatProblem" type="warning" show-icon :closable="false"><el-button text @click="selectView('settings')">{{ t('chat.modelSettings') }}</el-button></el-alert>
             <div v-if="!workspace.ready || historyBusy" class="history-loading">{{ t('chat.restoring') }}</div>
             <div v-if="workspace.ready && messages.length === 0 && !historyBusy && !historyError" class="chat-empty">
-              <div class="empty-symbol"><img :src="mensLogo" alt="Mens" /></div>
-              <h2>{{ t('chat.title') }}</h2>
-              <div class="suggestions"><button v-for="suggestion in chatSuggestions" :key="suggestion" @click="sendChat(suggestion)">{{ suggestion }}<el-icon><ArrowRight /></el-icon></button></div>
+              <div class="hero-grid">
+                <div class="hero-copy">
+                  <p class="hero-eyebrow">MENS ASSISTANT</p>
+                  <h2>{{ t('chat.title') }}</h2>
+                  <p class="hero-lead">{{ t('chat.hero.lead') }}</p>
+                  <div class="suggestions">
+                    <span class="suggestions-title">{{ t('chat.suggestions.title') }}</span>
+                    <button v-for="(suggestion, index) in chatSuggestions" :key="suggestion" @click="sendChat(suggestion)">
+                      <span class="suggestion-index">{{ String(index + 1).padStart(2, '0') }}</span>
+                      <span class="suggestion-text">{{ suggestion }}</span>
+                      <el-icon><ArrowRight /></el-icon>
+                    </button>
+                  </div>
+                </div>
+                <HeroScene class="hero-visual" :active="chatBusy" />
+              </div>
             </div>
             <div v-for="(message, index) in messages" :key="index" class="message-row" :class="message.role">
               <div class="message-avatar"><template v-if="message.role === 'user'">我</template><img v-else :src="mensLogo" alt="" /></div>

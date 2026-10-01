@@ -12,8 +12,10 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.2",
+    "@types/three": "^0.186.0",
     "element-plus": "^2.9.9",
     "pinia": "^3.0.2",
+    "three": "^0.186.1",
     "vue": "^3.5.13"
   },
   "devDependencies": {
