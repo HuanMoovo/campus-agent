@@ -87,6 +87,16 @@ jobs:
         run: |
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
             gh release create "${GITHUB_REF_NAME}" --title "Mens ${GITHUB_REF_NAME}" --notes "见 VERIFICATION.md 的构建与验收记录。"
+          # Never overwrite an artifact that is already attached: for the Windows installer the
+          # release may already carry the locally built and verified package with the SHA-256
+          # recorded in VERIFICATION.md. Later runs therefore only add missing files.
+          existing=$(gh release view "${GITHUB_REF_NAME}" --json assets -q '.assets[].name')
           for file in release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb; do
-            [ -f "$file" ] && gh release upload "${GITHUB_REF_NAME}" "$file" --clobber
+            [ -f "$file" ] || continue
+            name=$(basename "$file")
+            if printf '%s\n' "$existing" | grep -qx "$name"; then
+              echo "kept existing asset $name"
+              continue
+            fi
+            gh release upload "${GITHUB_REF_NAME}" "$file"
           done

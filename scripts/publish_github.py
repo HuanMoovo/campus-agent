@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,9 +21,10 @@ REPO = 'campus-agent'
 DESCRIPTION = 'Mens 校园助手 — 本地优先的校园问答工作台（Electron + Vue 3 + FastAPI）：知识库检索、校园服务、流式问答与可选联网搜索；Windows/macOS/Linux 构建，移动端可安装网页版。'
 
 
-def call(method: str, path: str, token: str, payload=None, *, raw=False, retries=3):
+def call(method: str, path: str, token: str, payload=None, *, raw=False, retries=4):
     url = path if path.startswith('http') else API + path
     data = json.dumps(payload, ensure_ascii=False).encode('utf-8') if payload is not None else None
+    last_error: Exception | None = None
     for attempt in range(1, retries + 1):
         request = Request(url, data=data, method=method, headers={
             'Authorization': f'Bearer {token}',
@@ -39,9 +40,18 @@ def call(method: str, path: str, token: str, payload=None, *, raw=False, retries
             detail = error.read().decode('utf-8', 'replace')[:400]
             if error.code in (429, 500, 502, 503) and attempt < retries:
                 time.sleep(2 * attempt)
+                last_error = RuntimeError(f'{error.code}: {detail}')
                 continue
             raise RuntimeError(f'{method} {url} -> {error.code}: {detail}') from error
-    raise RuntimeError('unreachable')
+        except (URLError, TimeoutError, ConnectionError, OSError) as error:
+            # Transient TLS/DNS hiccups on this host are common; retry with backoff.
+            last_error = error
+            if attempt < retries:
+                print(f'  retry {attempt}/{retries - 1} after {type(error).__name__}: {error}')
+                time.sleep(3 * attempt)
+                continue
+            raise RuntimeError(f'{method} {url} -> network error: {error}') from error
+    raise RuntimeError(f'{method} {url} failed: {last_error}')
 
 
 def tracked_files() -> list[Path]:

@@ -10,7 +10,7 @@ Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe`（126,396,099 字节，SHA-
 - 图标：`scripts/create_icon.py` 在装有 Pillow 时跨平台生成，缺失 Pillow 时仅在 Windows 回退到原有 PowerShell 缩放。本机校验生成结果：`.icns` 容器 7 个条目（icp4/5/6、ic07/08/09/10，负载均为有效 PNG），`.ico` 9 档（16–256），PWA 图标 192/512/180 尺寸精确。
 - 跨平台代码：桌面启动器按 `process.platform` 选择 `campus-backend(.exe)` 与虚拟环境解释器；冻结后端集成测试同样按平台解析路径；数据目录沿用 Electron 的 appData 规则（macOS `~/Library/Application Support/CampusAgent`，Linux `~/.config/CampusAgent`）。凭据存储：Windows 用 DPAPI，macOS/Linux 为 `0600` 明文文件（已在 PLATFORMS.md 标明这不是加密）。
 - 可安装网页版（PWA）：Web App Manifest、离线外壳 Service Worker（仅缓存界面资源，`/api` 一律走网络）、iOS 安全区适配；构建产物包含 `manifest.webmanifest`、`sw.js`、`icon-192/512.png`、`apple-touch-icon.png`。
-- 持续集成：`.github/workflows/build-desktop.yml` 在 windows-latest、macos-13（x64）、macos-latest（arm64）、ubuntu-latest 上分别执行同一套构建脚本并上传产物，推送 `v*` 标签时自动创建 Release 并附加安装包。
+- 持续集成：`.github/workflows/build-desktop.yml` 在 windows-latest、macos-13（x64）、macos-latest（arm64）、ubuntu-latest 上分别执行同一套构建脚本并上传产物，推送 `v*` 标签时自动创建 Release 并把各平台产物附加到 Release；已存在的同名资产不会被覆盖，因此 Release 上的 Windows 安装包保持为本机已验证的那一份。
 - 测试：后端 260 passed（65 subtests）、前端 13 passed、桌面 8/8；构建脚本内部的冻结后端真实集成测试同样通过。
 - Windows 安装验收：静默升级安装退出码 0；`Mens.exe` 文件版本 1.2.0；卸载项显示“Mens 1.2.0”；桌面与开始菜单快捷方式指向 `%LOCALAPPDATA%\Programs\Mens`。
 - 安装版界面验收（CDP 驱动安装后的应用，无控制台错误与失败请求）：侧栏显示 v1.2.0；设置页可通过界面启用「联网搜索」并保存（返回“已保存：自动选择。”，状态显示“当前生效：自动选择（bing）”）；聊天窗口开关可开启，开启后提问返回 5 条真实网页结果与可点击链接（`baike.baidu.com` 等），并提示“已联网检索（刚刚）”。
@@ -19,7 +19,7 @@ Windows 安装包 `release/Mens-Setup-1.2.0-x64.exe`（126,396,099 字节，SHA-
 
 ## 开发副本第六批改进：联网搜索（2026-10-01，已包含在 1.2.0 安装包）
 
-新增可选的实时联网搜索与网页读取，聊天窗口可按消息开关。**安装包尚未重新构建**（`release/` 中仍为 1.1.0）。
+新增可选的实时联网搜索与网页读取，聊天窗口可按消息开关。本节改动已包含在 1.2.0 安装包中。
 
 - 改动范围：`backend/app/web_search.py`（Bing HTML 搜索、Tavily/博查 API、页面正文提取、配置持久化）；`agent.py`（联网结果与知识库资料统一编号注入提示词，网页条目带链接与检索时间；无模型时降级回答也会列出链接）；`main.py`（`GET /api/web/status`、`PUT /api/web/config`、`ChatRequest.web`、来源规范化 `public_sources`）；前端聊天底部「联网搜索」开关与来源链接、设置页「联网搜索」区块；桌面 `campus:open-external-https`（HTTPS 白名单校验）供网页链接打开；`web-search.json` 纳入备份清单。
 - 后端测试：260 passed，65 subtests passed（新增解析、URL 安全、配置加密、联网接线 21 项）。
