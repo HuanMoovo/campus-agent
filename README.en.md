@@ -136,10 +136,10 @@ assistant is meant to be.
 
 | Platform | Status | Artefacts and data directory |
 | --- | --- | --- |
-| Windows 10/11 x64 | **Built and verified on a real machine** | `Mens-Setup-1.2.0-x64.exe` (NSIS, per-user install into `%LOCALAPPDATA%\Programs\Mens`), data in `%APPDATA%\CampusAgent` |
-| macOS 12+ (Intel) | Built by CI, not verified on hardware | `Mens-1.2.0-x64.dmg` / `.zip`; unsigned and not notarised, so the first launch needs a right-click Open |
-| macOS 12+ (Apple silicon) | Built by CI, not verified on hardware | `Mens-1.2.0-arm64.dmg` / `.zip`; data in `~/Library/Application Support/CampusAgent` |
-| Linux x64 | Built by CI, not verified on hardware | `Mens-1.2.0-x86_64.AppImage` (no install needed) and `Mens-1.2.0-amd64.deb`; data in `~/.config/CampusAgent` |
+| Windows 10/11 x64 | **Built and verified on a real machine** | `Mens-Setup-1.2.1-x64.exe` (NSIS, per-user install into `%LOCALAPPDATA%\Programs\Mens`), data in `%APPDATA%\CampusAgent` |
+| macOS 12+ (Intel) | Built by CI, not verified on hardware | `Mens-1.2.1-x64.dmg` / `.zip`; unsigned and not notarised, so the first launch needs a right-click Open |
+| macOS 12+ (Apple silicon) | Built by CI, not verified on hardware | `Mens-1.2.1-arm64.dmg` / `.zip`; data in `~/Library/Application Support/CampusAgent` |
+| Linux x64 | Built by CI, not verified on hardware | `Mens-1.2.1-x86_64.AppImage` (no install needed) and `Mens-1.2.1-amd64.deb`; data in `~/.config/CampusAgent` |
 | Android / iOS | No native app | Use the installable web app (PWA): open the deployed site in a browser and add it to the home screen; inference happens on the server |
 
 > "Verified" means the build was installed, launched and checked on that system; "built by CI"
@@ -147,14 +147,14 @@ assistant is meant to be.
 > See [PLATFORMS.md](PLATFORMS.md) for the matrix, build commands and the reasoning, and
 > [VERIFICATION.md](VERIFICATION.md) for results and scope.
 
-### Release assets (v1.2.0)
+### Release assets (v1.2.1)
 
 | Asset | Size | Notes |
 | --- | --- | --- |
-| `Mens-Setup-1.2.0-x64.exe` (+ `.blockmap`) | 126,402,135 B | Windows installer — this is the file used for the local install check |
-| `Mens-1.2.0-x64.dmg` / `Mens-1.2.0-x64.zip` | ≈ 158 MB | macOS Intel |
-| `Mens-1.2.0-arm64.dmg` / `Mens-1.2.0-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
-| `Mens-1.2.0-x86_64.AppImage` / `Mens-1.2.0-amd64.deb` | 191 MB / 153 MB | Linux |
+| `Mens-Setup-1.2.1-x64.exe` (+ `.blockmap`) | 126,409,577 B | Windows installer — this is the file used for the local install check |
+| `Mens-1.2.1-x64.dmg` / `Mens-1.2.1-x64.zip` | ≈ 158 MB | macOS Intel |
+| `Mens-1.2.1-arm64.dmg` / `Mens-1.2.1-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
+| `Mens-1.2.1-x86_64.AppImage` / `Mens-1.2.1-amd64.deb` | 191 MB / 153 MB | Linux |
 
 The installer also carries `LICENSE`, `NOTICE` and `THIRD-PARTY-NOTICES.md` (they end up in
 `resources/` after installation).
@@ -163,7 +163,7 @@ The installer also carries `LICENSE`, `NOTICE` and `THIRD-PARTY-NOTICES.md` (the
 
 ### 1. Install the Windows desktop app
 
-Download `Mens-Setup-1.2.0-x64.exe` from the
+Download `Mens-Setup-1.2.1-x64.exe` from the
 [latest release](https://github.com/HuanMoovo/campus-agent/releases/latest), run it (per-user
 install, no administrator rights needed) and launch Mens from the Start menu or the desktop.
 Add a model API key in Settings (or pick a local Ollama model) and start asking questions.

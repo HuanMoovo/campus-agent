@@ -135,10 +135,10 @@ Mens は「学内規定・手続きの質問応答」「ローカルのナレッ
 
 | プラットフォーム | 状態 | 成果物とデータフォルダ |
 | --- | --- | --- |
-| Windows 10/11 x64 | **ビルド済み・実機検証済み** | `Mens-Setup-1.2.0-x64.exe`（NSIS、ユーザー単位で `%LOCALAPPDATA%\Programs\Mens` にインストール）、データは `%APPDATA%\CampusAgent` |
-| macOS 12+（Intel） | CI ビルド・実機未検証 | `Mens-1.2.0-x64.dmg` / `.zip`。署名・公証なしのため初回は右クリックから「開く」 |
-| macOS 12+（Apple silicon） | CI ビルド・実機未検証 | `Mens-1.2.0-arm64.dmg` / `.zip`。データは `~/Library/Application Support/CampusAgent` |
-| Linux x64 | CI ビルド・実機未検証 | `Mens-1.2.0-x86_64.AppImage`（インストール不要）と `Mens-1.2.0-amd64.deb`。データは `~/.config/CampusAgent` |
+| Windows 10/11 x64 | **ビルド済み・実機検証済み** | `Mens-Setup-1.2.1-x64.exe`（NSIS、ユーザー単位で `%LOCALAPPDATA%\Programs\Mens` にインストール）、データは `%APPDATA%\CampusAgent` |
+| macOS 12+（Intel） | CI ビルド・実機未検証 | `Mens-1.2.1-x64.dmg` / `.zip`。署名・公証なしのため初回は右クリックから「開く」 |
+| macOS 12+（Apple silicon） | CI ビルド・実機未検証 | `Mens-1.2.1-arm64.dmg` / `.zip`。データは `~/Library/Application Support/CampusAgent` |
+| Linux x64 | CI ビルド・実機未検証 | `Mens-1.2.1-x86_64.AppImage`（インストール不要）と `Mens-1.2.1-amd64.deb`。データは `~/.config/CampusAgent` |
 | Android / iOS | ネイティブアプリなし | インストール可能なウェブ版（PWA）を使います。ブラウザで配備済みサイトを開き、ホーム画面に追加してください。推論はサーバー側で実行します |
 
 > 「実機検証済み」はその OS で実際にインストール・起動し画面確認まで行ったことを指し、
@@ -146,14 +146,14 @@ Mens は「学内規定・手続きの質問応答」「ローカルのナレッ
 > マトリクス・ビルドコマンド・理由は [PLATFORMS.md](PLATFORMS.md)、結果と範囲は
 > [VERIFICATION.md](VERIFICATION.md) を参照してください。
 
-### Release 成果物（v1.2.0）
+### Release 成果物（v1.2.1）
 
 | 成果物 | サイズ | 説明 |
 | --- | --- | --- |
-| `Mens-Setup-1.2.0-x64.exe`（+ `.blockmap`） | 126,402,135 B | Windows インストーラー。実機のインストール検証で使ったのはこのファイルです |
-| `Mens-1.2.0-x64.dmg` / `Mens-1.2.0-x64.zip` | 約 158 MB | macOS Intel |
-| `Mens-1.2.0-arm64.dmg` / `Mens-1.2.0-arm64.zip` | 約 151 MB | macOS Apple silicon |
-| `Mens-1.2.0-x86_64.AppImage` / `Mens-1.2.0-amd64.deb` | 191 MB / 153 MB | Linux |
+| `Mens-Setup-1.2.1-x64.exe`（+ `.blockmap`） | 126,409,577 B | Windows インストーラー。実機のインストール検証で使ったのはこのファイルです |
+| `Mens-1.2.1-x64.dmg` / `Mens-1.2.1-x64.zip` | 約 158 MB | macOS Intel |
+| `Mens-1.2.1-arm64.dmg` / `Mens-1.2.1-arm64.zip` | 約 151 MB | macOS Apple silicon |
+| `Mens-1.2.1-x86_64.AppImage` / `Mens-1.2.1-amd64.deb` | 191 MB / 153 MB | Linux |
 
 インストーラーには `LICENSE`、`NOTICE`、`THIRD-PARTY-NOTICES.md` も含まれます（インストール後は
 `resources/` にあります）。
@@ -163,7 +163,7 @@ Mens は「学内規定・手続きの質問応答」「ローカルのナレッ
 ### 1. Windows デスクトップ版のインストール
 
 [最新リリース](https://github.com/HuanMoovo/campus-agent/releases/latest) から
-`Mens-Setup-1.2.0-x64.exe` をダウンロードして実行します（ユーザー単位インストール、管理者権限は
+`Mens-Setup-1.2.1-x64.exe` をダウンロードして実行します（ユーザー単位インストール、管理者権限は
 不要）。スタートメニューまたはデスクトップから起動し、設定画面でモデルの API キーを入力するか
 ローカルの Ollama モデルを選べば、すぐに質問できます。
 
