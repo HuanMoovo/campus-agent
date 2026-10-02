@@ -79,8 +79,9 @@ jobs:
               echo "install: $installer"
               powershell -NoProfile -Command "Start-Process -FilePath '$(cygpath -w "$installer")' -ArgumentList '/S' -Wait"
               sleep 12
-              python scripts/smoke_package.py \
-                --command "${LOCALAPPDATA:-$HOME/AppData/Local}/Programs/Mens/Mens.exe" --expect Mens
+              # cygpath -m 转成 C:/... 形式：反斜杠会被 Python 的 shlex 当转义符吃掉
+              installed="$(cygpath -m "${LOCALAPPDATA:-$HOME/AppData/Local}")/Programs/Mens/Mens.exe"
+              python scripts/smoke_package.py --command "$installed" --expect Mens
               ;;
             mac)
               dmg=$(ls release/Mens-*.dmg | head -n 1)
