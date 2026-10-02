@@ -155,6 +155,18 @@ const zh = {
   'mcp.cli.title': '命令行（CLI）',
   'mcp.cli.hint': '命令行与桌面端共用同一数据目录：在终端里问过的问题会出现在界面里，反之亦然。',
   'mcp.cli.sampleQuestion': '图书馆开放时间',
+  'auth.title': '登录',
+  'auth.subtitle': '校园智能办事工作台',
+  'auth.hint': '这台服务器开启了访问控制，请使用管理员分配的账号登录。',
+  'auth.username': '用户名',
+  'auth.password': '口令',
+  'auth.submit': '登录',
+  'auth.back': '返回浏览',
+  'auth.foot': '登录状态保存在 HttpOnly Cookie 中，有效期 14 天；口令只以散列形式存储。',
+  'auth.logout': '退出登录',
+  'auth.checking': '正在校验登录状态…',
+  'auth.signedIn': '已登录：{name}',
+  'auth.sessionExpired': '登录已过期，请重新登录。',
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -293,6 +305,18 @@ const en: Record<keyof typeof zh, string> = {
   'mcp.cli.title': 'Command line (CLI)',
   'mcp.cli.hint': 'The CLI shares the same data directory as the desktop app: questions asked in a terminal show up in the app and vice versa.',
   'mcp.cli.sampleQuestion': 'library opening hours',
+  'auth.title': 'Sign in',
+  'auth.subtitle': 'Campus assistant workspace',
+  'auth.hint': 'This server requires an account. Use the credentials your administrator gave you.',
+  'auth.username': 'Username',
+  'auth.password': 'Password',
+  'auth.submit': 'Sign in',
+  'auth.back': 'Back to browsing',
+  'auth.foot': 'Your session lives in an HttpOnly cookie for 14 days; passwords are only stored as hashes.',
+  'auth.logout': 'Sign out',
+  'auth.checking': 'Checking your session…',
+  'auth.signedIn': 'Signed in as {name}',
+  'auth.sessionExpired': 'Your session expired — please sign in again.',
 }
 
 const ja: Record<keyof typeof zh, string> = {
@@ -431,6 +455,18 @@ const ja: Record<keyof typeof zh, string> = {
   'mcp.cli.title': 'コマンドライン（CLI）',
   'mcp.cli.hint': 'CLI はデスクトップ版と同じデータディレクトリを共有します。ターミナルで質問した内容は画面にも表示されます。',
   'mcp.cli.sampleQuestion': '図書館の開館時間',
+  'auth.title': 'ログイン',
+  'auth.subtitle': 'キャンパス業務アシスタント',
+  'auth.hint': 'このサーバーはアクセス制御が有効です。管理者から配布されたアカウントでログインしてください。',
+  'auth.username': 'ユーザー名',
+  'auth.password': 'パスワード',
+  'auth.submit': 'ログイン',
+  'auth.back': '閲覧に戻る',
+  'auth.foot': 'ログイン状態は HttpOnly Cookie に 14 日間保存されます。パスワードはハッシュのみ保存します。',
+  'auth.logout': 'ログアウト',
+  'auth.checking': 'ログイン状態を確認しています…',
+  'auth.signedIn': 'ログイン中：{name}',
+  'auth.sessionExpired': 'ログインの有効期限が切れました。もう一度ログインしてください。',
 }
 
 export const catalogs: { zh: typeof zh; en: typeof zh; ja: typeof zh } = { zh, en, ja }

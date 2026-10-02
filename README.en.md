@@ -158,6 +158,21 @@ python -m app.cli mcp list | test campus | tools --json
 python -m app.cli serve --port 8000                    # start the backend only
 ```
 
+### Deploy as a website (optional)
+
+Next to the desktop build, Mens can run as a website with sign-in:
+
+- The repo ships `Dockerfile.web` (frontend build + FastAPI in one container) and `render.yaml`;
+  sign in to Render with GitHub, pick **New → Blueprint** and select this repository — see
+  [DEPLOY.md](DEPLOY.md).
+- With `AUTH_REQUIRED=true` every API except health and the auth endpoints needs a session:
+  passwords are stored as PBKDF2-HMAC-SHA256 hashes and sessions use HttpOnly cookies whose
+  tokens are hashed server-side.
+- The first start creates the admin from `AUTH_ADMIN_USERNAME` / `AUTH_ADMIN_PASSWORD`
+  (leave the password empty to have one generated and logged once).
+- The desktop build is unaffected: `AUTH_REQUIRED` defaults to off and the shell keeps using
+  its injected token.
+
 ## Platform support
 
 | Platform | Status | Artefacts and data directory |

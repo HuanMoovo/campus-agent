@@ -12,6 +12,8 @@ import { desktop, type DesktopInfo } from './desktop'
 import mensLogo from './assets/mens.png'
 import AppearanceSettings from './components/AppearanceSettings.vue'
 import McpSettings from './components/McpSettings.vue'
+import LoginView from './components/LoginView.vue'
+import { authLogout, authMe, healthInfo, type AuthUser } from './api'
 import { applyAppearance } from './appearance'
 import { version as frontendVersion } from '../package.json'
 
@@ -20,6 +22,40 @@ type ServiceKey = 'grades' | 'schedule' | 'credits' | 'classrooms' | 'repair' | 
 
 const workspace = useWorkspaceStore()
 const desktopInfo = ref<DesktopInfo | null>(null)
+// 网站部署的登录状态：checking → authenticated / anonymous（桌面版与未开启登录时直接放行）
+const authState = ref<'checking' | 'authenticated' | 'anonymous'>('checking')
+const authUser = ref<AuthUser | null>(null)
+
+async function checkAuth() {
+  try {
+    const health = await healthInfo().catch(() => ({}) as Record<string, unknown>)
+    if (!(health as { auth_required?: boolean }).auth_required) {
+      authState.value = 'authenticated'
+      return
+    }
+    const user = await authMe()
+    if (user) {
+      authUser.value = user
+      authState.value = 'authenticated'
+    } else {
+      authState.value = 'anonymous'
+    }
+  } catch {
+    // 取不到状态时不阻塞使用：桌面版与离线开发本来就关闭登录
+    authState.value = 'authenticated'
+  }
+}
+
+function onAuthenticated(user: AuthUser) {
+  authUser.value = user
+  authState.value = 'authenticated'
+  window.location.reload()
+}
+
+async function signOut() {
+  await authLogout().catch(() => undefined)
+  window.location.reload()
+}
 const desktopError = ref('')
 const desktopAction = ref('')
 const nav: { key: View; labelKey: string; icon: typeof ChatLineRound; section: string }[] = [
@@ -1026,6 +1062,7 @@ async function restartDesktop() {
 }
 
 onMounted(async () => {
+  await checkAuth()
   applyLocale()
   void loadHealth()
   void loadWebStatus()
@@ -1048,7 +1085,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="app-shell" :class="{ 'desktop-app': desktop }">
+  <LoginView v-if="authState === 'anonymous'" @authenticated="onAuthenticated" />
+  <div v-else-if="authState === 'checking'" class="auth-checking">{{ t('auth.checking') }}</div>
+  <div v-else class="app-shell" :class="{ 'desktop-app': desktop }">
     <div v-if="mobileNavOpen" class="mobile-scrim" @click="mobileNavOpen = false" />
     <aside class="sidebar" :class="{ 'sidebar-open': mobileNavOpen }">
       <div class="brand">
@@ -1066,6 +1105,7 @@ onUnmounted(() => {
       <div class="side-footer">
         <div class="connection-dot" :class="{ demo: !health }" />
         <span>{{ healthLabel }}</span>
+        <button v-if="authUser && !desktop" class="side-logout" :title="t('auth.signedIn', { name: authUser.username })" @click="signOut">{{ t('auth.logout') }}</button>
         <span class="side-version">{{ desktop ? (desktopInfo ? `v${desktopInfo.version}` : t('app.version.desktop')) : `v${frontendVersion}` }}</span>
       </div>
     </aside>

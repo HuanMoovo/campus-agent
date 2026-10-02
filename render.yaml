@@ -1,0 +1,28 @@
+# Render 蓝图：把 Mens 部署成一个带登录的免费网站。
+# 用法：Render 控制台 → New → Blueprint → 选中本仓库，其余由本文件决定。
+# 说明：免费实例 15 分钟无访问会休眠，下次访问冷启动约 30-60 秒；SQLite 随实例重建而重置。
+services:
+  - type: web
+    name: mens-campus
+    runtime: docker
+    dockerfilePath: ./Dockerfile.web
+    plan: free
+    region: singapore
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: AUTH_REQUIRED
+        value: "true"
+      - key: COOKIE_SECURE
+        value: "true"
+      # 首次启动创建的管理员账号；口令由 Render 生成，在控制台的 Environment 里查看
+      - key: AUTH_ADMIN_USERNAME
+        value: admin
+      - key: AUTH_ADMIN_PASSWORD
+        generateValue: true
+      # 只读接口若不接学校网关，保持演示数据即可
+      - key: ENABLE_RAG
+        value: "false"
+      - key: WEB_SEARCH_ENABLED
+        value: "false"
+      # 模型密钥：需要真实问答时在上面的控制台里手动补 QWEN_API_KEY / DEEPSEEK_API_KEY

@@ -393,3 +393,20 @@ button { cursor: pointer; }
   .sidebar { padding-left: env(safe-area-inset-left); }
   .main-shell { padding-right: env(safe-area-inset-right); }
 }
+
+/* 网站部署的登录态：侧栏退出按钮与校验中的占位 */
+.side-logout {
+  margin-left: auto;
+  border: none;
+  background: none;
+  color: var(--el-text-color-secondary, #909399);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.side-logout:hover { color: var(--el-color-primary, #0e7c74); background: var(--el-fill-color-light, #f5f7fa); }
+.auth-checking {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--el-text-color-secondary, #909399); font-size: 14px;
+}

@@ -32,6 +32,12 @@ class Settings(BaseSettings):
     web_search_api_key: str = ""
     web_search_max_results: int = 5
     web_search_fetch_pages: int = 2
+    # 网站部署的登录开关；桌面包保持 false（沿用外壳注入的令牌）
+    auth_required: bool = False
+    auth_admin_username: str = "admin"
+    auth_admin_password: str = ""      # 首次启动创建该账号；留空则生成随机口令并打印一次
+    session_days: int = 14
+    cookie_secure: bool = False        # https 部署置 true
 
     @property
     def allowed_plugin_hosts(self) -> set[str]:
@@ -48,7 +54,12 @@ def get_settings() -> Settings:
     if data_dir:
         if not Path(data_dir).is_absolute():
             raise ValueError("CAMPUS_DATA_DIR must be an absolute path")
-        overrides["data_dir"] = Path(data_dir).resolve()
+        resolved = Path(data_dir).resolve()
+        overrides["data_dir"] = resolved
+        # 指定数据目录时数据库也应落在同一目录，否则测试与多实例会共用同一个库。
+        # 显式配置 DATABASE_URL（例如 Postgres）时以它为准。
+        if not os.environ.get("DATABASE_URL"):
+            overrides["database_url"] = f"sqlite:///{(resolved / 'campus.db').as_posix()}"
     if desktop_enabled():
         runtime = DesktopRuntime.from_environment()
         overrides.update(

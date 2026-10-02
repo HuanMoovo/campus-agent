@@ -156,6 +156,19 @@ python -m app.cli serve --port 8000                    # 只启动本地后端
 
 `--args` 后面的内容原样传给服务器进程，因此可写连字符开头的参数；`--env KEY=VALUE` 可重复。
 
+### 网站部署（可选）
+
+除桌面版外，还可以把 Mens 部署成带登录的网站，免费平台即可运行：
+
+- 仓库自带 `Dockerfile.web`（前端构建 + FastAPI 单容器）与 `render.yaml`；
+  在 Render 用 GitHub 登录后 **New → Blueprint** 选中本仓库即可，详见 [DEPLOY.md](DEPLOY.md)。
+- 打开 `AUTH_REQUIRED=true` 后，除健康检查与登录接口外的所有接口都要求登录：
+  口令以 PBKDF2-HMAC-SHA256 散列存储，会话走 HttpOnly Cookie，服务端只存令牌散列。
+- 首次启动会按 `AUTH_ADMIN_USERNAME` / `AUTH_ADMIN_PASSWORD` 创建管理员
+  （口令留空则生成随机口令并打印在服务端日志里，仅打印一次）。
+- 桌面版不受影响：`AUTH_REQUIRED` 默认关闭，桌面包继续使用外壳注入的令牌。
+- 免费实例的限制（15 分钟休眠、SQLite 随实例重建重置）已写入 DEPLOY.md。
+
 ## 平台支持
 
 | 平台 | 状态 | 交付物与数据目录 |

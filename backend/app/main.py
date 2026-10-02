@@ -14,16 +14,16 @@ from uuid import uuid4
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
 import httpx
-from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from .agent import prepare_stream_state, run_agent, stream_model
-from . import campus_data, mcp_registry, web_search
+from . import auth, campus_data, mcp_registry, web_search
 from .config import get_settings
 from .desktop_runtime import desktop_enabled, install_desktop_routes
 from .db import Base, SessionLocal, engine, ensure_conversation_client_id, get_db
@@ -32,7 +32,7 @@ from .model_runtime import configuration as model_configuration, update_provider
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
 from .plugin_catalog import catalog_list, install_curated_plugin
 from .rag import knowledge_index
-from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, McpServerCreate, McpServerUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
+from .schemas import AuthLogin, ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, McpServerCreate, McpServerUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
 from .seed import seed_demo_documents
 from . import services
 
@@ -45,6 +45,7 @@ async def lifespan(_app: FastAPI):
     ensure_conversation_client_id()
     with SessionLocal() as db:
         seed_demo_documents(db)
+        auth.ensure_bootstrap_admin(db)
     yield
 
 
@@ -52,13 +53,76 @@ app = FastAPI(title="Mens API", version="1.2.1", lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=[origin.strip() for origin in get_settings().cors_origins.split(",") if origin.strip()], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 
-def require_admin(x_admin_token: str | None = Header(default=None), x_campus_desktop_token: str | None = Header(default=None)):
+def require_admin(x_admin_token: str | None = Header(default=None), x_campus_desktop_token: str | None = Header(default=None),
+                  request: Request = None):
     configured = get_settings().admin_token
+    supplied = x_campus_desktop_token if desktop_enabled() else x_admin_token
+    if configured and supplied and secrets.compare_digest(supplied.encode("utf-8"), configured.encode("utf-8")):
+        return
+    # 网站部署下，已登录且角色为管理员的使用者同样可以执行管理操作
+    if auth.setting("auth_required", False) and not desktop_enabled() and request is not None:
+        token = request.cookies.get(auth.COOKIE_NAME, "")
+        if token:
+            with SessionLocal() as db:
+                user = auth.resolve_session(db, token)
+            if user is not None and user.role == "admin":
+                return
     if not configured:
         raise HTTPException(503, "尚未配置 ADMIN_TOKEN")
-    supplied = x_campus_desktop_token if desktop_enabled() else x_admin_token
-    if not supplied or not secrets.compare_digest(supplied.encode("utf-8"), configured.encode("utf-8")):
-        raise HTTPException(401, "管理员令牌无效")
+    raise HTTPException(401, "管理员令牌无效")
+
+
+PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/logout", "/api/auth/me", "/api/health"}
+
+
+@app.middleware("http")
+async def require_login(request: Request, call_next):
+    """网站部署：除公开接口外，/api/* 一律要求登录 Cookie；桌面版自动豁免。"""
+    settings = get_settings()
+    path = request.url.path
+    if (not auth.setting("auth_required", False)) or desktop_enabled() or request.method == "OPTIONS":
+        return await call_next(request)
+    if not path.startswith("/api/") or path in PUBLIC_API_PATHS or path.startswith("/api/desktop"):
+        return await call_next(request)
+    token = request.cookies.get(auth.COOKIE_NAME, "")
+    if token:
+        with SessionLocal() as db:
+            user = auth.resolve_session(db, token)
+        if user is not None:
+            request.state.user = user
+            return await call_next(request)
+    return JSONResponse({"detail": "请先登录"}, status_code=401)
+
+
+@app.post("/api/auth/login")
+def auth_login(body: AuthLogin, request: Request, response: Response, db: Session = Depends(get_db)):
+    key = f"{body.username.strip().lower()}|{request.client.host if request.client else 'unknown'}"
+    if auth.rate_limited(key):
+        raise HTTPException(429, "尝试过于频繁，请五分钟后再试")
+    user = auth.authenticate(db, body.username, body.password)
+    if user is None:
+        auth.record_attempt(key)
+        raise HTTPException(401, "用户名或口令不正确")
+    auth.clear_attempts(key)
+    token = auth.start_session(db, user)
+    response.set_cookie(auth.COOKIE_NAME, token, max_age=max(1, auth.setting("session_days", 14)) * 86400,
+                        httponly=True, samesite="lax", secure=bool(auth.setting("cookie_secure", False)), path="/")
+    return {"user": auth.public_user(user)}
+
+
+@app.post("/api/auth/logout")
+def auth_logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    auth.end_session(db, request.cookies.get(auth.COOKIE_NAME, ""))
+    response.delete_cookie(auth.COOKIE_NAME, path="/")
+    return {"ok": True}
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request, db: Session = Depends(get_db)):
+    user = auth.resolve_session(db, request.cookies.get(auth.COOKIE_NAME, ""))
+    if user is None:
+        raise HTTPException(401, "未登录")
+    return {"user": auth.public_user(user)}
 
 
 def document_json(doc: Document) -> dict:
@@ -124,6 +188,7 @@ def health():
     providers = model_configuration()["providers"]
     return {"status": "ok", "rag_enabled": settings.enable_rag, "rag_degraded": knowledge_index.last_error,
             "models": {key: row["configured"] for key, row in providers.items()},
+            "auth_required": bool(auth.setting("auth_required", False)) and not desktop_enabled(),
             "demo_services": not any(campus_data.configured(kind) for kind in campus_data.KINDS)}
 
 
@@ -906,3 +971,10 @@ async def import_backup(file: UploadFile = File(...)):
 
 
 install_desktop_routes(app)
+
+# 网站部署：把前端构建产物交给后端托管（桌面版走外壳自己的静态目录）。
+# 必须在所有 /api 路由注册之后挂载，避免遮挡接口。
+WEB_FRONTEND_DIR = os.environ.get("WEB_FRONTEND_DIR", "")
+if WEB_FRONTEND_DIR and Path(WEB_FRONTEND_DIR).is_dir():
+    from starlette.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=WEB_FRONTEND_DIR, html=True, follow_symlink=False), name="web-ui")

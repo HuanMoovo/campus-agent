@@ -5,6 +5,20 @@
 
 ## 未发布
 
+### 网站部署与登录
+
+- **登录**：新增 `backend/app/auth.py`（PBKDF2-HMAC-SHA256 口令散列、服务端会话表、登录限速、
+  首次启动引导管理员）与 `users` / `sessions` 数据表；新增 `/api/auth/login|logout|me`。
+  开启 `AUTH_REQUIRED` 后，除健康检查与登录接口外的所有 `/api/*` 都要求登录 Cookie；
+  桌面版自动豁免，管理员角色可执行管理操作。
+- **界面**：新增登录页（三语）与侧栏退出入口；启动时先校验会话再渲染主界面。
+- **部署**：新增 `Dockerfile.web`（前端构建 + FastAPI 单容器）、`render.yaml`（Render 免费实例蓝图）、
+  `.dockerignore` 与 `DEPLOY.md`；后端在设置 `WEB_FRONTEND_DIR` 时托管前端产物，
+  健康检查返回 `auth_required` 供前端判断是否显示登录页。
+- **修复**：`CAMPUS_DATA_DIR` 现在同时决定 SQLite 位置（此前只改目录不改库，
+  导致测试与多实例共用同一个数据库、测试账号污染开发库）。
+
+
 ### MCP 与命令行
 
 - **MCP 客户端**：新增 `backend/app/mcp_client.py`（标准库实现 stdio 传输，按行分隔的

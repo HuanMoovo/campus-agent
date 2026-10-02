@@ -473,3 +473,31 @@ export async function listMcpTools(): Promise<McpToolEntry[]> {
   const data = await request<{ tools: McpToolEntry[] }>('/mcp/tools')
   return data.tools
 }
+
+// ------------------------------------------------------------------ 登录
+export type AuthUser = { id: string; username: string; role: string; created_at: string | null }
+
+export async function healthInfo(): Promise<{ auth_required?: boolean } & Record<string, unknown>> {
+  return request<{ auth_required?: boolean } & Record<string, unknown>>('/health')
+}
+
+export async function authMe(): Promise<AuthUser | null> {
+  try {
+    const data = await request<{ user: AuthUser }>('/auth/me')
+    return data.user
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('未登录')) return null
+    const message = error instanceof Error ? error.message : ''
+    if (/40[13]/.test(message)) return null
+    throw error
+  }
+}
+
+export async function authLogin(username: string, password: string): Promise<AuthUser> {
+  const data = await request<{ user: AuthUser }>('/auth/login', json('POST', { username, password }))
+  return data.user
+}
+
+export async function authLogout(): Promise<void> {
+  await request<{ ok: boolean }>('/auth/logout', { method: 'POST' })
+}

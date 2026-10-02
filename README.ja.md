@@ -154,6 +154,20 @@ python -m app.cli mcp list | test campus | tools --json
 python -m app.cli serve --port 8000                    # バックエンドのみ起動
 ```
 
+### ウェブサイトとしてのデプロイ（任意）
+
+デスクトップ版に加えて、ログイン付きのウェブサイトとしても公開できます：
+
+- リポジトリには `Dockerfile.web`（フロントエンドビルド + FastAPI の単一コンテナ）と
+  `render.yaml` が含まれます。Render に GitHub でログインし **New → Blueprint** で本リポジトリを
+  選ぶだけです。詳しくは [DEPLOY.md](DEPLOY.md)。
+- `AUTH_REQUIRED=true` では、ヘルスチェックと認証系以外のすべての API にログインが必要です。
+  パスワードは PBKDF2-HMAC-SHA256 のハッシュで保存し、セッションは HttpOnly Cookie
+  （サーバー側はトークンのハッシュのみ保存）です。
+- 初回起動時に `AUTH_ADMIN_USERNAME` / `AUTH_ADMIN_PASSWORD` から管理者を作成します
+  （パスワード未設定ならランダム生成し、ログに一度だけ出力）。
+- デスクトップ版には影響しません（`AUTH_REQUIRED` の既定はオフ）。
+
 ## 対応プラットフォーム
 
 | プラットフォーム | 状態 | 成果物とデータフォルダ |

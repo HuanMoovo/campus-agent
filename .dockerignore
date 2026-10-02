@@ -1,0 +1,15 @@
+# 构建上下文瘦身：镜像里只需要源码与清单
+.git
+.github
+node_modules
+**/node_modules
+frontend/dist
+backend/data
+backend/.venv
+release
+build
+tmp
+*.log
+*.png
+*.webp
+desktop/node_modules
