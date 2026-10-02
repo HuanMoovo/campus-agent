@@ -140,9 +140,22 @@ Mens 把「校园政策与办事流程问答」「本地知识库检索」「校
 - 环境变量（可放令牌）在接口层只回键名与掩码，不回显明文。
 - 本次实现只包含 stdio 传输，网络型传输（SSE / streamable HTTP）不在范围内。
 
-### 命令行（CLI）
+### 命令行（CLI，独立安装）
 
-命令行与桌面端共用同一套后端代码和数据目录，终端里问过的问题会出现在界面里：
+命令行是**独立工具**，不打包进桌面程序：它与桌面端共用同一套后端代码，数据目录默认在安装目录下，
+也可用 `CAMPUS_DATA_DIR` 指向桌面端的数据目录。一键安装（脚本会放到用户目录、建独立虚拟环境、生成 `mens` 命令）：
+
+```powershell
+# Windows（PowerShell）
+irm https://raw.githubusercontent.com/HuanMoovo/campus-agent/main/scripts/install-cli.ps1 | iex
+```
+
+```bash
+# macOS / Linux
+curl -fsSL https://raw.githubusercontent.com/HuanMoovo/campus-agent/main/scripts/install-cli.sh | bash
+```
+
+也可直接在仓库里运行（开发用）：
 
 ```bash
 python -m app.cli ask "图书馆开放时间"                 # 提问一次（--json 便于脚本处理）

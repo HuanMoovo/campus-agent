@@ -273,6 +273,7 @@
     <div class="actions">
       <a class="button primary" data-i18n="action.download" href="https://github.com/HuanMoovo/campus-agent/releases/latest">下载 Windows 安装包</a>
       <a class="button" data-i18n="action.repo" href="https://github.com/HuanMoovo/campus-agent">查看仓库</a>
+      <a class="button" data-i18n="action.cli" href="#cli">命令行</a>
       <a class="button" data-i18n="action.platforms" href="#platforms">平台支持</a>
       <a class="button" data-i18n="action.license" href="#license">开源协议</a>
       <a class="button" data-i18n="action.limits" href="#limits">已知限制</a>
@@ -423,6 +424,21 @@ python scripts/build_desktop.py --os linux --arch x64</code></pre>
 start-backend.cmd
 start-frontend.cmd</code></pre>
     <p data-i18n="start.mobile"><b>手机 / 平板：</b>部署后端（见仓库 README 的服务器部署小节），手机浏览器打开站点后“添加到主屏幕”，即可获得全屏、独立图标的类应用体验。</p>
+  </section>
+
+  <section id="cli">
+    <h2 data-i18n="cli.title">命令行（CLI）</h2>
+    <p class="sub" data-i18n="cli.sub">命令行是独立工具，不打包进桌面程序：它与桌面端共用同一套后端代码，数据目录默认在安装目录下，也可用 CAMPUS_DATA_DIR 指向桌面端的数据目录。</p>
+    <p data-i18n="cli.install"><b>安装（Windows）：</b>在 PowerShell 中执行：</p>
+    <pre><code>irm https://raw.githubusercontent.com/HuanMoovo/campus-agent/main/scripts/install-cli.ps1 | iex</code></pre>
+    <p data-i18n="cli.unix"><b>安装（macOS / Linux）：</b></p>
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/HuanMoovo/campus-agent/main/scripts/install-cli.sh | bash</code></pre>
+    <p data-i18n="cli.detail">脚本会把源码下载到用户目录（Windows 为 <code>%LOCALAPPDATA%\Mens\cli</code>，macOS/Linux 为 <code>~/.local/share/mens</code>），创建独立虚拟环境、安装依赖并生成 <code>mens</code> 命令；不改动系统 Python，卸载只需删除该目录和命令。</p>
+    <p data-i18n="cli.usage">装好后可以直接使用：</p>
+    <pre><code>mens ask "图书馆开放时间"      # 提问一次（--json 便于脚本处理）
+mens chat                      # 交互式对话：/quit 退出、/new 新对话
+mens mcp list | test campus | tools --json
+mens serve --port 8000         # 只启动本地后端</code></pre>
   </section>
 
   <section id="architecture">
@@ -607,7 +623,14 @@ start-frontend.cmd</code></pre>
       'footer.verification': 'Verification record',
       'footer.license': 'LICENSE (Apache-2.0)',
       'footer.thirdparty': 'Third-party components',
-      'footer.note': 'Mens Campus Assistant · Copyright © 2026 HuanMoovo, released under Apache-2.0. This page is kept in step with the repository, and the feature descriptions defer to the verification record there. The page collects no data.'
+      'footer.note': 'Mens Campus Assistant · Copyright © 2026 HuanMoovo, released under Apache-2.0. This page is kept in step with the repository, and the feature descriptions defer to the verification record there. The page collects no data.',
+      'action.cli': 'CLI',
+      'cli.title': 'Command line (CLI)',
+      'cli.sub': 'The CLI is a separate tool and is not bundled into the desktop app: it shares the same backend code, keeps its data inside the install directory and honours CAMPUS_DATA_DIR when you want it to reuse the desktop data.',
+      'cli.install': '<b>Install (Windows):</b> run this in PowerShell:',
+      'cli.unix': '<b>Install (macOS / Linux):</b>',
+      'cli.detail': 'The script downloads the source into your user folder (%LOCALAPPDATA%\\\\Mens\\\\cli on Windows, ~/.local/share/mens on macOS/Linux), creates its own virtual environment, installs the dependencies and adds a mens command. Your system Python is untouched; uninstalling means deleting that folder and the command.',
+      'cli.usage': 'Then use it directly:',
     },
     ja: {
       'page.title': 'Mens キャンパスアシスタント · プロジェクト紹介',
@@ -711,7 +734,14 @@ start-frontend.cmd</code></pre>
       'footer.verification': '検証記録',
       'footer.license': 'LICENSE (Apache-2.0)',
       'footer.thirdparty': 'サードパーティ',
-      'footer.note': 'Mens キャンパスアシスタント · Copyright © 2026 HuanMoovo、Apache-2.0 で公開。本ページはリポジトリの状態に合わせて更新しており、機能の説明はリポジトリの検証記録に従います。本ページはデータを収集しません。'
+      'footer.note': 'Mens キャンパスアシスタント · Copyright © 2026 HuanMoovo、Apache-2.0 で公開。本ページはリポジトリの状態に合わせて更新しており、機能の説明はリポジトリの検証記録に従います。本ページはデータを収集しません。',
+      'action.cli': 'CLI',
+      'cli.title': 'コマンドライン（CLI）',
+      'cli.sub': 'CLI は独立したツールで、デスクトップアプリには同梱しません。同じバックエンドコードを使い、データは既定でインストール先に保存され、CAMPUS_DATA_DIR でデスクトップ版のデータを指すこともできます。',
+      'cli.install': '<b>インストール（Windows）：</b>PowerShell で実行：',
+      'cli.unix': '<b>インストール（macOS / Linux）：</b>',
+      'cli.detail': 'スクリプトはユーザーフォルダ（Windows は %LOCALAPPDATA%\\\\Mens\\\\cli、macOS/Linux は ~/.local/share/mens）へソースを取得し、専用の仮想環境を作って依存関係を導入し、mens コマンドを生成します。システムの Python は変更しません。アンインストールはフォルダとコマンドを削除するだけです。',
+      'cli.usage': 'インストール後はそのまま使えます：'
     }
   };
 

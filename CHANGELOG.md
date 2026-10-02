@@ -5,6 +5,15 @@
 
 ## 未发布
 
+### CLI 改为独立安装（从程序界面移出）
+
+- 按反馈把命令行从应用界面中撤出：MCP 页不再显示 CLI 命令卡片，CLI 作为独立工具发布。
+- 新增一键安装脚本 `scripts/install-cli.ps1`（Windows）与 `scripts/install-cli.sh`（macOS/Linux）：
+  下载源码到用户目录（`%LOCALAPPDATA%\Mens\cli` / `~/.local/share/mens`）、创建独立虚拟环境、
+  安装依赖并生成 `mens` 命令，不改动系统 Python，卸载只需删除目录。
+- GitHub Pages 介绍页新增「命令行（CLI）」板块（三语），含两条安装命令与用法示例。
+
+
 ### 完整用户方案
 
 - **管理端**：`/api/auth/users`（列表 / 新建 / 改角色 / 禁用 / 删除）与

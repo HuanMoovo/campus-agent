@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
-import { Connection, CopyDocument, Delete, Refresh, VideoPlay } from '@element-plus/icons-vue'
+import { onMounted, ref } from 'vue'
+import { Connection, Delete, Refresh, VideoPlay } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { t } from '../i18n'
 import {
@@ -19,15 +19,6 @@ const expanded = ref<Record<string, boolean>>({})
 const draft = ref({ name: '', command: '', argsText: '', envText: '', enabled: true })
 const adding = ref(false)
 
-const cliCommands = computed(() => [
-  `python -m app.cli ask "${t('mcp.cli.sampleQuestion')}"`,
-  'python -m app.cli chat',
-  `python -m app.cli mcp add <${t('mcp.form.name')}> --command npx --args -y <server-package>`,
-  'python -m app.cli mcp list',
-  'python -m app.cli mcp test <name>',
-  'python -m app.cli mcp tools --json',
-  'python -m app.cli serve --port 8000',
-])
 
 async function load() {
   busy.value = true
@@ -125,14 +116,6 @@ async function remove(server: McpServer) {
   }
 }
 
-async function copy(command: string) {
-  try {
-    await navigator.clipboard.writeText(command)
-    ElMessage.success(t('mcp.copied'))
-  } catch {
-    error.value = t('mcp.copyFailed')
-  }
-}
 
 onMounted(load)
 </script>
@@ -230,18 +213,6 @@ onMounted(load)
   </ul>
   <el-empty v-if="sharedTools.length === 0" :description="t('mcp.exposedEmpty')" :image-size="72" />
 
-  <div class="install-band cli-band">
-    <div>
-      <h2>{{ t('mcp.cli.title') }}</h2>
-      <p>{{ t('mcp.cli.hint') }}</p>
-    </div>
-    <ul class="cli-list">
-      <li v-for="command in cliCommands" :key="command">
-        <code>{{ command }}</code>
-        <el-button text :icon="CopyDocument" :aria-label="t('mcp.copy')" @click="copy(command)" />
-      </li>
-    </ul>
-  </div>
 </template>
 
 <style scoped>
@@ -257,10 +228,9 @@ onMounted(load)
 .mcp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .mcp-tools { margin-top: 10px; }
 .mcp-tools-toggle { border: none; background: none; color: var(--el-color-primary); cursor: pointer; padding: 0; }
-.mcp-tools ul, .exposed-list, .cli-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-.mcp-tools li, .exposed-list li, .cli-list li { display: flex; align-items: center; gap: 10px; font-size: 13px; }
+.mcp-tools ul, .exposed-list { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mcp-tools li, .exposed-list li { display: flex; align-items: center; gap: 10px; font-size: 13px; }
 .mcp-tools li span, .exposed-list li span { color: var(--el-text-color-secondary); }
 .mcp-form { display: flex; flex-direction: column; gap: 8px; min-width: 320px; }
 .mcp-form-actions { display: flex; align-items: center; justify-content: space-between; }
-.cli-list code { flex: 1; overflow-x: auto; white-space: nowrap; }
 </style>
