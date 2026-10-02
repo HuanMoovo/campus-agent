@@ -126,7 +126,7 @@ def test_ollama_stream_deep_retries_without_thinking(monkeypatch):
     monkeypatch.setattr(agent, "provider_settings", local_settings)
     install_async_transport(monkeypatch, handler)
     chunks = asyncio.run(_collect(agent.stream_model([{"role": "user", "content": "你好"}], "ollama", "custom:latest", "deep")))
-    assert chunks == ["普", "通"]
+    assert chunks == [("content", "普"), ("content", "通")]
     assert [body["think"] for body in bodies] == [True, False]
 
 
@@ -144,7 +144,7 @@ def test_qwen_stream_thinking_follows_reasoning(monkeypatch):
     monkeypatch.setattr(agent, "provider_settings", cloud_settings)
     install_async_transport(monkeypatch, handler)
     chunks = asyncio.run(_collect(agent.stream_model([{"role": "user", "content": "你好"}], "qwen", None, "deep")))
-    assert chunks == ["好"]
+    assert chunks == [("content", "好")]
     assert bodies[0]["enable_thinking"] is True
 
     asyncio.run(_collect(agent.stream_model([{"role": "user", "content": "你好"}], "qwen")))

@@ -60,6 +60,8 @@ assistant is meant to be.
 | Honest labelling | Demo data, degraded retrieval and web sources are all labelled in the interface |
 | Conversation export | Any conversation can be exported as Markdown (for reading) or JSON (for tooling), including source links, tool calls and demo-data labels; the desktop app uses a save dialog and the web app downloads directly |
 | Reasoning effort | A two-level switch at the right of the input bar: Fast answers directly; Deep enables the model's thinking chain (Ollama think, Qwen enable_thinking, DeepSeek switches to its reasoning model) for more thorough but slower answers; the choice applies per request and is remembered on this machine |
+| Thinking trace | In Deep mode the model's thinking streams live, auto-expands while thinking and folds once the answer starts; it can be re-opened anytime, is saved with the conversation and survives a reload |
+| Rich answers | Answers render as Markdown — headings, lists, tables, highlighted code blocks, quotes and links; HTML is sanitized and links open in the system browser on the desktop build |
 
 ### Knowledge base and retrieval
 

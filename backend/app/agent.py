@@ -124,10 +124,12 @@ def call_model(messages: list[dict], requested: str, local_model: str | None = N
 
 async def stream_model(messages: list[dict], requested: str, local_model: str | None = None,
                        reasoning: str | None = None):
-    """Yield answer deltas from the selected provider (streamed twin of `call_model`).
+    """Yield (kind, text) pairs from the selected provider (streamed twin of `call_model`).
 
-    Cloud failures end the stream without text so the caller falls back like
-    `completion()` does; local failures raise LocalModelError with the same messages.
+    kind is "content" for answer deltas and "thinking" for the model's reasoning trace
+    (Ollama `message.thinking`, OpenAI-compatible `delta.reasoning_content`). Cloud failures
+    end the stream without text so the caller falls back like `completion()` does; local
+    failures raise LocalModelError with the same messages.
     """
     selected = choose_model(requested, messages[-1]["content"], local_model)
     if selected is None:
@@ -148,9 +150,14 @@ async def stream_model(messages: list[dict], requested: str, local_model: str | 
                             continue
                         payload = json.loads(line)
                         message = payload.get("message")
-                        chunk = message.get("content") if isinstance(message, dict) else None
+                        if not isinstance(message, dict):
+                            continue
+                        thinking = message.get("thinking")
+                        if isinstance(thinking, str) and thinking:
+                            yield "thinking", thinking
+                        chunk = message.get("content")
                         if isinstance(chunk, str) and chunk:
-                            yield chunk
+                            yield "content", chunk
 
         try:
             try:
@@ -187,11 +194,17 @@ async def stream_model(messages: list[dict], requested: str, local_model: str | 
                     if data == "[DONE]":
                         break
                     try:
-                        delta = json.loads(data)["choices"][0]["delta"].get("content")
+                        delta = json.loads(data)["choices"][0]["delta"]
                     except (ValueError, KeyError, IndexError, TypeError):
                         continue
-                    if isinstance(delta, str) and delta:
-                        yield delta
+                    if not isinstance(delta, dict):
+                        continue
+                    reasoning = delta.get("reasoning_content")
+                    if isinstance(reasoning, str) and reasoning:
+                        yield "thinking", reasoning
+                    content = delta.get("content")
+                    if isinstance(content, str) and content:
+                        yield "content", content
     except httpx.HTTPError:
         return
 

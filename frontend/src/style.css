@@ -232,6 +232,37 @@ button { cursor: pointer; }
 .history-item:hover .history-delete, .history-item.active .history-delete, .history-delete:focus-visible,
 .history-item:hover .history-export, .history-item.active .history-export, .history-export:focus-visible { opacity: 1; }
 .stream-caret { display: inline-block; width: 7px; height: 15px; margin-left: 3px; vertical-align: -2px; background: var(--accent-text); animation: caret-blink 1s steps(2, start) infinite; }
+.thinking-block { margin: 2px 0 6px; }
+.thinking-toggle { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; font-family: inherit; cursor: pointer; padding: 2px 0; }
+.thinking-toggle:hover { color: var(--text-secondary); }
+.thinking-text { margin: 6px 0 0; padding: 10px 12px; border-left: 2px solid var(--border); background: var(--page); border-radius: 0 6px 6px 0; color: var(--text-secondary); font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; font-family: inherit; }
+.markdown-body { white-space: normal; line-height: 1.7; }
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child { margin-bottom: 0; }
+.markdown-body p { margin: 0.45em 0; }
+.markdown-body h1 { font-size: 17px; }.markdown-body h2 { font-size: 16px; }.markdown-body h3 { font-size: 15px; }.markdown-body h4, .markdown-body h5, .markdown-body h6 { font-size: 14px; }
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 { margin: 0.8em 0 0.4em; font-weight: 700; line-height: 1.4; }
+.markdown-body ul, .markdown-body ol { margin: 0.4em 0; padding-left: 1.5em; }
+.markdown-body li { margin: 0.15em 0; }
+.markdown-body code { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; background: var(--surface-hover); border-radius: 4px; padding: 1px 5px; }
+.markdown-body pre { margin: 0.6em 0; padding: 10px 12px; background: var(--page); border: 1px solid var(--border); border-radius: 6px; overflow-x: auto; }
+.markdown-body pre code { padding: 0; background: transparent; font-size: 12px; line-height: 1.55; white-space: pre; }
+.markdown-body blockquote { margin: 0.6em 0; padding: 4px 12px; border-left: 3px solid var(--accent-border); background: var(--accent-soft); border-radius: 0 6px 6px 0; color: var(--text-secondary); }
+.markdown-body table { border-collapse: collapse; margin: 0.6em 0; font-size: 12.5px; display: block; max-width: 100%; overflow-x: auto; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 5px 10px; text-align: left; }
+.markdown-body th { background: var(--surface-hover); font-weight: 600; }
+.markdown-body a { color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
+.markdown-body hr { border: 0; border-top: 1px solid var(--border); margin: 0.9em 0; }
+.markdown-body .hljs-comment, .markdown-body .hljs-quote { color: #6a737d; font-style: italic; }
+.markdown-body .hljs-keyword, .markdown-body .hljs-selector-tag, .markdown-body .hljs-deletion { color: #cf222e; }
+.markdown-body .hljs-string, .markdown-body .hljs-attr, .markdown-body .hljs-addition { color: #0a7d43; }
+.markdown-body .hljs-number, .markdown-body .hljs-literal, .markdown-body .hljs-symbol, .markdown-body .hljs-bullet { color: #0550ae; }
+.markdown-body .hljs-title, .markdown-body .hljs-section, .markdown-body .hljs-name, .markdown-body .hljs-built_in { color: #8250df; }
+html[data-theme='dark'] .markdown-body .hljs-comment, html[data-theme='dark'] .markdown-body .hljs-quote { color: #8b949e; }
+html[data-theme='dark'] .markdown-body .hljs-keyword, html[data-theme='dark'] .markdown-body .hljs-selector-tag, html[data-theme='dark'] .markdown-body .hljs-deletion { color: #ff7b72; }
+html[data-theme='dark'] .markdown-body .hljs-string, html[data-theme='dark'] .markdown-body .hljs-attr, html[data-theme='dark'] .markdown-body .hljs-addition { color: #7ee787; }
+html[data-theme='dark'] .markdown-body .hljs-number, html[data-theme='dark'] .markdown-body .hljs-literal, html[data-theme='dark'] .markdown-body .hljs-symbol, html[data-theme='dark'] .markdown-body .hljs-bullet { color: #79c0ff; }
+html[data-theme='dark'] .markdown-body .hljs-title, html[data-theme='dark'] .markdown-body .hljs-section, html[data-theme='dark'] .markdown-body .hljs-name, html[data-theme='dark'] .markdown-body .hljs-built_in { color: #d2a8ff; }
 @keyframes caret-blink { 50% { opacity: 0; } }
 .message-note { margin: 8px 0 0; color: var(--danger-text); font-size: 11px; line-height: 1.6; }
 

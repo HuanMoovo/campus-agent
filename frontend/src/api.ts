@@ -51,7 +51,7 @@ export interface Health {
 
 export interface ConversationHistory {
   id: string
-  messages: Array<{ role: 'user' | 'assistant'; content: string; created_at: string; sources?: Source[]; tool_calls?: Array<{ name: string }>; mode?: string; partial?: boolean }>
+  messages: Array<{ role: 'user' | 'assistant'; content: string; created_at: string; sources?: Source[]; tool_calls?: Array<{ name: string }>; mode?: string; partial?: boolean; thinking?: string }>
 }
 
 export interface Plugin {
@@ -131,6 +131,7 @@ export interface ConversationSummary {
 
 export interface ChatStreamCallbacks {
   onMeta?: (conversationId: string) => void
+  onThinking?: (text: string) => void
   onDelta?: (text: string) => void
 }
 
@@ -305,6 +306,9 @@ export async function chatStream(
         if (frame.event === 'meta') {
           const id = frame.data.conversation_id
           if (typeof id === 'string' && id) callbacks.onMeta?.(id)
+        } else if (frame.event === 'thinking') {
+          const text = frame.data.text
+          if (typeof text === 'string' && text) callbacks.onThinking?.(text)
         } else if (frame.event === 'delta') {
           const text = frame.data.text
           if (typeof text === 'string' && text) {

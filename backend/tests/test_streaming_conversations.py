@@ -187,7 +187,7 @@ def test_stream_model_yields_local_deltas(monkeypatch):
     monkeypatch.setattr(agent, "provider_settings", local_provider_settings)
     install_async_transport(monkeypatch, handler)
     chunks = asyncio.run(_collect(agent.stream_model([{"role": "user", "content": "你好"}], "ollama", "organization/custom:Q4_K_M")))
-    assert chunks == ["你", "好"]
+    assert chunks == [("content", "你"), ("content", "好")]
 
 
 def test_stream_model_reports_local_failure_instead_of_falling_back(monkeypatch):
@@ -220,7 +220,7 @@ def test_stream_model_parses_cloud_sse(monkeypatch):
     })
     install_async_transport(monkeypatch, handler)
     chunks = asyncio.run(_collect(agent.stream_model([{"role": "user", "content": "你好"}], "qwen")))
-    assert chunks == ["嗨", "！"]
+    assert chunks == [("content", "嗨"), ("content", "！")]
 
 
 def test_stream_model_without_provider_yields_nothing(monkeypatch):

@@ -2,6 +2,14 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 功能批次：思考链展示与 Markdown 富文本回答（2026-10-02）
+
+- **后端（345 passed，65 subtests；+4 项思考流测试）**：`stream_model` 产出 (kind, text) 二元组（`content`/`thinking`）——Ollama 采集 `message.thinking`、OpenAI 兼容流采集 `delta.reasoning_content`；SSE 新增 `thinking` 事件（序列 ["meta","thinking","delta","done"]）；`persist_stream_exchange` 将思考写入 `result_data.thinking`（上限 12,000 字符），随 `/api/conversations/{id}` 回读。
+- **前端（22 passed，+4 项 markdown 渲染测试；vue-tsc/生产构建通过）**：新增 `src/markdown.ts`（marked + marked-highlight + highlight.js 十种语言 + DOMPurify 净化，禁 img/iframe/表单/style 等）；助手回答渲染 Markdown；思考块自动展开→自动折叠→手动开合，文案三语（查看/收起思考过程、Show/Hide thinking、思考プロセスを表示/隠す）。DOMPurify 在 happy-dom 下行为失真的用例改用 `@vitest-environment jsdom`（新增 devDependency jsdom）。
+- **隔离 HTTP 实测**（scratch 目录 + 127.0.0.1:8000 + mock 模型）：mock 流式 deep → `thinking` 3 帧先于 `delta` 5 帧；fast → 0 思考帧；**真实 `gemma4:e4b`（Ollama）深度档**：HTTP 200 / 11.1s，`thinking` 346 帧 + `delta` 170 帧；该会话回读 `thinking_len=1510`、`answer_len=279`。
+- **真实浏览器（Edge + Playwright，0 控制台错误；6 张截图逐张核验）**：思考实时可见（自动展开）→ 完成自动折叠（「查看思考过程」）→ 展开显示完整思考文本 → Markdown 渲染（h1、表格、代码块）→ 刷新后历史恢复（思考可展开、表格仍在）→ 英文界面 `Show thinking`。脚本 13 项断言中 1 项因脚本自身选择器笔误误报（`.hljs-` 非法选择器），已用 DOM 探针复核：真实浏览器代码块含 `hljs-built_in`/`hljs-string` 两个高亮 span，高亮真实生效。
+- **未验证**：思考内容不随会话导出（Markdown 导出暂无思考段）；Qwen/DeepSeek 云端 `reasoning_content` 仅 mock+单测（本机无真实 key）；非流式 `/api/chat` 不返回思考（设计如此）；桌面安装版未重新打包（随发版统一执行）。
+
 ## 功能批次：推理强度两档（快速 / 深度）（2026-10-02）
 
 - **交互（参考 Hermes 会话设计）**：聊天输入栏右端、发送按钮左侧新增无边框文字胶囊（当前档位 + 小箭头）；点击向上弹出两档菜单（快速：直接作答，响应更快；深度：开启模型思考链，更细致但更慢；当前档右侧勾选），悬停浮层「推理强度：<档位> — <说明>」；生成中与未就绪时禁用。三语：快速 / Fast / 高速，深度 / Deep / じっくり。

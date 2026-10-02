@@ -259,8 +259,11 @@ def iso_utc(value) -> str:
     return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)).isoformat()
 
 
+THINKING_LIMIT = 12000
+
+
 def persist_stream_exchange(conversation_id: str, question: str, text: str, final: dict | None, error: str,
-                            streamed_from_model: bool = False) -> None:
+                            streamed_from_model: bool = False, thinking: str = "") -> None:
     """Best-effort persistence for streamed answers; stopped or failed streams must not crash cleanup."""
     try:
         with SessionLocal() as db:
@@ -268,6 +271,8 @@ def persist_stream_exchange(conversation_id: str, question: str, text: str, fina
             if text.strip():
                 data = {"sources": (final or {}).get("sources", []), "tool_calls": (final or {}).get("tool_calls", [])}
                 data["mode"] = final.get("mode", "demo") if final is not None else ("llm" if streamed_from_model else "demo")
+                if thinking.strip():
+                    data["thinking"] = thinking[:THINKING_LIMIT]
                 if final and final.get("web"):
                     data["web"] = final["web"]
                 if final is None or error:
@@ -363,6 +368,7 @@ async def chat_stream(body: ChatRequest):
 
     async def event_stream():
         parts: list[str] = []
+        thinking_parts: list[str] = []
         final: dict | None = None
         error = ""
         streamed_from_model = False
@@ -377,9 +383,13 @@ async def chat_stream(body: ChatRequest):
                 else:
                     streamed_from_model = True
                     try:
-                        async for chunk in stream_model(prepared["messages"], prepared["requested_model"], prepared.get("local_model"), prepared.get("reasoning")):
-                            parts.append(chunk)
-                            yield sse_event("delta", {"text": chunk})
+                        async for kind, chunk in stream_model(prepared["messages"], prepared["requested_model"], prepared.get("local_model"), prepared.get("reasoning")):
+                            if kind == "thinking":
+                                thinking_parts.append(chunk)
+                                yield sse_event("thinking", {"text": chunk})
+                            else:
+                                parts.append(chunk)
+                                yield sse_event("delta", {"text": chunk})
                     except LocalModelError as exc:
                         error = str(exc)
                     if not error:
@@ -397,7 +407,7 @@ async def chat_stream(body: ChatRequest):
             logger.exception("Streamed chat failed for conversation %s", conversation_id)
             error = error or "生成回答时发生错误，请稍后重试。"
         finally:
-            persist_stream_exchange(conversation_id, question, "".join(parts), final, error, streamed_from_model)
+            persist_stream_exchange(conversation_id, question, "".join(parts), final, error, streamed_from_model, "".join(thinking_parts))
         if error:
             yield sse_event("error", {"message": error, "partial": "".join(parts), "conversation_id": conversation_id})
         else:

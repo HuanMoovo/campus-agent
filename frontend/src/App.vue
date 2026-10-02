@@ -17,9 +17,10 @@ import AccountSettings from './components/AccountSettings.vue'
 import { User as UserIcon } from '@element-plus/icons-vue'
 import { authLogout, authMe, healthInfo, type AuthUser } from './api'
 import { applyAppearance } from './appearance'
+import { renderMarkdown } from './markdown'
 import { version as frontendVersion } from '../package.json'
 
-type Message = { role: 'user' | 'assistant'; text: string; sources?: Source[]; tools?: string[]; demo?: boolean; error?: boolean; streaming?: boolean; stopped?: boolean; note?: string }
+type Message = { role: 'user' | 'assistant'; text: string; sources?: Source[]; tools?: string[]; demo?: boolean; error?: boolean; streaming?: boolean; stopped?: boolean; note?: string; thinking?: string; thinkingOpen?: boolean }
 type ServiceKey = 'grades' | 'schedule' | 'credits' | 'classrooms' | 'repair' | 'notices' | 'library' | 'dining' | 'shuttle'
 
 const workspace = useWorkspaceStore()
@@ -365,6 +366,25 @@ function friendlyError(error: unknown) {
   return error instanceof Error ? error.message : '操作失败，请稍后重试。'
 }
 
+const markdownCache = new WeakMap<Message, { text: string; html: string }>()
+
+function markdownHtml(message: Message) {
+  const cached = markdownCache.get(message)
+  if (cached && cached.text === message.text) return cached.html
+  const html = renderMarkdown(message.text)
+  markdownCache.set(message, { text: message.text, html })
+  return html
+}
+
+function onMarkdownClick(event: MouseEvent) {
+  const target = event.target as HTMLElement | null
+  const anchor = target?.closest ? target.closest('a') : null
+  if (!anchor) return
+  event.preventDefault()
+  const href = anchor.getAttribute('href') || ''
+  if (/^https?:\/\//i.test(href)) void openSourceUrl(href)
+}
+
 function selectView(view: View) {
   workspace.view = view
   mobileNavOpen.value = false
@@ -633,7 +653,7 @@ async function restoreConversation() {
   historyError.value = ''
   try {
     const result = await api.conversation(workspace.conversationId)
-    messages.value = result.messages.map(message => ({ role: message.role, text: message.content, sources: message.sources, tools: message.tool_calls?.map(call => call.name), demo: message.mode === 'demo', stopped: Boolean(message.partial) }))
+    messages.value = result.messages.map(message => ({ role: message.role, text: message.content, sources: message.sources, tools: message.tool_calls?.map(call => call.name), demo: message.mode === 'demo', stopped: Boolean(message.partial), thinking: message.thinking || undefined }))
     scrollChat()
   } catch (error) { historyError.value = t('history.loadErrorHint', { error: friendlyError(error) }) }
   finally { historyBusy.value = false }
@@ -657,7 +677,16 @@ async function sendChat(value = prompt.value) {
       { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId, web: useWeb, reasoning: workspace.reasoning },
       {
         onMeta: id => { if (id) workspace.setConversationId(id) },
-        onDelta: chunk => { assistant.text += chunk; scrollChat() },
+        onThinking: chunk => {
+          assistant.thinking = (assistant.thinking || '') + chunk
+          if (!assistant.text) assistant.thinkingOpen = true
+          scrollChat()
+        },
+        onDelta: chunk => {
+          if (!assistant.text) assistant.thinkingOpen = false
+          assistant.text += chunk
+          scrollChat()
+        },
       },
       controller.signal,
     )
@@ -1161,12 +1190,12 @@ onUnmounted(() => {
             </div>
             <div v-for="(message, index) in messages" :key="index" class="message-row" :class="message.role">
               <div class="message-avatar"><template v-if="message.role === 'user'">我</template><img v-else :src="mensLogo" alt="" /></div>
-              <div class="message-body"><div class="message-author">{{ message.role === 'user' ? '你' : 'Mens' }}<span v-if="message.demo" class="inline-demo">演示回答</span><span v-if="message.error" class="inline-demo">请求失败</span><span v-if="message.stopped" class="inline-demo">已停止</span></div><div class="message-text">{{ message.text }}<span v-if="message.streaming && message.text" class="stream-caret" /></div><p v-if="message.note" class="message-note">{{ message.note }}</p>
+              <div class="message-body"><div class="message-author">{{ message.role === 'user' ? '你' : 'Mens' }}<span v-if="message.demo" class="inline-demo">演示回答</span><span v-if="message.error" class="inline-demo">请求失败</span><span v-if="message.stopped" class="inline-demo">已停止</span></div><div class="message-text"><template v-if="message.role === 'assistant'"><div v-if="message.thinking" class="thinking-block"><button type="button" class="thinking-toggle" :aria-expanded="Boolean(message.thinkingOpen)" @click="message.thinkingOpen = !message.thinkingOpen"><el-icon :size="10"><ArrowDown v-if="message.thinkingOpen" /><ArrowRight v-else /></el-icon>{{ message.thinkingOpen ? t('chat.hideThinking') : t('chat.showThinking') }}</button><pre v-if="message.thinkingOpen" class="thinking-text">{{ message.thinking }}<span v-if="message.streaming && !message.text" class="stream-caret" /></pre></div><div class="markdown-body" @click="onMarkdownClick" v-html="markdownHtml(message)"></div></template><template v-else>{{ message.text }}</template><span v-if="message.streaming && message.text" class="stream-caret" /></div><p v-if="message.note" class="message-note">{{ message.note }}</p>
                 <div v-if="message.tools?.length" class="tool-note"><el-icon><Connection /></el-icon> 已调用 {{ message.tools.join('、') }}</div>
                 <div v-if="message.sources?.length" class="source-list"><div class="source-label">{{ message.sources.some(source => source.kind === 'web') ? t('chat.sourceLabelWeb') : t('chat.sourceLabel') }}</div><div v-for="(source, sourceIndex) in message.sources" :key="sourceIndex" class="source-item"><el-icon><Link v-if="source.kind === 'web'" /><Document v-else /></el-icon><div><strong>{{ source.title || source.source }}</strong><small v-if="source.snippet">{{ source.snippet }}</small><small v-if="source.url" class="source-url"><a v-if="!desktop" :href="source.url" target="_blank" rel="noopener noreferrer">{{ sourceHost(source.url) }} ↗</a><button v-else type="button" class="link-button" @click="openSourceUrl(source.url)">{{ sourceHost(source.url) }} ↗</button></small></div></div></div>
               </div>
             </div>
-            <div v-if="chatBusy && !streamingMessage?.text" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
+            <div v-if="chatBusy && !streamingMessage?.text && !streamingMessage?.thinking" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
             <div ref="chatEnd" />
           </div>
           <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" :placeholder="t('chat.placeholder')" :aria-label="t('chat.placeholder')" @keydown="onChatKeydown" /><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>{{ t('chat.webToggle') }}</span></label></el-tooltip><span>{{ t('chat.disclaimer') }}</span><div class="composer-actions"><el-tooltip :content="reasoningHint" placement="top"><el-dropdown trigger="click" placement="top-end" :disabled="!workspace.ready || chatBusy" @command="setReasoning"><button type="button" class="reasoning-pill" :disabled="!workspace.ready || chatBusy" :aria-label="reasoningHint"><span>{{ reasoningLabel }}</span><el-icon class="reasoning-caret" :size="10"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="fast"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningFast') }}</strong><small>{{ t('chat.reasoningFastDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'fast'"><Check /></el-icon></div></el-dropdown-item><el-dropdown-item command="deep"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningDeep') }}</strong><small>{{ t('chat.reasoningDeepDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'deep'"><Check /></el-icon></div></el-dropdown-item></el-dropdown-menu></template></el-dropdown></el-tooltip><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">{{ t('chat.stop') }}</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">{{ t('chat.send') }}</el-button></div></div></div></div>
