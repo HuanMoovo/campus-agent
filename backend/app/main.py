@@ -27,12 +27,12 @@ from . import auth, campus_data, mcp_registry, web_search
 from .config import get_settings
 from .desktop_runtime import desktop_enabled, install_desktop_routes
 from .db import Base, SessionLocal, engine, ensure_conversation_client_id, get_db
-from .models import Conversation, Document, Message, Plugin
+from .models import Conversation, Document, Message, Plugin, User
 from .model_runtime import configuration as model_configuration, update_provider, test_provider, local_models, start_download, get_download, cancel_download, resolve_local_model, LocalModelError
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
 from .plugin_catalog import catalog_list, install_curated_plugin
 from .rag import knowledge_index
-from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, McpServerCreate, McpServerUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
+from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, McpServerCreate, McpServerUpdate, PasswordChange, PasswordReset, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, UserCreate, UserUpdate, WebSearchConfigUpdate
 from .seed import seed_demo_documents
 from . import services
 
@@ -145,6 +145,86 @@ def auth_me(request: Request, db: Session = Depends(get_db)):
     if user is None:
         raise HTTPException(401, "未登录")
     return {"user": auth.public_user(user)}
+
+
+def _session_user(request: Request, db: Session):
+    return auth.resolve_session(db, request.cookies.get(auth.COOKIE_NAME, ""))
+
+
+@app.post("/api/auth/password")
+def auth_change_password(body: PasswordChange, request: Request, db: Session = Depends(get_db)):
+    """自助改密：需提供当前口令。"""
+    user = _session_user(request, db)
+    if user is None:
+        raise HTTPException(401, "未登录")
+    try:
+        auth.change_own_password(db, user, body.current, body.password)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"ok": True}
+
+
+@app.get("/api/auth/users", dependencies=[Depends(require_admin)])
+def auth_list_users(db: Session = Depends(get_db)):
+    users = auth.list_users(db)
+    return {"users": users, "admin_count": auth.count_admins(db), "total": len(users)}
+
+
+@app.post("/api/auth/users", dependencies=[Depends(require_admin)])
+def auth_create_user(body: UserCreate, db: Session = Depends(get_db)):
+    try:
+        user = auth.create_user(db, body.username, body.password, role=body.role)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"user": auth.public_user(user)}
+
+
+@app.patch("/api/auth/users/{user_id}", dependencies=[Depends(require_admin)])
+def auth_update_user(user_id: str, body: UserUpdate, request: Request, db: Session = Depends(get_db)):
+    actor = _session_user(request, db)
+    actor_id = actor.id if actor else ""
+    try:
+        if body.role is not None:
+            auth.set_role(db, user_id, body.role, actor_id)
+        if body.disabled is not None:
+            auth.set_disabled(db, user_id, body.disabled, actor_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    user = db.get(User, user_id)
+    return {"user": auth.public_user(user) if user else None}
+
+
+@app.delete("/api/auth/users/{user_id}", dependencies=[Depends(require_admin)])
+def auth_delete_user(user_id: str, request: Request, db: Session = Depends(get_db)):
+    actor = _session_user(request, db)
+    try:
+        auth.delete_user(db, user_id, actor.id if actor else "")
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"deleted": user_id}
+
+
+@app.post("/api/auth/users/{user_id}/password", dependencies=[Depends(require_admin)])
+def auth_reset_password(user_id: str, body: PasswordReset, db: Session = Depends(get_db)):
+    """管理员重置口令：改完立即踢掉该用户的全部会话。"""
+    try:
+        user = auth.reset_password(db, user_id, body.password)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"user": auth.public_user(user)}
+
+
+@app.post("/api/auth/users/{user_id}/revoke", dependencies=[Depends(require_admin)])
+def auth_revoke_sessions(user_id: str, db: Session = Depends(get_db)):
+    if db.get(User, user_id) is None:
+        raise HTTPException(404, "用户不存在")
+    return {"revoked": auth.revoke_sessions(db, user_id)}
 
 
 def document_json(doc: Document) -> dict:

@@ -77,7 +77,95 @@ def validate(username: str, password: str) -> None:
 
 def public_user(user: User) -> dict:
     return {"id": user.id, "username": user.username, "role": user.role,
-            "created_at": user.created_at.isoformat() if user.created_at else None}
+            "disabled": bool(user.disabled),
+            "created_at": user.created_at.isoformat() if user.created_at else None,
+            "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None}
+
+
+def list_users(db: DbSession) -> list[dict]:
+    rows = db.scalars(select(User).order_by(User.created_at, User.username)).all()
+    return [public_user(row) for row in rows]
+
+
+def count_admins(db: DbSession, active_only: bool = True) -> int:
+    statement = select(func.count()).select_from(User).where(User.role == "admin")
+    if active_only:
+        statement = statement.where(User.disabled.is_(False))
+    return int(db.scalar(statement) or 0)
+
+
+def _require_not_last_admin(db: DbSession, user: User, action: str) -> None:
+    """拦住"把最后一个可用管理员关掉/降级/删掉"这类会把自己锁在门外的操作。"""
+    if user.role == "admin" and not user.disabled and count_admins(db) <= 1:
+        raise ValueError(f"这是最后一个管理员，不能{action}")
+
+
+def set_role(db: DbSession, user_id: str, role: str, actor_id: str = "") -> User:
+    if role not in ("user", "admin"):
+        raise ValueError("角色只能是 user 或 admin")
+    user = db.get(User, user_id)
+    if user is None:
+        raise LookupError("用户不存在")
+    if user.id == actor_id and role != "admin":
+        raise ValueError("不能降低自己的权限")
+    if role != "admin":
+        _require_not_last_admin(db, user, "降级")
+    user.role = role
+    db.commit()
+    return user
+
+
+def set_disabled(db: DbSession, user_id: str, disabled: bool, actor_id: str = "") -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise LookupError("用户不存在")
+    if user.id == actor_id and disabled:
+        raise ValueError("不能禁用自己的账号")
+    if disabled:
+        _require_not_last_admin(db, user, "禁用")
+    user.disabled = bool(disabled)
+    if disabled:
+        revoke_sessions(db, user.id)
+    db.commit()
+    return user
+
+
+def delete_user(db: DbSession, user_id: str, actor_id: str = "") -> None:
+    user = db.get(User, user_id)
+    if user is None:
+        raise LookupError("用户不存在")
+    if user.id == actor_id:
+        raise ValueError("不能删除自己的账号")
+    _require_not_last_admin(db, user, "删除")
+    revoke_sessions(db, user.id)
+    db.delete(user)
+    db.commit()
+
+
+def revoke_sessions(db: DbSession, user_id: str) -> int:
+    result = db.execute(delete(Session).where(Session.user_id == user_id))
+    db.commit()
+    return int(result.rowcount or 0)
+
+
+def change_own_password(db: DbSession, user: User, current: str, new_password: str) -> None:
+    """自助改密：必须提供当前口令；改完踢掉其它会话，只保留当前这条。"""
+    if not verify_password(current, user.password_hash):
+        raise ValueError("当前口令不正确")
+    validate(user.username, new_password)
+    user.password_hash = hash_password(new_password)
+    db.commit()
+
+
+def reset_password(db: DbSession, user_id: str, new_password: str) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise LookupError("用户不存在")
+    validate(user.username, new_password)
+    user.password_hash = hash_password(new_password)
+    revoke_sessions(db, user.id)
+    db.commit()
+    return user
 
 
 def create_user(db: DbSession, username: str, password: str, role: str = "user") -> User:

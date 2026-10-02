@@ -195,6 +195,113 @@ class RegistrationTest(unittest.TestCase):
         self.assertEqual(self.register(code="campus-2026").status_code, 429)
 
 
+class UserAdminTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        Base.metadata.create_all(engine)
+        cls.admin = TestClient(main.app)
+        cls.student = TestClient(main.app)
+        cls.settings = get_settings()
+
+    def setUp(self):
+        with SessionLocal() as db:
+            for row in db.query(User).all():
+                db.delete(row)
+            db.commit()
+            auth.create_user(db, "root", "root-pass-1234", role="admin")
+            auth.create_user(db, "kid", "kid-pass-1234", role="user")
+        auth._attempts.clear()
+        self.settings.auth_required = True
+        self.settings.allow_registration = False
+        self.admin.post("/api/auth/login", json={"username": "root", "password": "root-pass-1234"})
+        self.student.post("/api/auth/login", json={"username": "kid", "password": "kid-pass-1234"})
+
+    def tearDown(self):
+        self.settings.auth_required = False
+
+    def users(self):
+        response = self.admin.get("/api/auth/users")
+        self.assertEqual(response.status_code, 200, response.text)
+        return {row["username"]: row for row in response.json()["users"]}
+
+    def test_regular_user_cannot_manage(self):
+        self.assertEqual(self.student.get("/api/auth/users").status_code, 401)
+        self.assertEqual(self.student.post("/api/auth/users",
+                                           json={"username": "x1", "password": "x1-pass-1234"}).status_code, 401)
+
+    def test_admin_creates_and_lists_users(self):
+        response = self.admin.post("/api/auth/users",
+                                   json={"username": "newbie", "password": "newbie-pass-1", "role": "admin"})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["user"]["role"], "admin")
+        listing = self.users()
+        self.assertEqual(sorted(listing), ["kid", "newbie", "root"])
+        self.assertEqual(self.admin.get("/api/auth/users").json()["admin_count"], 2)
+
+    def test_duplicate_username_is_rejected(self):
+        response = self.admin.post("/api/auth/users", json={"username": "kid", "password": "kid-pass-1234"})
+        self.assertEqual(response.status_code, 422)
+
+    def test_promote_and_demote(self):
+        kid = self.users()["kid"]
+        self.assertEqual(self.admin.patch(f"/api/auth/users/{kid['id']}", json={"role": "admin"}).status_code, 200)
+        self.assertEqual(self.users()["kid"]["role"], "admin")
+        self.assertEqual(self.admin.patch(f"/api/auth/users/{kid['id']}", json={"role": "user"}).status_code, 200)
+
+    def test_disable_kills_sessions_and_blocks_login(self):
+        kid = self.users()["kid"]
+        self.assertEqual(self.student.get("/api/auth/me").status_code, 200)
+        self.assertEqual(self.admin.patch(f"/api/auth/users/{kid['id']}", json={"disabled": True}).status_code, 200)
+        self.assertEqual(self.student.get("/api/auth/me").status_code, 401)
+        self.assertEqual(self.student.post("/api/auth/login",
+                                           json={"username": "kid", "password": "kid-pass-1234"}).status_code, 401)
+
+    def test_cannot_disable_or_delete_self(self):
+        root = self.users()["root"]
+        self.assertEqual(self.admin.patch(f"/api/auth/users/{root['id']}", json={"disabled": True}).status_code, 422)
+        self.assertEqual(self.admin.delete(f"/api/auth/users/{root['id']}").status_code, 422)
+
+    def test_last_admin_is_protected(self):
+        kid = self.users()["kid"]
+        self.admin.patch(f"/api/auth/users/{kid['id']}", json={"role": "admin"})
+        both = self.users()
+        # 现在有两个管理员：降级 kid 可以
+        self.assertEqual(self.admin.patch(f"/api/auth/users/{both['kid']['id']}", json={"role": "user"}).status_code, 200)
+        # 只剩 root 一个管理员：再降级就被拦
+        self.assertEqual(self.admin.patch(f"/api/auth/users/{both['root']['id']}", json={"role": "user"}).status_code, 422)
+
+    def test_admin_resets_password_and_revokes_sessions(self):
+        kid = self.users()["kid"]
+        self.assertEqual(self.admin.post(f"/api/auth/users/{kid['id']}/password",
+                                         json={"password": "reset-pass-99"}).status_code, 200)
+        self.assertEqual(self.student.get("/api/auth/me").status_code, 401)   # 旧会话被踢
+        self.assertEqual(self.student.post("/api/auth/login",
+                                           json={"username": "kid", "password": "reset-pass-99"}).status_code, 200)
+
+    def test_revoke_sessions_endpoint(self):
+        kid = self.users()["kid"]
+        self.assertEqual(self.student.get("/api/auth/me").status_code, 200)
+        response = self.admin.post(f"/api/auth/users/{kid['id']}/revoke")
+        self.assertEqual(response.status_code, 200)
+        self.assertGreaterEqual(response.json()["revoked"], 1)
+        self.assertEqual(self.student.get("/api/auth/me").status_code, 401)
+
+    def test_delete_user_cleans_sessions(self):
+        kid = self.users()["kid"]
+        self.assertEqual(self.admin.delete(f"/api/auth/users/{kid['id']}").status_code, 200)
+        self.assertNotIn("kid", self.users())
+        self.assertEqual(self.student.get("/api/auth/me").status_code, 401)
+
+    def test_self_service_password_change(self):
+        wrong = self.student.post("/api/auth/password", json={"current": "nope", "password": "brand-new-99"})
+        self.assertEqual(wrong.status_code, 422)
+        right = self.student.post("/api/auth/password", json={"current": "kid-pass-1234", "password": "brand-new-99"})
+        self.assertEqual(right.status_code, 200, right.text)
+        fresh = TestClient(main.app)
+        self.assertEqual(fresh.post("/api/auth/login",
+                                    json={"username": "kid", "password": "brand-new-99"}).status_code, 200)
+
+
 class BootstrapTest(unittest.TestCase):
     def test_bootstrap_creates_admin_only_when_enabled(self):
         with SessionLocal() as db:

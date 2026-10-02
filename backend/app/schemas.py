@@ -146,6 +146,26 @@ class AuthRegister(RequestModel):
     code: str = Field(default="", max_length=200)
 
 
+class UserCreate(RequestModel):
+    username: str = Field(min_length=3, max_length=64)
+    password: str = Field(min_length=8, max_length=200)
+    role: Literal["user", "admin"] = "user"
+
+
+class UserUpdate(RequestModel):
+    role: Literal["user", "admin"] | None = None
+    disabled: bool | None = None
+
+
+class PasswordChange(RequestModel):
+    current: str = Field(min_length=1, max_length=200)
+    password: str = Field(min_length=8, max_length=200)
+
+
+class PasswordReset(RequestModel):
+    password: str = Field(min_length=8, max_length=200)
+
+
 class McpServerCreate(RequestModel):
     """登记一个 MCP 服务器；env 里可放令牌，接口只回掩码不回显。"""
 

@@ -13,6 +13,8 @@ import mensLogo from './assets/mens.png'
 import AppearanceSettings from './components/AppearanceSettings.vue'
 import McpSettings from './components/McpSettings.vue'
 import LoginView from './components/LoginView.vue'
+import AccountSettings from './components/AccountSettings.vue'
+import { User as UserIcon } from '@element-plus/icons-vue'
 import { authLogout, authMe, healthInfo, type AuthUser } from './api'
 import { applyAppearance } from './appearance'
 import { version as frontendVersion } from '../package.json'
@@ -64,6 +66,7 @@ const nav: { key: View; labelKey: string; icon: typeof ChatLineRound; section: s
   { key: 'knowledge', labelKey: 'nav.knowledge', icon: FolderOpened, section: 'admin' },
   { key: 'plugins', labelKey: 'nav.plugins', icon: Connection, section: 'admin' },
   { key: 'mcp', labelKey: 'nav.mcp', icon: Connection, section: 'admin' },
+  { key: 'account', labelKey: 'nav.account', icon: UserIcon, section: 'admin' },
   { key: 'settings', labelKey: 'nav.settings', icon: Setting, section: 'admin' },
 ]
 const navSections = ['workspace', 'admin']
@@ -1208,6 +1211,10 @@ onUnmounted(() => {
 
         <section v-else-if="workspace.view === 'mcp'" class="content-view">
           <McpSettings :desktop="Boolean(desktop)" />
+        </section>
+
+        <section v-else-if="workspace.view === 'account'" class="content-view">
+          <AccountSettings />
         </section>
 
         <section v-else class="content-view settings-view">

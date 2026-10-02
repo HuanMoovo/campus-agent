@@ -475,7 +475,8 @@ export async function listMcpTools(): Promise<McpToolEntry[]> {
 }
 
 // ------------------------------------------------------------------ 登录
-export type AuthUser = { id: string; username: string; role: string; created_at: string | null }
+export type AuthUser = { id: string; username: string; role: string; created_at: string | null;
+  disabled?: boolean; last_login_at?: string | null }
 
 export async function healthInfo(): Promise<{ auth_required?: boolean } & Record<string, unknown>> {
   return request<{ auth_required?: boolean } & Record<string, unknown>>('/health')
@@ -505,4 +506,38 @@ export async function authLogout(): Promise<void> {
 export async function authRegister(username: string, password: string, code = ''): Promise<AuthUser> {
   const data = await request<{ user: AuthUser }>('/auth/register', json('POST', { username, password, code }))
   return data.user
+}
+
+// ------------------------------------------------------------------ 用户管理
+export type ManagedUser = AuthUser & { disabled: boolean; last_login_at: string | null }
+
+export async function listUsers(): Promise<ManagedUser[]> {
+  const data = await request<{ users: ManagedUser[] }>('/auth/users')
+  return data.users
+}
+
+export async function createUser(username: string, password: string, role: 'user' | 'admin'): Promise<ManagedUser> {
+  const data = await request<{ user: ManagedUser }>('/auth/users', json('POST', { username, password, role }))
+  return data.user
+}
+
+export async function updateUser(id: string, patch: { role?: 'user' | 'admin'; disabled?: boolean }): Promise<ManagedUser> {
+  const data = await request<{ user: ManagedUser }>(`/auth/users/${encodeURIComponent(id)}`, json('PATCH', patch))
+  return data.user
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  await request<void>(`/auth/users/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function resetUserPassword(id: string, password: string): Promise<void> {
+  await request<{ user: ManagedUser }>(`/auth/users/${encodeURIComponent(id)}/password`, json('POST', { password }))
+}
+
+export async function revokeUserSessions(id: string): Promise<{ revoked: number }> {
+  return request<{ revoked: number }>(`/auth/users/${encodeURIComponent(id)}/revoke`, { method: 'POST' })
+}
+
+export async function changePassword(current: string, password: string): Promise<void> {
+  await request<{ ok: boolean }>('/auth/password', json('POST', { current, password }))
 }
