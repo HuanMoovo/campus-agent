@@ -17,6 +17,20 @@
   - 三次会话均 **零 console 错误**。
 - **未验证**：Safari / iOS 未跑；深色主题仅按系统偏好与手动切换验证，未做打印样式检查。
 
+## 验收补强批次：签名管线、产物冒烟与网关契约（2026-10-02）
+
+- **签名管线（本机实测）**：对安装包副本执行 `scripts/sign_release.ps1 -SelfSignedDemo`，
+  signtool 逐步完成签名与验签，`Get-AuthenticodeSignature` 返回 `UnknownError`（自签名根不受信任，
+  属预期），签名主体与指纹正确，演练后证书与临时 pfx 已清理。**正式分发仍需 CA 证书与时间戳**。
+- **校验清单**：`scripts/release_checksums.py` 为 `release/` 下的安装包生成 `SHA256SUMS.txt`，
+  本机产出 3 项（1.1.0 / 1.2.0 / 1.2.1），其中 1.2.1 的哈希与 VERIFICATION 记录一致。
+- **产物冒烟（本机实测）**：`scripts/smoke_package.py` 对**已安装的 1.2.1** 执行——
+  启动后从 CDP 取到内部地址 `http://127.0.0.1:11134/`，探测返回 401（外部请求无外壳请求头，
+  说明内置后端已启动且鉴权生效），脚本判定「冒烟通过」。
+- **CI 平台冒烟（待运行结果）**：`build-desktop.yml` 新增冒烟步骤，在 Windows 上静默安装后启动，
+  macOS 上挂载 dmg 后启动 .app，Linux 上以 `--appimage-extract-and-run` 配合 xvfb 启动；
+  通过标题为 “Smoke-test the packaged app” 的步骤判定。**结果以 Actions 页面为准**。
+
 ## 发布批次：Mens 1.2.1（2026-10-02）
 
 - **版本统一为 1.2.1**：`desktop/package.json`、`frontend/package.json`（含两个 lock 文件的根包）、

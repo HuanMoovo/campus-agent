@@ -65,6 +65,39 @@ jobs:
           python -m pip install -r requirements-build.txt
           python scripts/build_desktop.py --os ${{ matrix.target_os }} --arch ${{ matrix.arch }}
 
+      - name: Smoke-test the packaged app
+        shell: bash
+        run: |
+          set -e
+          # 产物跑得起来才算通过：启动内置后端与界面，从调试端口取出内部地址后再退出。
+          # 401 属于预期（桌面后端要求外壳注入的请求头），脚本会据此判定鉴权生效。
+          case "${{ matrix.target_os }}" in
+            win)
+              installer=$(ls release/Mens-Setup-*.exe | head -n 1)
+              echo "install: $installer"
+              powershell -NoProfile -Command "Start-Process -FilePath '$(cygpath -w "$installer")' -ArgumentList '/S' -Wait"
+              sleep 12
+              python scripts/smoke_package.py \
+                --command "${LOCALAPPDATA:-$HOME/AppData/Local}/Programs/Mens/Mens.exe" --expect Mens
+              ;;
+            mac)
+              dmg=$(ls release/Mens-*.dmg | head -n 1)
+              echo "attach: $dmg"
+              hdiutil attach "$dmg" -nobrowse -quiet -mountpoint /tmp/mens-dmg
+              cp -R /tmp/mens-dmg/*.app /tmp/Mens.app
+              hdiutil detach /tmp/mens-dmg -quiet
+              xattr -dr com.apple.quarantine /tmp/Mens.app || true
+              python scripts/smoke_package.py --command "/tmp/Mens.app/Contents/MacOS/Mens" --expect Mens
+              ;;
+            linux)
+              appimage=$(ls release/*.AppImage | head -n 1)
+              chmod +x "$appimage"
+              command -v xvfb-run >/dev/null 2>&1 || sudo apt-get install -y -qq xvfb
+              python scripts/smoke_package.py \
+                --command "xvfb-run -a $appimage --appimage-extract-and-run --no-sandbox" --expect Mens
+              ;;
+          esac
+
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
