@@ -42,6 +42,14 @@ def fetch(url: str) -> tuple[int, str]:
 
 
 def main() -> int:
+    # Windows 控制台默认 cp1252，直接打印中文会抛 UnicodeEncodeError（CI 上真踩过），
+    # 这里把标准输出切到 UTF-8 并对无法编码的字符降级替换。
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--command", required=True, help="启动产物的命令（可用引号）")
     parser.add_argument("--port", type=int, default=9700, help="CDP 调试端口")

@@ -67,6 +67,8 @@ jobs:
 
       - name: Smoke-test the packaged app
         shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
         run: |
           set -e
           # 产物跑得起来才算通过：启动内置后端与界面，从调试端口取出内部地址后再退出。
