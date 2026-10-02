@@ -129,6 +129,33 @@ Mens 把「校园政策与办事流程问答」「本地知识库检索」「校
 | 调用方式 | 由管理员显式试调用；插件只能返回 JSON，普通问答不会自动向外部插件发送消息 |
 | 出站约束 | 与联网搜索相同的 HTTPS / 固定 IP / 禁跳转 / 限额策略 |
 
+### MCP 服务器（外部工具）
+
+系统同时是一个 MCP（Model Context Protocol）客户端，用标准输入输出连接本机的 MCP 服务器，
+把它们的工具按需交给模型：
+
+- 在「MCP」页登记服务器（启动命令、参数、环境变量），点「测试」会**真实启动一次子进程**，
+  完成握手并拉取工具清单；只有已启用且测试过的服务器才会把工具暴露给模型。
+- 工具名统一为 `mcp__<服务器>__<工具>`，参数原样透传，一次问答最多调用一个，结果原样展示。
+- 环境变量（可放令牌）在接口层只回键名与掩码，不回显明文。
+- 本次实现只包含 stdio 传输，网络型传输（SSE / streamable HTTP）不在范围内。
+
+### 命令行（CLI）
+
+命令行与桌面端共用同一套后端代码和数据目录，终端里问过的问题会出现在界面里：
+
+```bash
+python -m app.cli ask "图书馆开放时间"                 # 提问一次（--json 便于脚本处理）
+python -m app.cli chat                                 # 交互式对话：/quit 退出、/new 新对话
+python -m app.cli mcp add campus --command npx --args -y <server-package>
+python -m app.cli mcp list                             # 已登记服务器
+python -m app.cli mcp test campus                      # 真实连通性检查
+python -m app.cli mcp tools --json                     # 暴露给模型的工具
+python -m app.cli serve --port 8000                    # 只启动本地后端
+```
+
+`--args` 后面的内容原样传给服务器进程，因此可写连字符开头的参数；`--env KEY=VALUE` 可重复。
+
 ## 平台支持
 
 | 平台 | 状态 | 交付物与数据目录 |

@@ -152,6 +152,9 @@ async def stream_model(messages: list[dict], requested: str, local_model: str | 
         return
 
 
+from . import mcp_registry  # MCP 工具（模块间无循环依赖，放在工具表前便于对照）
+
+
 TOOLS = [
     {"type": "function", "function": {"name": name, "description": description, "parameters": {
         "type": "object", "properties": {}, "additionalProperties": False,
@@ -167,12 +170,18 @@ TOOLS = [
 
 def plan(state: AgentState) -> AgentState:
     question = state["question"]
+    entries = state.get("mcp_entries") or []
+    instruction = ("你是校园查询计划器。只有用户明确请求查询成绩、课表、学分统计、空教室时才选择工具，每次最多一个。"
+                   "政策、流程、申请条件和普通问答不选择工具。报修必须由用户在校园服务表单中确认提交。结合历史理解追问。")
+    if entries:
+        instruction += ("另外，用户明确要求使用某个外部工具（工具名以 mcp__ 开头）时可以选择它，每次最多一个；"
+                        "只是普通提问、没有明确工具意图时不要选择外部工具。")
     # Use deterministic service routing for local models that may not support tools.
     proposal = None if state.get("requested_model") == "ollama" else completion([
-        {"role": "system", "content": "你是校园查询计划器。只有用户明确请求查询成绩、课表、学分统计、空教室时才选择工具，每次最多一个。政策、流程、申请条件和普通问答不选择工具。报修必须由用户在校园服务表单中确认提交。结合历史理解追问。"},
+        {"role": "system", "content": instruction},
         *state.get("history", [])[-6:],
         {"role": "user", "content": question},
-    ], state.get("requested_model", "auto"), TOOLS)
+    ], state.get("requested_model", "auto"), TOOLS + mcp_registry.openai_tools(entries))
     if proposal:
         try:
             calls = proposal.get("tool_calls") or []
@@ -185,6 +194,10 @@ def plan(state: AgentState) -> AgentState:
                 allowed = {"building", "min_seats"} if intent == "classrooms" else set()
                 if not set(arguments) - allowed:
                     return {"intent": intent, "arguments": arguments}
+            if isinstance(intent, str) and any(entry["function"] == intent for entry in entries) and isinstance(arguments, dict):
+                # 外部工具的参数按同一份 schema 校验体积，防止误传超大负载
+                if len(json.dumps(arguments, ensure_ascii=False)) <= 8192:
+                    return {"intent": intent, "arguments": arguments}
         except (ValueError, TypeError, KeyError, IndexError, AttributeError):
             pass
     if any(word in question for word in ("政策", "规定", "流程", "如何", "怎么办", "申请条件")):
@@ -193,6 +206,23 @@ def plan(state: AgentState) -> AgentState:
         if any(word in question for word in words):
             return {"intent": intent, "arguments": {}}
     return {"intent": "knowledge", "arguments": {}}
+
+
+def make_service_node(db: Session):
+    """服务节点：校园只读服务与 MCP 外部工具都从这里执行。"""
+    def node(state: AgentState) -> AgentState:
+        intent = state["intent"]
+        if isinstance(intent, str) and intent.startswith(mcp_registry.PREFIX):
+            entry = next((item for item in (state.get("mcp_entries") or []) if item["function"] == intent), None)
+            if entry is None:
+                outcome = {"ok": False, "error": "工具不存在或对应服务器已停用", "server": "", "tool": "", "text": ""}
+            else:
+                outcome = mcp_registry.call(db, intent, state.get("arguments") or {})
+            return {"tool_result": {"mcp": outcome},
+                    "tool_calls": [{"name": intent, "arguments": state.get("arguments") or {}, "result": outcome}]}
+        return execute_service(state)
+
+    return node
 
 
 def execute_service(state: AgentState) -> AgentState:
@@ -244,6 +274,12 @@ def make_knowledge_node(db: Session, use_web: bool = False):
 
 def respond(state: AgentState) -> AgentState:
     intent = state["intent"]
+    if isinstance(intent, str) and intent.startswith(mcp_registry.PREFIX):
+        outcome = (state.get("tool_result") or {}).get("mcp") or {}
+        if not outcome.get("ok"):
+            return {"answer": "MCP 工具调用未成功：" + (outcome.get("error") or "未知错误"), "mode": "mcp"}
+        text = outcome.get("text") or "（工具没有返回文本内容）"
+        return {"answer": f"MCP 服务器「{outcome.get('server')}」的工具「{outcome.get('tool')}」返回：\n\n{text}", "mode": "mcp"}
     if intent != "knowledge":
         result = state["tool_result"]
         labels = {"grades": "成绩", "schedule": "课表", "credits": "学分统计", "classrooms": "空教室"}
@@ -313,20 +349,21 @@ def needs_campus_evidence(state: AgentState) -> bool:
 def run_agent(db: Session, question: str, history: list[dict], model: str = "auto",
               local_model: str | None = None, use_web: bool = False) -> AgentState:
     initial: AgentState = {"question": question, "history": history, "requested_model": model}
+    initial["mcp_entries"] = mcp_registry.catalog(db)
     if local_model is not None:
         initial["local_model"] = local_model
     try:
         from langgraph.graph import END, START, StateGraph
     except ImportError:
         state = {**initial, **plan(initial)}
-        state.update(execute_service(state) if state["intent"] != "knowledge" else make_knowledge_node(db, use_web)(state))
+        state.update(make_service_node(db)(state) if state["intent"] != "knowledge" else make_knowledge_node(db, use_web)(state))
         state.update(respond(state))
         return state
 
     graph = StateGraph(AgentState)
     graph.add_node("plan", plan)
     graph.add_node("retrieve", make_knowledge_node(db, use_web))
-    graph.add_node("execute_service", execute_service)
+    graph.add_node("execute_service", make_service_node(db))
     graph.add_node("respond", respond)
     graph.add_edge(START, "plan")
     graph.add_conditional_edges("plan", lambda state: "retrieve" if state["intent"] == "knowledge" else "execute_service")
@@ -344,11 +381,12 @@ def prepare_stream_state(db: Session, question: str, history: list[dict], model:
     metadata the caller needs to stream the model answer.
     """
     initial: AgentState = {"question": question, "history": history, "requested_model": model}
+    initial["mcp_entries"] = mcp_registry.catalog(db)
     if local_model is not None:
         initial["local_model"] = local_model
     state = {**initial, **plan(initial)}
     if state["intent"] != "knowledge":
-        state.update(execute_service(state))
+        state.update(make_service_node(db)(state))
         final = {**respond(state), "sources": [], "tool_calls": state.get("tool_calls", [])}
         return {"direct": final}
     state.update(make_knowledge_node(db, use_web)(state))

@@ -135,6 +135,24 @@ class PluginUpdate(RequestModel):
         return value
 
 
+class McpServerCreate(RequestModel):
+    """登记一个 MCP 服务器；env 里可放令牌，接口只回掩码不回显。"""
+
+    name: str = Field(min_length=1, max_length=40)
+    command: str = Field(min_length=1, max_length=300)
+    args: list[str] = Field(default_factory=list, max_length=30)
+    env: dict[str, str] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class McpServerUpdate(RequestModel):
+    name: str | None = Field(default=None, max_length=40)
+    command: str | None = Field(default=None, max_length=300)
+    args: list[str] | None = Field(default=None, max_length=30)
+    env: dict[str, str] | None = None
+    enabled: bool | None = None
+
+
 class RepairCreate(RequestModel):
     location: str = Field(min_length=2, max_length=120)
     issue: str = Field(min_length=5, max_length=2000)

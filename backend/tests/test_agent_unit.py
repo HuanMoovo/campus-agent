@@ -24,6 +24,10 @@ stubs = {
     "_campus_agent_test.rag": module("_campus_agent_test.rag", knowledge_index=retriever),
     "_campus_agent_test.models": module("_campus_agent_test.models", Repair=object),
     "_campus_agent_test.schemas": module("_campus_agent_test.schemas", RepairCreate=object),
+    # MCP 依赖整体替换：本文件只验证校园只读工具的有界路由
+    "_campus_agent_test.mcp_registry": module("_campus_agent_test.mcp_registry", PREFIX="mcp__",
+                                              catalog=lambda db: [], openai_tools=lambda entries: [],
+                                              call=lambda db, name, args=None: {}),
     "sqlalchemy": module("sqlalchemy", select=lambda *args, **kwargs: None),
     "sqlalchemy.orm": module("sqlalchemy.orm", Session=object),
     "httpx": module("httpx", HTTPError=type("HTTPError", (Exception,), {})),

@@ -185,7 +185,7 @@ const base = desktop ? '/api' : import.meta.env.VITE_API_BASE_URL || '/api'
 async function request<T>(path: string, init?: RequestInit, admin = false): Promise<T> {
   let response: Response
   try {
-    const needsAdmin = admin || ((path.startsWith('/documents') || path.startsWith('/plugins') || path.startsWith('/models') || path.startsWith('/campus-sources') || path.startsWith('/backup') || path.startsWith('/web')) && init?.method !== 'GET' && init?.method !== undefined)
+    const needsAdmin = admin || ((path.startsWith('/documents') || path.startsWith('/plugins') || path.startsWith('/mcp') || path.startsWith('/models') || path.startsWith('/campus-sources') || path.startsWith('/backup') || path.startsWith('/web')) && init?.method !== 'GET' && init?.method !== undefined)
     const headers = new Headers(init?.headers)
     if (needsAdmin && !desktop) headers.set('X-Admin-Token', sessionStorage.getItem('campus-agent-admin-token') || '')
     response = await fetch(`${base}${path}`, { ...init, headers })
@@ -409,4 +409,67 @@ export const api = {
     form.append('file', new Blob([bytes.slice().buffer as ArrayBuffer], { type: 'application/zip' }), name)
     return request<{ restored: string[]; failed: string[]; restart_required: boolean }>('/backup/import', { method: 'POST', body: form })
   },
+}
+
+
+// ------------------------------------------------------------------ MCP 服务器
+export type McpTool = { name: string; description: string; inputSchema: Record<string, unknown> }
+export type McpServer = {
+  id: string
+  name: string
+  command: string
+  args: string[]
+  env_keys: string[]
+  env_masked: Record<string, string>
+  enabled: boolean
+  tools: McpTool[]
+  tool_count: number
+  last_checked_at: string | null
+  last_error: string
+}
+export type McpServerInput = {
+  name: string
+  command: string
+  args?: string[]
+  env?: Record<string, string>
+  enabled?: boolean
+}
+export type McpToolEntry = { server: string; tool: string; function: string; description: string }
+export type McpCheckResult = {
+  ok: boolean
+  error?: string
+  server?: string
+  version?: string
+  protocolVersion?: string
+  tool_count?: number
+  tools?: McpTool[]
+  elapsed_ms?: number
+}
+
+export async function listMcpServers(): Promise<McpServer[]> {
+  const data = await request<{ servers: McpServer[] }>('/mcp/servers')
+  return data.servers
+}
+
+export async function createMcpServer(input: McpServerInput): Promise<McpServer> {
+  const data = await request<{ server: McpServer }>('/mcp/servers', json('POST', input))
+  return data.server
+}
+
+export async function updateMcpServer(id: string, patch: Partial<McpServerInput>): Promise<McpServer> {
+  const data = await request<{ server: McpServer }>(`/mcp/servers/${encodeURIComponent(id)}`, json('PUT', patch))
+  return data.server
+}
+
+export async function deleteMcpServer(id: string): Promise<void> {
+  await request<void>(`/mcp/servers/${encodeURIComponent(id)}`, { method: 'DELETE' })
+}
+
+export async function testMcpServer(id: string): Promise<McpCheckResult> {
+  return request<McpCheckResult>(`/mcp/servers/${encodeURIComponent(id)}/test`, { method: 'POST' })
+}
+
+export async function listMcpTools(): Promise<McpToolEntry[]> {
+  const data = await request<{ tools: McpToolEntry[] }>('/mcp/tools')
+  return data.tools
 }

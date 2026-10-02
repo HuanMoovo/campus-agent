@@ -132,6 +132,32 @@ assistant is meant to be.
 | Invocation | An administrator invokes them explicitly; plugins may only return JSON, and ordinary Q&A never sends messages to external plugins |
 | Outbound limits | The same HTTPS / pinned-IP / no-redirect / capped policy as web search |
 
+### MCP servers (external tools)
+
+Mens is also an MCP (Model Context Protocol) client: it starts local MCP servers over stdio and
+hands their tools to the model when a question needs them.
+
+- Register a server on the **MCP** page (command, arguments, environment variables). **Test** really
+  spawns the process, completes the handshake and lists its tools; only enabled and tested servers
+  expose tools to the model.
+- Tools are namespaced as `mcp__<server>__<tool>`; at most one is called per question and the result
+  is shown as returned.
+- Environment values (tokens live there) are returned as keys plus a mask, never in clear text.
+- Only the stdio transport is implemented; SSE / streamable HTTP are out of scope.
+
+### Command line (CLI)
+
+The CLI shares the backend code and data directory with the desktop app, so questions asked in a
+terminal show up in the app and vice versa:
+
+```bash
+python -m app.cli ask "library opening hours"          # one-shot question (--json for scripts)
+python -m app.cli chat                                 # interactive: /quit, /new
+python -m app.cli mcp add campus --command npx --args -y <server-package>
+python -m app.cli mcp list | test campus | tools --json
+python -m app.cli serve --port 8000                    # start the backend only
+```
+
 ## Platform support
 
 | Platform | Status | Artefacts and data directory |

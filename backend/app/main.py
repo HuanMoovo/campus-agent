@@ -23,7 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
 from .agent import prepare_stream_state, run_agent, stream_model
-from . import campus_data, web_search
+from . import campus_data, mcp_registry, web_search
 from .config import get_settings
 from .desktop_runtime import desktop_enabled, install_desktop_routes
 from .db import Base, SessionLocal, engine, ensure_conversation_client_id, get_db
@@ -32,7 +32,7 @@ from .model_runtime import configuration as model_configuration, update_provider
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
 from .plugin_catalog import catalog_list, install_curated_plugin
 from .rag import knowledge_index
-from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
+from .schemas import ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, McpServerCreate, McpServerUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
 from .seed import seed_demo_documents
 from . import services
 
@@ -496,6 +496,56 @@ def reindex(db: Session = Depends(get_db)):
         return {"indexed": knowledge_index.rebuild(db), "mode": "vector" if get_settings().enable_rag else "keyword"}
     except Exception as exc:
         raise HTTPException(503, "向量重建失败，请检查 BGE-M3、Chroma 依赖与模型文件。") from exc
+
+
+@app.get("/api/mcp/servers")
+def mcp_servers(db: Session = Depends(get_db)):
+    """已登记的 MCP 服务器（环境变量只回键名与掩码）。"""
+    return {"servers": mcp_registry.list_servers(db)}
+
+
+@app.post("/api/mcp/servers", dependencies=[Depends(require_admin)])
+def mcp_create_server(body: McpServerCreate, db: Session = Depends(get_db)):
+    try:
+        row = mcp_registry.create_server(db, body.name, body.command, body.args, body.env, body.enabled)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    return {"server": mcp_registry.public_row(row)}
+
+
+@app.put("/api/mcp/servers/{server_id}", dependencies=[Depends(require_admin)])
+def mcp_update_server(server_id: str, body: McpServerUpdate, db: Session = Depends(get_db)):
+    try:
+        row = mcp_registry.update_server(db, server_id, name=body.name, command=body.command,
+                                         args=body.args, env=body.env, enabled=body.enabled)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"server": mcp_registry.public_row(row)}
+
+
+@app.delete("/api/mcp/servers/{server_id}", dependencies=[Depends(require_admin)])
+def mcp_delete_server(server_id: str, db: Session = Depends(get_db)):
+    try:
+        mcp_registry.delete_server(db, server_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"deleted": server_id}
+
+
+@app.post("/api/mcp/servers/{server_id}/test", dependencies=[Depends(require_admin)])
+def mcp_test_server(server_id: str, db: Session = Depends(get_db)):
+    """真实启动一次服务器：握手、列工具，并把结果缓存下来供界面展示。"""
+    try:
+        return mcp_registry.check_server(db, server_id)
+    except LookupError as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@app.get("/api/mcp/tools")
+def mcp_tools(db: Session = Depends(get_db)):
+    return {"tools": mcp_registry.catalog(db)}
 
 
 @app.get("/api/services/grades")

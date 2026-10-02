@@ -47,6 +47,20 @@ class Plugin(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class McpServer(Base):
+    __tablename__ = "mcp_servers"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    name: Mapped[str] = mapped_column(String(80), unique=True)
+    command: Mapped[str] = mapped_column(String(300))
+    args: Mapped[list] = mapped_column(JSON, default=list)
+    env: Mapped[dict] = mapped_column(JSON, default=dict)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    last_tools: Mapped[list] = mapped_column(JSON, default=list)
+    last_error: Mapped[str] = mapped_column(String(500), default="", server_default="")
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Repair(Base):
     __tablename__ = "repairs"
     id: Mapped[str] = mapped_column(String(36), primary_key=True)

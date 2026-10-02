@@ -5,6 +5,21 @@
 
 ## 未发布
 
+### MCP 与命令行
+
+- **MCP 客户端**：新增 `backend/app/mcp_client.py`（标准库实现 stdio 传输，按行分隔的
+  JSON-RPC 2.0，完成 initialize / tools/list / tools/call）与 `backend/app/mcp_registry.py`
+  （服务器登记、掩码、连通性检查、工具编目与调用）。新增 `/api/mcp/servers`、
+  `/api/mcp/servers/{id}/test`、`/api/mcp/tools` 接口与 `mcp_servers` 数据表。
+  工具以 `mcp__<服务器>__<工具>` 暴露给模型，一次问答最多调用一个，参数与结果原样透传。
+- **界面**：「MCP」页可登记、测试、启停、删除服务器并查看工具清单，内含 CLI 命令速查卡；
+  三语（中/英/日）文案与接口封装同步补齐。
+- **命令行**：新增 `backend/app/cli.py`（`python -m app.cli`），提供 `ask`、`chat`、
+  `mcp list/add/remove/test/tools`、`serve` 子命令，与桌面端共用同一数据目录。
+- **测试**：新增 `test_mcp_client.py`、`test_mcp_registry.py`、`test_cli.py` 共 37 项
+  （后端合计 294 项通过），前端构建与 17 项测试通过。
+
+
 ### 交付验收补强
 
 - **签名与完整性**：新增 `scripts/sign_release.ps1`（用 .pfx 或 CA 证书签名 + 立即验签，

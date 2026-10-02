@@ -11,6 +11,7 @@ import { applyLocale, t } from './i18n'
 import { desktop, type DesktopInfo } from './desktop'
 import mensLogo from './assets/mens.png'
 import AppearanceSettings from './components/AppearanceSettings.vue'
+import McpSettings from './components/McpSettings.vue'
 import { applyAppearance } from './appearance'
 import { version as frontendVersion } from '../package.json'
 
@@ -26,6 +27,7 @@ const nav: { key: View; labelKey: string; icon: typeof ChatLineRound; section: s
   { key: 'services', labelKey: 'nav.services', icon: Grid, section: 'workspace' },
   { key: 'knowledge', labelKey: 'nav.knowledge', icon: FolderOpened, section: 'admin' },
   { key: 'plugins', labelKey: 'nav.plugins', icon: Connection, section: 'admin' },
+  { key: 'mcp', labelKey: 'nav.mcp', icon: Connection, section: 'admin' },
   { key: 'settings', labelKey: 'nav.settings', icon: Setting, section: 'admin' },
 ]
 const navSections = ['workspace', 'admin']
@@ -1162,6 +1164,10 @@ onUnmounted(() => {
           <p v-if="!desktop" class="management-note">安装、启停和测试调用需在「设置」填写管理员令牌。</p>
           <div class="plugin-list" v-loading="pluginsBusy"><el-empty v-if="!pluginsBusy && !pluginsError && plugins.length === 0" description="尚未安装插件" :image-size="96" /><div v-for="plugin in plugins" :key="plugin.id" class="plugin-row"><div class="plugin-icon"><el-icon :size="20"><Connection /></el-icon></div><div class="plugin-info"><div><strong>{{ plugin.name }}</strong></div><p>{{ plugin.description || plugin.url || '自定义插件' }}</p></div><el-switch :model-value="plugin.enabled" :loading="pluginAction === plugin.id" :disabled="Boolean(pluginAction)" :aria-label="`${plugin.name} 启用状态`" @change="togglePlugin(plugin, Boolean($event))" /><el-button link type="primary" :disabled="!plugin.enabled || Boolean(pluginAction)" @click="openPluginTest(plugin)">测试调用</el-button><el-button link type="danger" :loading="pluginAction === plugin.id" :disabled="Boolean(pluginAction)" @click="removePlugin(plugin)">卸载</el-button></div></div>
           <div v-if="testPlugin" class="plugin-test"><div class="result-title"><h3>测试插件：{{ testPlugin.name }}</h3></div><p v-if="testPlugin.name === 'baidu_baike_search'">{{ desktop ? '输入词条关键词，搜索结果将在系统浏览器中打开。' : '输入词条关键词，生成链接后点击打开百度百科搜索结果。' }}</p><p v-else>参数将由后端发送至已注册服务 {{ testPlugin.url }}。</p><details v-if="testPlugin.parameters"><summary>查看参数定义</summary><pre>{{ JSON.stringify(testPlugin.parameters, null, 2) }}</pre></details><label class="field"><span>JSON 参数</span><el-input v-model="testParameters" type="textarea" :rows="5" :disabled="testBusy" /></label><div class="form-action"><el-button type="primary" :loading="testBusy" @click="invokePlugin">{{ testPlugin.name === 'baidu_baike_search' ? '搜索词条' : '发送测试请求' }}</el-button><el-button :disabled="testBusy" @click="testPlugin = null">关闭</el-button></div><el-alert v-if="testError" class="alert" :title="testError" type="error" show-icon :closable="false" /><a v-if="baikeUrl && !desktop" :href="baikeUrl" target="_blank" rel="noopener noreferrer">打开百度百科搜索结果</a><pre v-if="testResult !== null" class="plugin-result">{{ JSON.stringify(testResult, null, 2) }}</pre></div>
+        </section>
+
+        <section v-else-if="workspace.view === 'mcp'" class="content-view">
+          <McpSettings :desktop="Boolean(desktop)" />
         </section>
 
         <section v-else class="content-view settings-view">

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { desktop, type AppearanceMode, type WorkspaceModel } from './desktop'
 
-export type View = 'chat' | 'services' | 'knowledge' | 'plugins' | 'settings'
+export type View = 'chat' | 'services' | 'knowledge' | 'plugins' | 'settings' | 'mcp'
 export type Model = WorkspaceModel
 
 function savedValue(key: string) {
