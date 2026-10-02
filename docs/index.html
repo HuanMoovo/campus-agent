@@ -211,6 +211,9 @@
   section { margin-top: var(--space-7); }
   h2 { font-size: clamp(20px, 2.6vw, 26px); }
   table, pre { box-shadow: var(--shadow-sm); }
+  .table-wrap { overflow-x: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+  .table-wrap table { min-width: 520px; }
+  .table-wrap code { overflow-wrap: anywhere; }
 
   @media (max-width: 1000px) {
     .hero-inner { grid-template-columns: minmax(0, 1fr); }
@@ -372,7 +375,8 @@
   <section id="platforms">
     <h2 data-i18n="platforms.title">平台支持</h2>
     <p class="sub" data-i18n="platforms.sub">“已验收”指在对应系统上真实安装、启动并完成界面检查；“CI 构建”指由 GitHub Actions 生成产物但尚未真机运行。</p>
-    <table>
+    <div class="table-wrap">
+<table>
       <thead>
         <tr>
           <th data-i18n="platforms.th1">平台</th>
@@ -403,6 +407,7 @@
         </tr>
       </tbody>
     </table>
+    </div>
   </section>
 
   <section id="start">
