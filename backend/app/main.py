@@ -32,7 +32,7 @@ from .model_runtime import configuration as model_configuration, update_provider
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
 from .plugin_catalog import catalog_list, install_curated_plugin
 from .rag import knowledge_index
-from .schemas import AuthLogin, ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, McpServerCreate, McpServerUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
+from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, McpServerCreate, McpServerUpdate, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, WebSearchConfigUpdate
 from .seed import seed_demo_documents
 from . import services
 
@@ -72,7 +72,7 @@ def require_admin(x_admin_token: str | None = Header(default=None), x_campus_des
     raise HTTPException(401, "管理员令牌无效")
 
 
-PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/logout", "/api/auth/me", "/api/health"}
+PUBLIC_API_PATHS = {"/api/auth/login", "/api/auth/logout", "/api/auth/me", "/api/auth/register", "/api/health"}
 
 
 @app.middleware("http")
@@ -104,6 +104,28 @@ def auth_login(body: AuthLogin, request: Request, response: Response, db: Sessio
         auth.record_attempt(key)
         raise HTTPException(401, "用户名或口令不正确")
     auth.clear_attempts(key)
+    token = auth.start_session(db, user)
+    response.set_cookie(auth.COOKIE_NAME, token, max_age=max(1, auth.setting("session_days", 14)) * 86400,
+                        httponly=True, samesite="lax", secure=bool(auth.setting("cookie_secure", False)), path="/")
+    return {"user": auth.public_user(user)}
+
+
+@app.post("/api/auth/register")
+def auth_register(body: AuthRegister, request: Request, response: Response, db: Session = Depends(get_db)):
+    """自助注册：由 ALLOW_REGISTRATION 控制；设置 REGISTER_CODE 后必须带对注册码。"""
+    if not auth.setting("allow_registration", False):
+        raise HTTPException(403, "本站未开放自助注册，请联系管理员开通账号")
+    key = f"register|{request.client.host if request.client else 'unknown'}"
+    if auth.rate_limited(key):
+        raise HTTPException(429, "注册过于频繁，请稍后再试")
+    expected = str(auth.setting("register_code", "") or "")
+    if expected and not secrets.compare_digest(body.code.strip().encode("utf-8"), expected.encode("utf-8")):
+        auth.record_attempt(key)
+        raise HTTPException(403, "注册码不正确")
+    try:
+        user = auth.create_user(db, body.username, body.password, role="user")
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
     token = auth.start_session(db, user)
     response.set_cookie(auth.COOKIE_NAME, token, max_age=max(1, auth.setting("session_days", 14)) * 86400,
                         httponly=True, samesite="lax", secure=bool(auth.setting("cookie_secure", False)), path="/")
@@ -189,6 +211,8 @@ def health():
     return {"status": "ok", "rag_enabled": settings.enable_rag, "rag_degraded": knowledge_index.last_error,
             "models": {key: row["configured"] for key, row in providers.items()},
             "auth_required": bool(auth.setting("auth_required", False)) and not desktop_enabled(),
+            "allow_registration": bool(auth.setting("allow_registration", False)) and not desktop_enabled(),
+            "register_code_required": bool(str(auth.setting("register_code", "") or "")) and not desktop_enabled(),
             "demo_services": not any(campus_data.configured(kind) for kind in campus_data.KINDS)}
 
 

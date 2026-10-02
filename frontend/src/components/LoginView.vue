@@ -1,40 +1,68 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { Lock, User } from '@element-plus/icons-vue'
 import mensLogo from '../assets/mens.png'
-import { authLogin, authLogout, type AuthUser } from '../api'
+import { authLogin, authRegister, healthInfo, type AuthUser } from '../api'
 import { t } from '../i18n'
 
-const emit = defineEmits<{ authenticated: [user: AuthUser]; cancelled: [] }>()
+const emit = defineEmits<{ authenticated: [user: AuthUser] }>()
 
+const mode = ref<'login' | 'register'>('login')
+const allowRegister = ref(false)
+const codeRequired = ref(false)
 const username = ref('')
 const password = ref('')
+const confirm = ref('')
+const code = ref('')
 const busy = ref(false)
 const error = ref('')
 
+onMounted(async () => {
+  try {
+    const health = await healthInfo()
+    allowRegister.value = Boolean((health as { allow_registration?: boolean }).allow_registration)
+    codeRequired.value = Boolean((health as { register_code_required?: boolean }).register_code_required)
+  } catch {
+    allowRegister.value = false
+  }
+})
+
+function switchMode(next: 'login' | 'register') {
+  mode.value = next
+  error.value = ''
+  password.value = ''
+  confirm.value = ''
+}
+
 async function submit() {
   if (busy.value || !username.value.trim() || !password.value) return
+  if (mode.value === 'register' && password.value !== confirm.value) {
+    error.value = t('auth.register.mismatch')
+    return
+  }
+  if (mode.value === 'register' && codeRequired.value && !code.value.trim()) {
+    error.value = t('auth.register.codeRequired')
+    return
+  }
   busy.value = true
   error.value = ''
   try {
-    const user = await authLogin(username.value.trim(), password.value)
+    const user = mode.value === 'login'
+      ? await authLogin(username.value.trim(), password.value)
+      : await authRegister(username.value.trim(), password.value, code.value.trim())
     emit('authenticated', user)
   } catch (reason) {
     error.value = reason instanceof Error ? reason.message : String(reason)
     password.value = ''
+    confirm.value = ''
   } finally {
     busy.value = false
   }
 }
-
-async function leave() {
-  await authLogout().catch(() => undefined)
-  emit('cancelled')
-}
 </script>
 
 <template>
-  <div class="login-shell" :class="{ 'desktop-app': false }">
+  <div class="login-shell">
     <form class="login-card" @submit.prevent="submit">
       <div class="login-brand">
         <img :src="mensLogo" alt="" />
@@ -43,23 +71,42 @@ async function leave() {
           <span>{{ t('auth.subtitle') }}</span>
         </div>
       </div>
-      <h1>{{ t('auth.title') }}</h1>
-      <p class="login-hint">{{ t('auth.hint') }}</p>
+      <h1>{{ mode === 'login' ? t('auth.title') : t('auth.register.title') }}</h1>
+      <p class="login-hint">{{ mode === 'login' ? t('auth.hint') : t('auth.register.hint') }}</p>
+
       <label class="login-field">
         <span>{{ t('auth.username') }}</span>
-        <el-input v-model="username" :prefix-icon="User" autocomplete="username" :disabled="busy" />
+        <el-input v-model="username" :prefix-icon="User" autocomplete="username" :disabled="busy" :maxlength="64" />
       </label>
       <label class="login-field">
         <span>{{ t('auth.password') }}</span>
         <el-input v-model="password" type="password" show-password :prefix-icon="Lock"
-                  autocomplete="current-password" :disabled="busy" @keyup.enter="submit" />
+                  :autocomplete="mode === 'login' ? 'current-password' : 'new-password'" :disabled="busy" />
       </label>
+      <template v-if="mode === 'register'">
+        <label class="login-field">
+          <span>{{ t('auth.register.confirm') }}</span>
+          <el-input v-model="confirm" type="password" show-password :prefix-icon="Lock"
+                    autocomplete="new-password" :disabled="busy" />
+        </label>
+        <label v-if="codeRequired" class="login-field">
+          <span>{{ t('auth.register.code') }}</span>
+          <el-input v-model="code" :disabled="busy" :maxlength="200" />
+        </label>
+        <p class="login-rule">{{ t('auth.register.rule') }}</p>
+      </template>
+
       <el-alert v-if="error" class="alert" :title="error" type="error" show-icon :closable="false" />
       <div class="login-actions">
         <el-button type="primary" native-type="submit" :loading="busy" :disabled="!username.trim() || !password">
-          {{ t('auth.submit') }}
+          {{ mode === 'login' ? t('auth.submit') : t('auth.register.submit') }}
         </el-button>
-        <el-button text :disabled="busy" @click="leave">{{ t('auth.back') }}</el-button>
+        <el-button v-if="allowRegister && mode === 'login'" text :disabled="busy" @click="switchMode('register')">
+          {{ t('auth.register.switch') }}
+        </el-button>
+        <el-button v-else-if="mode === 'register'" text :disabled="busy" @click="switchMode('login')">
+          {{ t('auth.register.back') }}
+        </el-button>
       </div>
       <p class="login-foot">{{ t('auth.foot') }}</p>
     </form>
@@ -79,6 +126,7 @@ async function leave() {
 .login-card h1 { margin: 4px 0 0; font-size: 22px; }
 .login-hint { margin: 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .login-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.login-rule { margin: 0; color: var(--el-text-color-placeholder); font-size: 12px; }
 .login-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .login-foot { margin: 0; color: var(--el-text-color-placeholder); font-size: 12px; }
 </style>

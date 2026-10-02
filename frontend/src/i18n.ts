@@ -167,6 +167,16 @@ const zh = {
   'auth.checking': '正在校验登录状态…',
   'auth.signedIn': '已登录：{name}',
   'auth.sessionExpired': '登录已过期，请重新登录。',
+  'auth.register.title': '注册账号',
+  'auth.register.hint': '使用注册码自助开通账号，注册成功即自动登录。',
+  'auth.register.confirm': '确认口令',
+  'auth.register.code': '注册码',
+  'auth.register.rule': '用户名 3-64 位字母、数字、点、下划线或横线；口令至少 8 位。',
+  'auth.register.submit': '注册并登录',
+  'auth.register.switch': '没有账号？注册',
+  'auth.register.back': '已有账号？登录',
+  'auth.register.mismatch': '两次输入的口令不一致',
+  'auth.register.codeRequired': '请填写注册码',
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -317,6 +327,16 @@ const en: Record<keyof typeof zh, string> = {
   'auth.checking': 'Checking your session…',
   'auth.signedIn': 'Signed in as {name}',
   'auth.sessionExpired': 'Your session expired — please sign in again.',
+  'auth.register.title': 'Create account',
+  'auth.register.hint': 'Use the invitation code to open an account; you are signed in right away.',
+  'auth.register.confirm': 'Confirm password',
+  'auth.register.code': 'Invitation code',
+  'auth.register.rule': 'Username: 3-64 letters, digits, dots, underscores or dashes; password: at least 8 characters.',
+  'auth.register.submit': 'Register and sign in',
+  'auth.register.switch': 'No account yet? Register',
+  'auth.register.back': 'Already registered? Sign in',
+  'auth.register.mismatch': 'The two passwords do not match',
+  'auth.register.codeRequired': 'Please enter the invitation code',
 }
 
 const ja: Record<keyof typeof zh, string> = {
@@ -467,6 +487,16 @@ const ja: Record<keyof typeof zh, string> = {
   'auth.checking': 'ログイン状態を確認しています…',
   'auth.signedIn': 'ログイン中：{name}',
   'auth.sessionExpired': 'ログインの有効期限が切れました。もう一度ログインしてください。',
+  'auth.register.title': 'アカウント登録',
+  'auth.register.hint': '登録コードでアカウントを作成できます。登録後はそのままログインします。',
+  'auth.register.confirm': 'パスワード（確認）',
+  'auth.register.code': '登録コード',
+  'auth.register.rule': 'ユーザー名は英数字・ドット・アンダースコア・ハイフン 3〜64 文字、パスワードは 8 文字以上。',
+  'auth.register.submit': '登録してログイン',
+  'auth.register.switch': 'アカウントがない場合は登録',
+  'auth.register.back': 'すでにアカウントをお持ちの方はログイン',
+  'auth.register.mismatch': 'パスワードが一致しません',
+  'auth.register.codeRequired': '登録コードを入力してください',
 }
 
 export const catalogs: { zh: typeof zh; en: typeof zh; ja: typeof zh } = { zh, en, ja }

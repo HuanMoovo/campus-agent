@@ -130,6 +130,71 @@ class LoginFlowTest(unittest.TestCase):
         self.assertEqual(self.login("student", "student-pass-1").status_code, 401)
 
 
+class RegistrationTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        Base.metadata.create_all(engine)
+        cls.client = TestClient(main.app)
+        cls.settings = get_settings()
+
+    def setUp(self):
+        with SessionLocal() as db:
+            for row in db.query(User).all():
+                db.delete(row)
+            db.commit()
+        auth._attempts.clear()
+        self.settings.auth_required = True
+        self.settings.allow_registration = False
+        self.settings.register_code = ""
+
+    def tearDown(self):
+        self.settings.auth_required = False
+        self.settings.allow_registration = False
+        self.settings.register_code = ""
+
+    def register(self, username="newbie", password="newbie-pass-1", code=""):
+        return self.client.post("/api/auth/register", json={"username": username, "password": password, "code": code})
+
+    def test_registration_closed_by_default(self):
+        response = self.register()
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("未开放", response.json()["detail"])
+
+    def test_open_registration_creates_user_and_signs_in(self):
+        self.settings.allow_registration = True
+        response = self.register()
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["user"]["role"], "user")
+        self.assertIn("mens_session=", response.headers.get("set-cookie", ""))
+        self.assertEqual(self.client.get("/api/auth/me").status_code, 200)
+        self.assertEqual(self.client.get("/api/conversations").status_code, 200)
+
+    def test_registration_code_is_enforced_when_configured(self):
+        self.settings.allow_registration = True
+        self.settings.register_code = "campus-2026"
+        self.assertEqual(self.register(code="wrong-code").status_code, 403)
+        self.assertEqual(self.register(code="campus-2026").status_code, 200)
+
+    def test_duplicate_username_and_weak_password(self):
+        self.settings.allow_registration = True
+        self.assertEqual(self.register().status_code, 200)
+        self.assertEqual(self.register().status_code, 422)          # 重名
+        self.assertEqual(self.register(username="other", password="short").status_code, 422)
+
+    def test_registered_user_is_not_admin(self):
+        self.settings.allow_registration = True
+        self.register()
+        response = self.client.post("/api/mcp/servers", json={"name": "selfmake", "command": "x"})
+        self.assertEqual(response.status_code, 401)                  # 普通用户仍需管理员令牌
+
+    def test_registration_rate_limited_after_repeated_bad_codes(self):
+        self.settings.allow_registration = True
+        self.settings.register_code = "campus-2026"
+        for _ in range(auth.LOGIN_MAX_ATTEMPTS):
+            self.assertEqual(self.register(code="nope").status_code, 403)
+        self.assertEqual(self.register(code="campus-2026").status_code, 429)
+
+
 class BootstrapTest(unittest.TestCase):
     def test_bootstrap_creates_admin_only_when_enabled(self):
         with SessionLocal() as db:

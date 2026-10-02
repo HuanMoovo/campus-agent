@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     auth_admin_password: str = ""      # 首次启动创建该账号；留空则生成随机口令并打印一次
     session_days: int = 14
     cookie_secure: bool = False        # https 部署置 true
+    # 自助注册：默认关闭；开启后任何人可注册普通账号；填了注册码就必须带对注册码
+    allow_registration: bool = False
+    register_code: str = ""
 
     @property
     def allowed_plugin_hosts(self) -> set[str]:

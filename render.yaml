@@ -15,6 +15,13 @@ services:
         value: "true"
       - key: COOKIE_SECURE
         value: "true"
+      # 开放自助注册：同学用注册码自己开账号；不需要就改成 "false"
+      - key: ALLOW_REGISTRATION
+        value: "true"
+      # 可选：设置后注册必须填写该注册码（留空或删除则任何人可注册）
+      - key: REGISTER_CODE
+        sync: false
+        value: ""
       # 首次启动创建的管理员账号；口令由 Render 生成，在控制台的 Environment 里查看
       - key: AUTH_ADMIN_USERNAME
         value: admin

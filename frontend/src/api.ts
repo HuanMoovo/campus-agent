@@ -501,3 +501,8 @@ export async function authLogin(username: string, password: string): Promise<Aut
 export async function authLogout(): Promise<void> {
   await request<{ ok: boolean }>('/auth/logout', { method: 'POST' })
 }
+
+export async function authRegister(username: string, password: string, code = ''): Promise<AuthUser> {
+  const data = await request<{ user: AuthUser }>('/auth/register', json('POST', { username, password, code }))
+  return data.user
+}

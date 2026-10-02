@@ -5,6 +5,16 @@
 
 ## 未发布
 
+### 自助注册
+
+- 新增 `POST /api/auth/register`：由 `ALLOW_REGISTRATION` 开关控制，设置 `REGISTER_CODE`
+  后必须携带正确注册码；注册成功直接建立会话（自动登录），账号角色为普通用户。
+- 登录页增加"注册"入口（中/英/日），含口令确认与注册码字段；`/api/health` 暴露
+  `allow_registration` 与 `register_code_required` 两个标志供前端判断。
+- 注册同样受窗口限速保护；重名、弱口令（<8 位）返回明确错误。
+- `render.yaml` 默认开启自助注册并预留 `REGISTER_CODE`（由控制台管理）。
+
+
 ### 网站部署与登录
 
 - **登录**：新增 `backend/app/auth.py`（PBKDF2-HMAC-SHA256 口令散列、服务端会话表、登录限速、
