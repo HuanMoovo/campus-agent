@@ -180,6 +180,32 @@ export interface UpdateCheck {
   error?: string
 }
 
+import { t } from './i18n'
+/** 把 FastAPI 的字段校验数组（string_too_short 之类）翻成人话，避免把原始 JSON 丢给用户。 */
+export function formatFieldErrors(rows: unknown[]): string {
+  const labels: Record<string, string> = {
+    username: t('auth.username'),
+    password: t('auth.password'),
+    current: t('auth.password'),
+    code: t('auth.register.code'),
+  }
+  const messages: string[] = []
+  for (const row of rows as { loc?: unknown[]; type?: string; ctx?: { min_length?: number; max_length?: number } }[]) {
+    const key = Array.isArray(row?.loc) ? String(row.loc[row.loc.length - 1]) : ''
+    const label = labels[key] || key || t('api.error.field')
+    if (row?.type === 'string_too_short') {
+      messages.push(t('api.error.minLength', { field: label, count: String(row.ctx?.min_length ?? 0) }))
+    } else if (row?.type === 'string_too_long') {
+      messages.push(t('api.error.maxLength', { field: label, count: String(row.ctx?.max_length ?? 0) }))
+    } else if (row?.type === 'missing') {
+      messages.push(t('api.error.missing', { field: label }))
+    } else {
+      messages.push(t('api.error.invalid', { field: label }))
+    }
+  }
+  return messages.join('；') || t('api.error.generic')
+}
+
 const base = desktop ? '/api' : import.meta.env.VITE_API_BASE_URL || '/api'
 
 async function request<T>(path: string, init?: RequestInit, admin = false): Promise<T> {
@@ -196,7 +222,13 @@ async function request<T>(path: string, init?: RequestInit, admin = false): Prom
     let detail = ''
     try {
       const data = await response.json()
-      detail = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail || data)
+      if (typeof data.detail === 'string') {
+        detail = data.detail
+      } else if (Array.isArray(data.detail)) {
+        detail = formatFieldErrors(data.detail)
+      } else {
+        detail = JSON.stringify(data.detail || data)
+      }
     } catch {
       detail = response.statusText
     }

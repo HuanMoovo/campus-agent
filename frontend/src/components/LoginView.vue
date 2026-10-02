@@ -36,6 +36,14 @@ function switchMode(next: 'login' | 'register') {
 
 async function submit() {
   if (busy.value || !username.value.trim() || !password.value) return
+  if (mode.value === 'register' && username.value.trim().length < 3) {
+    error.value = t('auth.register.usernameShort')
+    return
+  }
+  if (mode.value === 'register' && password.value.length < 8) {
+    error.value = t('auth.register.passwordShort')
+    return
+  }
   if (mode.value === 'register' && password.value !== confirm.value) {
     error.value = t('auth.register.mismatch')
     return

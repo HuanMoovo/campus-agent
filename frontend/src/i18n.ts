@@ -223,6 +223,14 @@ const zh = {
   'account.users.deleteConfirm': '确定删除「{name}」？该用户的会话会立即失效，操作不可撤销。',
   'account.users.deleted': '已删除 {name}',
   'account.users.note': '不能禁用或删除自己；系统也会拦住去掉最后一个管理员的操作，避免把管理入口锁死。',
+  'api.error.field': '该参数',
+  'api.error.minLength': '{field}至少需要 {count} 个字符',
+  'api.error.maxLength': '{field}最多 {count} 个字符',
+  'api.error.missing': '缺少{field}',
+  'api.error.invalid': '{field}格式不正确',
+  'api.error.generic': '请求参数不合法',
+  'auth.register.usernameShort': '用户名至少 3 个字符（字母、数字、点、下划线或横线）',
+  'auth.register.passwordShort': '口令至少 8 位',
 }
 
 const en: Record<keyof typeof zh, string> = {
@@ -429,6 +437,14 @@ const en: Record<keyof typeof zh, string> = {
   'account.users.deleteConfirm': 'Delete {name}? Their sessions end immediately and this cannot be undone.',
   'account.users.deleted': 'Deleted {name}',
   'account.users.note': 'You cannot disable or delete yourself, and the system blocks removing the last administrator so nobody locks the controls out.',
+  'api.error.field': 'This field',
+  'api.error.minLength': '{field} needs at least {count} characters',
+  'api.error.maxLength': '{field} allows at most {count} characters',
+  'api.error.missing': '{field} is required',
+  'api.error.invalid': '{field} has an invalid format',
+  'api.error.generic': 'Invalid request',
+  'auth.register.usernameShort': 'Username needs at least 3 characters (letters, digits, dot, underscore or dash)',
+  'auth.register.passwordShort': 'Password needs at least 8 characters',
 }
 
 const ja: Record<keyof typeof zh, string> = {
@@ -635,6 +651,14 @@ const ja: Record<keyof typeof zh, string> = {
   'account.users.deleteConfirm': '「{name}」を削除しますか？セッションは即時失効し、元に戻せません。',
   'account.users.deleted': '{name} を削除しました',
   'account.users.note': '自分自身の無効化・削除はできず、最後の管理者を外す操作もブロックします。',
+  'api.error.field': 'この項目',
+  'api.error.minLength': '{field}は {count} 文字以上必要です',
+  'api.error.maxLength': '{field}は {count} 文字までです',
+  'api.error.missing': '{field}を入力してください',
+  'api.error.invalid': '{field}の形式が正しくありません',
+  'api.error.generic': 'リクエストが不正です',
+  'auth.register.usernameShort': 'ユーザー名は 3 文字以上（英数字・ドット・アンダースコア・ハイフン）',
+  'auth.register.passwordShort': 'パスワードは 8 文字以上必要です',
 }
 
 export const catalogs: { zh: typeof zh; en: typeof zh; ja: typeof zh } = { zh, en, ja }
