@@ -1,6 +1,7 @@
 'use strict'
 
 const MODELS = new Set(['auto', 'qwen3', 'deepseek', 'ollama'])
+const REASONING_EFFORTS = new Set(['fast', 'deep'])
 
 function isOwnUrl(url, origin) {
   if (!origin) return false
@@ -12,7 +13,7 @@ function isOwnUrl(url, origin) {
 
 function validateWorkspace(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Invalid workspace settings')
-  if (Object.keys(value).some(key => !['model', 'conversationId', 'clientId', 'localModel', 'appearance', 'accentColor', 'webSearch'].includes(key))) throw new TypeError('Unsupported setting')
+  if (Object.keys(value).some(key => !['model', 'conversationId', 'clientId', 'localModel', 'appearance', 'accentColor', 'webSearch', 'reasoning'].includes(key))) throw new TypeError('Unsupported setting')
   if ('model' in value && !MODELS.has(value.model)) throw new TypeError('Invalid model')
   if ('conversationId' in value && (typeof value.conversationId !== 'string' || !/^[a-zA-Z0-9-]{0,64}$/.test(value.conversationId))) {
     throw new TypeError('Invalid conversation ID')
@@ -24,6 +25,7 @@ function validateWorkspace(value) {
   if ('appearance' in value && !['light', 'dark', 'system'].includes(value.appearance)) throw new TypeError('Invalid appearance')
   if ('accentColor' in value && (typeof value.accentColor !== 'string' || !/^#[0-9a-f]{6}$/i.test(value.accentColor))) throw new TypeError('Invalid accent color')
   if ('webSearch' in value && typeof value.webSearch !== 'boolean') throw new TypeError('Invalid web search preference')
+  if ('reasoning' in value && !REASONING_EFFORTS.has(value.reasoning)) throw new TypeError('Invalid reasoning effort')
   return { ...value }
 }
 

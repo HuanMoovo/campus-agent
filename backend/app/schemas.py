@@ -64,6 +64,7 @@ class ChatRequest(RequestModel):
     web: bool = False
     local_model: str | None = Field(default=None, min_length=1, max_length=128,
                                     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
+    reasoning: Literal["fast", "deep"] | None = None
 
     @model_validator(mode="after")
     def local_model_requires_ollama(self):

@@ -57,6 +57,19 @@ describe('workspace store', () => {
     expect(freshStore().webSearch).toBe(true)
   })
 
+  it('remembers the per-user reasoning effort preference', async () => {
+    const store = freshStore()
+    expect(store.reasoning).toBe('fast')
+    store.setReasoning('deep')
+    await store.flushWorkspace()
+    expect(localStorage.getItem('campus-agent-reasoning')).toBe('deep')
+    store.setReasoning('odd' as never)
+    await store.flushWorkspace()
+    expect(store.reasoning).toBe('fast')
+    localStorage.setItem('campus-agent-reasoning', 'deep')
+    expect(freshStore().reasoning).toBe('deep')
+  })
+
   it('ignores local model names that would break the api contract', () => {
     const store = freshStore()
     store.setLocalModel('bad\nname')

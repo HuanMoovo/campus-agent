@@ -9,6 +9,7 @@ export interface DesktopWorkspace {
   appearance: AppearanceMode
   accentColor: string
   webSearch: boolean
+  reasoning: 'fast' | 'deep'
 }
 
 export interface DesktopInfo {

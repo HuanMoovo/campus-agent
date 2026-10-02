@@ -5,6 +5,14 @@
 
 ## 未发布
 
+### 推理强度（输入栏右端两档：快速 / 深度）
+
+- 聊天输入栏右端新增「推理强度」选择（参考 Hermes 会话交互设计）：无边框文字胶囊显示当前档位，点击弹出两档菜单（快速 / 深度），悬停显示说明浮层。
+- **快速**（默认）：直接作答——Ollama `think=false`，Qwen 流式显式 `enable_thinking=false`，DeepSeek 使用配置的对话模型。
+- **深度**：开启模型思考链——Ollama `think=true`、Qwen 流式 `enable_thinking=true`、DeepSeek 自动切换官方推理模型 `deepseek-reasoner`；所选本地模型不支持思考时自动退回普通调用，不会因「深度」报错。
+- 选择逐请求生效（`reasoning` 字段），界面三语（中/英/日），保存在本机（桌面版 workspace.json / 网页版 localStorage）。
+
+
 ### CLI 改为独立安装（从程序界面移出）
 
 - 按反馈把命令行从应用界面中撤出：MCP 页不再显示 CLI 命令卡片，CLI 作为独立工具发布。

@@ -198,6 +198,16 @@ button { cursor: pointer; }
 .composer textarea::placeholder { color: var(--text-muted); }
 .composer-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .composer-bottom span { color: var(--text-muted); font-size: 11px; }
+.composer-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.reasoning-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 7px; border: 0; border-radius: 6px; background: transparent; color: var(--text-secondary); font-size: 11px; font-family: inherit; cursor: pointer; white-space: nowrap; }
+.reasoning-pill:hover:not(:disabled) { background: var(--surface-hover); color: var(--text); }
+.reasoning-pill:disabled { opacity: .55; cursor: not-allowed; }
+.reasoning-pill .reasoning-caret { opacity: .5; }
+.reasoning-option { display: flex; align-items: center; justify-content: space-between; gap: 18px; min-width: 232px; }
+.reasoning-option-text { display: flex; flex-direction: column; gap: 1px; line-height: 1.35; }
+.reasoning-option-text strong { font-size: 12px; font-weight: 600; }
+.reasoning-option-text small { color: var(--text-muted); font-size: 11px; }
+.reasoning-option > .el-icon { color: var(--accent-text); }
 
 .chat-body { display: flex; flex: 1; min-height: 0; }
 .chat-column { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }

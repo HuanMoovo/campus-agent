@@ -121,18 +121,20 @@ def test_chat_model_switch_is_request_scoped_and_preserves_history():
     with TestClient(app) as client:
         seen = []
 
-        def answer(db, question, history, model, local_model=None, use_web=False):
-            seen.append((model, local_model, history))
+        def answer(db, question, history, model, local_model=None, use_web=False, reasoning=None):
+            seen.append((model, local_model, history, reasoning))
             return {"answer": local_model, "mode": "llm", "sources": []}
 
         with patch("app.main.resolve_local_model", side_effect=lambda name: name), patch("app.main.run_agent", side_effect=answer):
             first = client.post("/api/chat", json={"message": "你好", "model": "ollama", "local_model": "first:latest"})
             assert first.status_code == 200
             second = client.post("/api/chat", json={"message": "继续", "model": "ollama", "local_model": "second:latest",
-                                                   "conversation_id": first.json()["conversation_id"]})
+                                                   "conversation_id": first.json()["conversation_id"], "reasoning": "deep"})
             assert second.status_code == 200
         assert [(row[0], row[1]) for row in seen] == [("ollama", "first:latest"), ("ollama", "second:latest")]
         assert seen[1][2] == [{"role": "user", "content": "你好"}, {"role": "assistant", "content": "first:latest"}]
+        assert seen[0][3] is None
+        assert seen[1][3] == "deep"
 
 
 def test_local_model_failure_does_not_save_failed_messages():

@@ -47,6 +47,10 @@ function savedWebSearch() {
   return savedValue('campus-agent-web-search') === '1'
 }
 
+function savedReasoning(): 'fast' | 'deep' {
+  return savedValue('campus-agent-reasoning') === 'deep' ? 'deep' : 'fast'
+}
+
 function localModel(value: unknown) {
   return typeof value === 'string' && value.length <= 128 && !/[\x00-\x1f\x7f]/.test(value) ? value : ''
 }
@@ -64,6 +68,7 @@ export const useWorkspaceStore = defineStore('workspace', {
     appearance: appearanceMode(savedValue('mens-appearance')),
     accentColor: accentColor(savedValue('mens-accent-color')),
     webSearch: savedWebSearch(),
+    reasoning: savedReasoning(),
     ready: !desktop,
     persistenceError: '',
   }),
@@ -78,6 +83,7 @@ export const useWorkspaceStore = defineStore('workspace', {
         this.appearance = appearanceMode(saved.appearance)
         this.accentColor = accentColor(saved.accentColor)
         this.webSearch = saved.webSearch === true
+        this.reasoning = saved.reasoning === 'deep' ? 'deep' : 'fast'
         this.clientId = validClientId(saved.clientId) || newClientId()
       } catch (error) {
         this.persistenceError = `无法恢复本地偏好和对话：${error instanceof Error ? error.message : '读取失败'}`
@@ -88,7 +94,7 @@ export const useWorkspaceStore = defineStore('workspace', {
       }
     },
     persistWorkspace() {
-      const snapshot = { model: this.model, conversationId: this.conversationId, clientId: this.clientId, localModel: this.localModel, appearance: this.appearance, accentColor: this.accentColor, webSearch: this.webSearch }
+      const snapshot = { model: this.model, conversationId: this.conversationId, clientId: this.clientId, localModel: this.localModel, appearance: this.appearance, accentColor: this.accentColor, webSearch: this.webSearch, reasoning: this.reasoning }
       pendingWrites = pendingWrites.then(async () => {
         try {
           if (desktop) await desktop.saveWorkspace(snapshot)
@@ -100,6 +106,7 @@ export const useWorkspaceStore = defineStore('workspace', {
             localStorage.setItem('mens-appearance', snapshot.appearance)
             localStorage.setItem('mens-accent-color', snapshot.accentColor)
             localStorage.setItem('campus-agent-web-search', snapshot.webSearch ? '1' : '0')
+            localStorage.setItem('campus-agent-reasoning', snapshot.reasoning)
           }
           this.persistenceError = ''
         } catch (error) {
@@ -136,6 +143,11 @@ export const useWorkspaceStore = defineStore('workspace', {
     setWebSearch(enabled: boolean) {
       if (!this.ready) return
       this.webSearch = Boolean(enabled)
+      void this.persistWorkspace()
+    },
+    setReasoning(value: 'fast' | 'deep') {
+      if (!this.ready) return
+      this.reasoning = value === 'deep' ? 'deep' : 'fast'
       void this.persistWorkspace()
     },
     setAccentColor(color: string) {

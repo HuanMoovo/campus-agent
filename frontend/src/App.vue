@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowRight, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, FolderOpened,
+  ArrowDown, ArrowRight, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, FolderOpened,
   Grid, Link, Plus, Refresh, Search, Setting, Upload, Download,
 } from '@element-plus/icons-vue'
 import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source, type WebStatus } from './api'
@@ -186,6 +186,11 @@ const webSwitch = computed({
 const webToggleHint = computed(() => webAvailable.value
   ? `开启后会把问题发送到${webStatus.value?.resolved_provider === 'bing' ? ' Bing 网页搜索' : webStatus.value?.resolved_provider === 'tavily' ? ' Tavily' : ' 博查'}并引用网页结果`
   : '管理员尚未启用联网搜索（可在设置中开启）')
+const reasoningLabel = computed(() => t(workspace.reasoning === 'deep' ? 'chat.reasoningDeep' : 'chat.reasoningFast'))
+const reasoningHint = computed(() => t('chat.reasoningTip', { level: reasoningLabel.value, desc: t(workspace.reasoning === 'deep' ? 'chat.reasoningDeepDesc' : 'chat.reasoningFastDesc') }))
+function setReasoning(value: unknown) {
+  workspace.setReasoning(value === 'deep' ? 'deep' : 'fast')
+}
 let downloadTimer: ReturnType<typeof setTimeout> | undefined
 
 function fileSize(bytes?: number) {
@@ -649,7 +654,7 @@ async function sendChat(value = prompt.value) {
   scrollChat()
   try {
     const answer = await chatStream(
-      { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId, web: useWeb },
+      { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId, web: useWeb, reasoning: workspace.reasoning },
       {
         onMeta: id => { if (id) workspace.setConversationId(id) },
         onDelta: chunk => { assistant.text += chunk; scrollChat() },
@@ -1164,7 +1169,7 @@ onUnmounted(() => {
             <div v-if="chatBusy && !streamingMessage?.text" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
             <div ref="chatEnd" />
           </div>
-          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" :placeholder="t('chat.placeholder')" :aria-label="t('chat.placeholder')" @keydown="onChatKeydown" /><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>{{ t('chat.webToggle') }}</span></label></el-tooltip><span>{{ t('chat.disclaimer') }}</span><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">{{ t('chat.stop') }}</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">{{ t('chat.send') }}</el-button></div></div></div>
+          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" :placeholder="t('chat.placeholder')" :aria-label="t('chat.placeholder')" @keydown="onChatKeydown" /><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>{{ t('chat.webToggle') }}</span></label></el-tooltip><span>{{ t('chat.disclaimer') }}</span><div class="composer-actions"><el-tooltip :content="reasoningHint" placement="top"><el-dropdown trigger="click" placement="top-end" :disabled="!workspace.ready || chatBusy" @command="setReasoning"><button type="button" class="reasoning-pill" :disabled="!workspace.ready || chatBusy" :aria-label="reasoningHint"><span>{{ reasoningLabel }}</span><el-icon class="reasoning-caret" :size="10"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="fast"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningFast') }}</strong><small>{{ t('chat.reasoningFastDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'fast'"><Check /></el-icon></div></el-dropdown-item><el-dropdown-item command="deep"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningDeep') }}</strong><small>{{ t('chat.reasoningDeepDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'deep'"><Check /></el-icon></div></el-dropdown-item></el-dropdown-menu></template></el-dropdown></el-tooltip><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">{{ t('chat.stop') }}</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">{{ t('chat.send') }}</el-button></div></div></div></div>
             </div>
           </div>
         </section>

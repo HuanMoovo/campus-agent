@@ -59,6 +59,7 @@ assistant is meant to be.
 | Conversation isolation | Desktop builds are isolated per machine, web builds per browser; individual conversations can be deleted or all cleared |
 | Honest labelling | Demo data, degraded retrieval and web sources are all labelled in the interface |
 | Conversation export | Any conversation can be exported as Markdown (for reading) or JSON (for tooling), including source links, tool calls and demo-data labels; the desktop app uses a save dialog and the web app downloads directly |
+| Reasoning effort | A two-level switch at the right of the input bar: Fast answers directly; Deep enables the model's thinking chain (Ollama think, Qwen enable_thinking, DeepSeek switches to its reasoning model) for more thorough but slower answers; the choice applies per request and is remembered on this machine |
 
 ### Knowledge base and retrieval
 

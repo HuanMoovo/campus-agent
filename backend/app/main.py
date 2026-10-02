@@ -319,7 +319,7 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
     past = db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(8)).all()
     history = [{"role": item.role, "content": item.content} for item in reversed(past)]
     try:
-        result = run_agent(db, body.message.strip(), history, model, local_model=local_model, use_web=body.web)
+        result = run_agent(db, body.message.strip(), history, model, local_model=local_model, use_web=body.web, reasoning=body.reasoning)
     except LocalModelError as exc:
         db.rollback()
         raise HTTPException(exc.status_code, str(exc)) from exc
@@ -369,7 +369,7 @@ async def chat_stream(body: ChatRequest):
         yield sse_event("meta", {"conversation_id": conversation_id})
         try:
             with SessionLocal() as db:
-                prepared = await run_in_threadpool(prepare_stream_state, db, question, history, model, local_model, body.web)
+                prepared = await run_in_threadpool(prepare_stream_state, db, question, history, model, local_model, body.web, body.reasoning)
                 if "direct" in prepared:
                     final = dict(prepared["direct"])
                     parts.append(final["answer"])
@@ -377,7 +377,7 @@ async def chat_stream(body: ChatRequest):
                 else:
                     streamed_from_model = True
                     try:
-                        async for chunk in stream_model(prepared["messages"], prepared["requested_model"], prepared.get("local_model")):
+                        async for chunk in stream_model(prepared["messages"], prepared["requested_model"], prepared.get("local_model"), prepared.get("reasoning")):
                             parts.append(chunk)
                             yield sse_event("delta", {"text": chunk})
                     except LocalModelError as exc:

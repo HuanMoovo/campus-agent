@@ -19,6 +19,7 @@ class AgentState(TypedDict, total=False):
     history: list[dict]
     requested_model: str
     local_model: str
+    reasoning: str
     intent: str
     arguments: dict
     sources: list[dict]
@@ -51,16 +52,35 @@ def choose_model(requested: str, question: str = "", local_model: str | None = N
     return None
 
 
+def reasoning_is_deep(reasoning: str | None) -> bool:
+    """「深度」档开启模型思考链；None 或「快速」保持直接作答。"""
+    return reasoning == "deep"
+
+
+def apply_reasoning(provider: str, model: str, reasoning: str | None) -> str:
+    """DeepSeek 的思考链是独立模型：深度档切换到官方 deepseek-reasoner。"""
+    if provider == "deepseek" and reasoning_is_deep(reasoning) and "reason" not in model.lower():
+        return "deepseek-reasoner"
+    return model
+
+
 def completion(messages: list[dict], requested: str, tools: list[dict] | None = None,
-               local_model: str | None = None) -> dict | None:
+               local_model: str | None = None, reasoning: str | None = None) -> dict | None:
     selected = choose_model(requested, messages[-1]["content"], local_model)
     if selected is None:
         return None
     provider, key, base, model = selected
+    deep = reasoning_is_deep(reasoning)
+    model = apply_reasoning(provider, model, reasoning)
     try:
         body = {"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 900}
+        if provider == "qwen":
+            # 非流式调用不携带思考链（DashScope 要求非流式显式关闭）。
+            body["enable_thinking"] = False
+        if provider == "deepseek" and model.endswith("reasoner"):
+            body.pop("temperature", None)
         if provider == "ollama":
-            body = {"model": model, "messages": messages, "stream": False, "think": False,
+            body = {"model": model, "messages": messages, "stream": False, "think": deep,
                     "options": {"temperature": 0.2, "num_predict": 900}}
         if tools:
             body.update(tools=tools, tool_choice="auto")
@@ -69,6 +89,10 @@ def completion(messages: list[dict], requested: str, tools: list[dict] | None = 
             url = OLLAMA_URL + "/api/chat" if provider == "ollama" else f"{base.rstrip('/')}/chat/completions"
             response = client.post(url, headers={"Authorization": f"Bearer {key}"} if provider != "ollama" else {},
                                    json=body)
+            if provider == "ollama" and deep and response.status_code == 400:
+                # 所选模型不支持思考链：退回普通调用，不让「深度」变成报错。
+                body["think"] = False
+                response = client.post(url, json=body)
             response.raise_for_status()
             payload = response.json()
             result = payload["message"] if provider == "ollama" else payload["choices"][0]["message"]
@@ -87,8 +111,9 @@ def completion(messages: list[dict], requested: str, tools: list[dict] | None = 
         return None
 
 
-def call_model(messages: list[dict], requested: str, local_model: str | None = None) -> str | None:
-    result = completion(messages, requested, local_model=local_model)
+def call_model(messages: list[dict], requested: str, local_model: str | None = None,
+               reasoning: str | None = None) -> str | None:
+    result = completion(messages, requested, local_model=local_model, reasoning=reasoning)
     text = result.get("content") if result else None
     if isinstance(text, str) and text.strip():
         return text
@@ -97,7 +122,8 @@ def call_model(messages: list[dict], requested: str, local_model: str | None = N
     return None
 
 
-async def stream_model(messages: list[dict], requested: str, local_model: str | None = None):
+async def stream_model(messages: list[dict], requested: str, local_model: str | None = None,
+                       reasoning: str | None = None):
     """Yield answer deltas from the selected provider (streamed twin of `call_model`).
 
     Cloud failures end the stream without text so the caller falls back like
@@ -107,11 +133,13 @@ async def stream_model(messages: list[dict], requested: str, local_model: str | 
     if selected is None:
         return
     provider, key, base, model = selected
+    deep = reasoning_is_deep(reasoning)
+    model = apply_reasoning(provider, model, reasoning)
     timeout = httpx.Timeout(180, connect=5) if provider == "ollama" else 25
     if provider == "ollama":
-        body = {"model": model, "messages": messages, "stream": True, "think": False,
-                "options": {"temperature": 0.2, "num_predict": 900}}
-        try:
+        async def stream_ollama(think: bool):
+            body = {"model": model, "messages": messages, "stream": True, "think": think,
+                    "options": {"temperature": 0.2, "num_predict": 900}}
             async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
                 async with client.stream("POST", OLLAMA_URL + "/api/chat", json=body) as response:
                     response.raise_for_status()
@@ -123,6 +151,17 @@ async def stream_model(messages: list[dict], requested: str, local_model: str | 
                         chunk = message.get("content") if isinstance(message, dict) else None
                         if isinstance(chunk, str) and chunk:
                             yield chunk
+
+        try:
+            try:
+                async for chunk in stream_ollama(deep):
+                    yield chunk
+            except httpx.HTTPStatusError as exc:
+                if not (deep and exc.response.status_code == 400):
+                    raise
+                # 所选模型不支持思考链：退回普通调用，不让「深度」变成报错。
+                async for chunk in stream_ollama(False):
+                    yield chunk
         except httpx.HTTPError as exc:
             if isinstance(exc, httpx.TimeoutException):
                 raise LocalModelError("本地模型响应超时，请选择更小的模型或稍后重试", 504) from exc
@@ -131,6 +170,11 @@ async def stream_model(messages: list[dict], requested: str, local_model: str | 
             raise LocalModelError("本地模型返回了无效内容，请重试或切换模型", 502) from exc
         return
     body = {"model": model, "messages": messages, "temperature": 0.2, "max_tokens": 900, "stream": True}
+    if provider == "qwen":
+        # 思考链仅流式调用支持：「深度」即开启，默认显式关闭。
+        body["enable_thinking"] = deep
+    if provider == "deepseek" and model.endswith("reasoner"):
+        body.pop("temperature", None)
     try:
         async with httpx.AsyncClient(timeout=timeout, trust_env=False) as client:
             async with client.stream("POST", f"{base.rstrip('/')}/chat/completions",
@@ -297,7 +341,8 @@ def respond(state: AgentState) -> AgentState:
     sources = state.get("sources", [])
     if not sources and needs_campus_evidence(state):
         return {"answer": KNOWLEDGE_MISSING, "mode": "demo"}
-    answer = call_model(knowledge_messages(state), state.get("requested_model", "auto"), state.get("local_model"))
+    answer = call_model(knowledge_messages(state), state.get("requested_model", "auto"), state.get("local_model"),
+                        state.get("reasoning"))
     if answer:
         return {"answer": answer, "mode": "llm"}
     return knowledge_fallback(state)
@@ -347,11 +392,14 @@ def needs_campus_evidence(state: AgentState) -> bool:
 
 
 def run_agent(db: Session, question: str, history: list[dict], model: str = "auto",
-              local_model: str | None = None, use_web: bool = False) -> AgentState:
+              local_model: str | None = None, use_web: bool = False,
+              reasoning: str | None = None) -> AgentState:
     initial: AgentState = {"question": question, "history": history, "requested_model": model}
     initial["mcp_entries"] = mcp_registry.catalog(db)
     if local_model is not None:
         initial["local_model"] = local_model
+    if reasoning is not None:
+        initial["reasoning"] = reasoning
     try:
         from langgraph.graph import END, START, StateGraph
     except ImportError:
@@ -374,7 +422,8 @@ def run_agent(db: Session, question: str, history: list[dict], model: str = "aut
 
 
 def prepare_stream_state(db: Session, question: str, history: list[dict], model: str = "auto",
-                         local_model: str | None = None, use_web: bool = False) -> dict:
+                         local_model: str | None = None, use_web: bool = False,
+                         reasoning: str | None = None) -> dict:
     """Run planning and retrieval synchronously (threadpool-friendly) before streaming.
 
     Returns either a finished deterministic answer under "direct" or the prompt and
@@ -384,6 +433,8 @@ def prepare_stream_state(db: Session, question: str, history: list[dict], model:
     initial["mcp_entries"] = mcp_registry.catalog(db)
     if local_model is not None:
         initial["local_model"] = local_model
+    if reasoning is not None:
+        initial["reasoning"] = reasoning
     state = {**initial, **plan(initial)}
     if state["intent"] != "knowledge":
         state.update(make_service_node(db)(state))
@@ -396,4 +447,4 @@ def prepare_stream_state(db: Session, question: str, history: list[dict], model:
                            "web": state.get("web", {})}}
     return {"messages": knowledge_messages(state), "sources": sources, "fallback": knowledge_fallback(state),
             "web": state.get("web", {}), "requested_model": state.get("requested_model", "auto"),
-            "local_model": state.get("local_model")}
+            "local_model": state.get("local_model"), "reasoning": state.get("reasoning")}

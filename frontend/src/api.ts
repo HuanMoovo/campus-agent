@@ -242,13 +242,14 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
 }
 
-function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false) {
+function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false, reasoning: 'fast' | 'deep' = 'fast') {
   return {
     message,
     conversation_id: conversationId || undefined,
     model: model === 'qwen3' ? 'qwen' : model,
     client_id: clientId || undefined,
     ...(web ? { web: true } : {}),
+    ...(reasoning === 'deep' ? { reasoning: 'deep' } : {}),
     ...(model === 'ollama' && localModel ? { local_model: localModel } : {}),
   }
 }
@@ -259,7 +260,7 @@ function responseError(status: number, detail: string) {
 
 /** Streams an answer over SSE; aborts by passing signal.abort(), partial text is kept by the caller. */
 export async function chatStream(
-  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean },
+  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean; reasoning?: 'fast' | 'deep' },
   callbacks: ChatStreamCallbacks,
   signal: AbortSignal,
 ): Promise<ChatResponse> {
@@ -268,7 +269,7 @@ export async function chatStream(
     response = await fetch(`${base}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web)),
+      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web, payload.reasoning)),
       signal,
     })
   } catch (error) {
