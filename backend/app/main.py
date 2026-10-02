@@ -32,7 +32,7 @@ from .model_runtime import configuration as model_configuration, update_provider
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
 from .plugin_catalog import catalog_list, install_curated_plugin
 from .rag import knowledge_index
-from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, ImportUrlRequest, McpServerCreate, McpServerUpdate, PasswordChange, PasswordReset, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, UserCreate, UserUpdate, WebSearchConfigUpdate
+from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, FeedbackRequest, ImportUrlRequest, McpServerCreate, McpServerUpdate, PasswordChange, PasswordReset, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, UserCreate, UserUpdate, WebSearchConfigUpdate
 from .seed import seed_demo_documents
 from . import services
 
@@ -284,6 +284,16 @@ def persist_stream_exchange(conversation_id: str, question: str, text: str, fina
         logger.warning("Failed to persist streamed exchange for conversation %s", conversation_id, exc_info=True)
 
 
+def replace_trailing_exchange(db, conversation_id: str, question: str) -> bool:
+    """重新生成：删除末尾与之匹配的「问答对」，避免同题在历史里重复出现。"""
+    tail = db.scalars(select(Message).where(Message.conversation_id == conversation_id).order_by(Message.id.desc()).limit(2)).all()
+    if len(tail) == 2 and tail[0].role == "assistant" and tail[1].role == "user" and tail[1].content == question:
+        for row in tail:
+            db.delete(row)
+        return True
+    return False
+
+
 def public_sources(rows) -> list[dict]:
     """Normalize agent source rows for responses and storage (drops fetched page text)."""
     return [Source(**row).model_dump() for row in (rows or [])]
@@ -321,6 +331,8 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
         conversation = Conversation(id=str(uuid4()), client_id=client_id)
         db.add(conversation)
         db.flush()
+    if body.regenerate and body.conversation_id:
+        replace_trailing_exchange(db, conversation.id, body.message.strip())
     past = db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(8)).all()
     history = [{"role": item.role, "content": item.content} for item in reversed(past)]
     try:
@@ -362,6 +374,8 @@ async def chat_stream(body: ChatRequest):
         else:
             conversation_id = str(uuid4())
             db.add(Conversation(id=conversation_id, client_id=client_id))
+        if body.regenerate and body.conversation_id:
+            replace_trailing_exchange(db, conversation_id, question)
         past = db.scalars(select(Message).where(Message.conversation_id == conversation_id).order_by(Message.id.desc()).limit(8)).all()
         history = [{"role": item.role, "content": item.content} for item in reversed(past)]
         db.commit()
@@ -464,7 +478,23 @@ def conversation_history(conversation_id: str, db: Session = Depends(get_db)):
     if db.get(Conversation, conversation_id) is None:
         raise HTTPException(404, "对话不存在")
     rows = db.scalars(select(Message).where(Message.conversation_id == conversation_id).order_by(Message.id)).all()
-    return {"id": conversation_id, "messages": [{"role": row.role, "content": row.content, "created_at": row.created_at, **(row.result_data or {})} for row in rows]}
+    return {"id": conversation_id, "messages": [{"role": row.role, "content": row.content, "created_at": row.created_at, **(row.result_data or {}), "id": row.id} for row in rows]}
+
+
+@app.post("/api/conversations/{conversation_id}/messages/{message_id}/feedback")
+def message_feedback(conversation_id: str, message_id: int, body: FeedbackRequest, db: Session = Depends(get_db)):
+    """用户对某条助手回答的「有帮助 / 没帮助」反馈；value 为 null 时清除。"""
+    row = db.get(Message, message_id)
+    if row is None or row.conversation_id != conversation_id or row.role != "assistant":
+        raise HTTPException(404, "消息不存在")
+    data = dict(row.result_data or {})
+    if body.value is None:
+        data.pop("feedback", None)
+    else:
+        data["feedback"] = body.value
+    row.result_data = data
+    db.commit()
+    return {"ok": True, "feedback": body.value}
 
 
 def conversation_rows(db: Session, conversation_id: str) -> list[Message]:

@@ -236,6 +236,11 @@ button { cursor: pointer; }
 .thinking-toggle { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; font-family: inherit; cursor: pointer; padding: 2px 0; }
 .thinking-toggle:hover { color: var(--text-secondary); }
 .thinking-text { margin: 6px 0 0; padding: 10px 12px; border-left: 2px solid var(--border); background: var(--page); border-radius: 0 6px 6px 0; color: var(--text-secondary); font-size: 11.5px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; font-family: inherit; }
+.message-actions { display: flex; align-items: center; gap: 4px; margin-top: 6px; }
+.message-action { border: 0; background: transparent; color: var(--text-muted); font-size: 11px; font-family: inherit; cursor: pointer; padding: 2px 6px; border-radius: 5px; }
+.message-action:hover:not(:disabled) { background: var(--surface-hover); color: var(--text-secondary); }
+.message-action:disabled { opacity: .5; cursor: not-allowed; }
+.message-action.active { color: var(--accent-text); background: var(--accent-soft); }
 .markdown-body { white-space: normal; line-height: 1.7; }
 .markdown-body > :first-child { margin-top: 0; }
 .markdown-body > :last-child { margin-bottom: 0; }

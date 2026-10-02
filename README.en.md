@@ -62,6 +62,7 @@ assistant is meant to be.
 | Reasoning effort | A two-level switch at the right of the input bar: Fast answers directly; Deep enables the model's thinking chain (Ollama think, Qwen enable_thinking, DeepSeek switches to its reasoning model) for more thorough but slower answers; the choice applies per request and is remembered on this machine |
 | Thinking trace | In Deep mode the model's thinking streams live, auto-expands while thinking and folds once the answer starts; it can be re-opened anytime, is saved with the conversation and survives a reload |
 | Rich answers | Answers render as Markdown — headings, lists, tables, highlighted code blocks, quotes and links; HTML is sanitized and links open in the system browser on the desktop build |
+| Message actions | Every answer carries an action row: Copy the raw text, Regenerate (replaces that answer — no duplicate Q&A left in history), Retry in Deep (a one-off deep answer that does not change your saved effort), and Helpful / Not helpful (saved with the conversation; click again to undo) |
 
 ### Knowledge base and retrieval
 

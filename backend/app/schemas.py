@@ -65,12 +65,19 @@ class ChatRequest(RequestModel):
     local_model: str | None = Field(default=None, min_length=1, max_length=128,
                                     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
     reasoning: Literal["fast", "deep"] | None = None
+    regenerate: bool = False
 
     @model_validator(mode="after")
     def local_model_requires_ollama(self):
         if self.local_model is not None and self.model != "ollama":
             raise ValueError("指定本地模型时，model 必须为 ollama")
         return self
+
+
+class FeedbackRequest(RequestModel):
+    """「有帮助 / 没帮助」反馈；value 为 null 表示清除已有反馈。"""
+
+    value: Literal["up", "down"] | None = None
 
 
 class Source(BaseModel):

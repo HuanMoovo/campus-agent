@@ -2,6 +2,13 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 功能批次：回答操作条（复制 / 重新生成 / 用深度重答 / 有帮助 / 没帮助）（2026-10-03）
+
+- **后端（349 passed，65 subtests；+4 项消息操作测试）**：`ChatRequest.regenerate`（bool）在流式与非流式路径均先行调用 `replace_trailing_exchange`——仅当末尾两行确为「同一问题的问答对」时整体替换，否则保持追加；新增反馈端点 `POST /api/conversations/{id}/messages/{mid}/feedback`（value=up/down/null，非 assistant 消息或跨会话返回 404，非法取值 422）；会话回读消息新增 `id`。
+- **前端（22 passed；vue-tsc/生产构建通过）**：每条助手回答下方细体文字操作条（复制/重新生成/用深度重答/有帮助/没帮助）；重新生成仅最后一条回答可见（生成中隐藏）；反馈乐观更新 + 失败回滚；新流式回答的消息 ID 懒同步（按序对齐后提交反馈）；文案三语。
+- **真实浏览器（Edge + Playwright，0 控制台错误；7 张截图逐张核验）**：复制 → 剪贴板内容与回答原文逐字一致（Windows 剪贴板 CRLF 规范化后比对）+「已复制到剪贴板」提示；重新生成 → 屏幕与刷新后均为「1 问 1 答、回答编号 2」（替换语义成立）；用深度重答 → 思考链出现、档位胶囊保持「快速」、刷新后仍为单对问答 + 思考可查看；有帮助 → 选中态；刷新后选中保持；切换没帮助 → 保持；再点取消 → 刷新后无选中；英文界面按钮 Copy / Regenerate / Retry in Deep / Helpful / Not helpful。mock 请求序列证明第 3 次流式请求（深度重答）`enable_thinking=true`，前两次为非思考直答。
+- **未验证**：云服务商真实 key 下的同一流程（仅 mock 覆盖）；桌面安装版未重新打包（随发版统一执行）。
+
 ## 功能批次：思考链展示与 Markdown 富文本回答（2026-10-02）
 
 - **后端（345 passed，65 subtests；+4 项思考流测试）**：`stream_model` 产出 (kind, text) 二元组（`content`/`thinking`）——Ollama 采集 `message.thinking`、OpenAI 兼容流采集 `delta.reasoning_content`；SSE 新增 `thinking` 事件（序列 ["meta","thinking","delta","done"]）；`persist_stream_exchange` 将思考写入 `result_data.thinking`（上限 12,000 字符），随 `/api/conversations/{id}` 回读。

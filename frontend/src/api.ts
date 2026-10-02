@@ -51,7 +51,7 @@ export interface Health {
 
 export interface ConversationHistory {
   id: string
-  messages: Array<{ role: 'user' | 'assistant'; content: string; created_at: string; sources?: Source[]; tool_calls?: Array<{ name: string }>; mode?: string; partial?: boolean; thinking?: string }>
+  messages: Array<{ id?: number; role: 'user' | 'assistant'; content: string; created_at: string; sources?: Source[]; tool_calls?: Array<{ name: string }>; mode?: string; partial?: boolean; thinking?: string; feedback?: 'up' | 'down' }>
 }
 
 export interface Plugin {
@@ -243,7 +243,7 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
 }
 
-function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false, reasoning: 'fast' | 'deep' = 'fast') {
+function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false, reasoning: 'fast' | 'deep' = 'fast', regenerate = false) {
   return {
     message,
     conversation_id: conversationId || undefined,
@@ -251,6 +251,7 @@ function chatPayload(message: string, conversationId: string, model: string, loc
     client_id: clientId || undefined,
     ...(web ? { web: true } : {}),
     ...(reasoning === 'deep' ? { reasoning: 'deep' } : {}),
+    ...(regenerate ? { regenerate: true } : {}),
     ...(model === 'ollama' && localModel ? { local_model: localModel } : {}),
   }
 }
@@ -261,7 +262,7 @@ function responseError(status: number, detail: string) {
 
 /** Streams an answer over SSE; aborts by passing signal.abort(), partial text is kept by the caller. */
 export async function chatStream(
-  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean; reasoning?: 'fast' | 'deep' },
+  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean; reasoning?: 'fast' | 'deep'; regenerate?: boolean },
   callbacks: ChatStreamCallbacks,
   signal: AbortSignal,
 ): Promise<ChatResponse> {
@@ -270,7 +271,7 @@ export async function chatStream(
     response = await fetch(`${base}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web, payload.reasoning)),
+      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web, payload.reasoning, payload.regenerate)),
       signal,
     })
   } catch (error) {
@@ -347,6 +348,8 @@ export const api = {
     request<{ deleted: boolean }>(`/conversations/${encodeURIComponent(id)}?client_id=${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
   clearConversations: (clientId: string) =>
     request<{ deleted: number }>(`/conversations?client_id=${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
+  setFeedback: (conversationId: string, messageId: number, value: 'up' | 'down' | null) =>
+    request<{ ok: boolean; feedback: string | null }>(`/conversations/${encodeURIComponent(conversationId)}/messages/${messageId}/feedback`, json('POST', { value })),
   chat: (message: string, conversationId: string, model: string, localModel?: string, clientId = '', web = false) =>
     request<ChatResponse>('/chat', json('POST', chatPayload(message, conversationId, model, localModel, clientId, web))),
   webStatus: () => request<WebStatus>('/web/status'),

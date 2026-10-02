@@ -20,7 +20,7 @@ import { applyAppearance } from './appearance'
 import { renderMarkdown } from './markdown'
 import { version as frontendVersion } from '../package.json'
 
-type Message = { role: 'user' | 'assistant'; text: string; sources?: Source[]; tools?: string[]; demo?: boolean; error?: boolean; streaming?: boolean; stopped?: boolean; note?: string; thinking?: string; thinkingOpen?: boolean }
+type Message = { role: 'user' | 'assistant'; text: string; sources?: Source[]; tools?: string[]; demo?: boolean; error?: boolean; streaming?: boolean; stopped?: boolean; note?: string; thinking?: string; thinkingOpen?: boolean; id?: number; feedback?: 'up' | 'down' }
 type ServiceKey = 'grades' | 'schedule' | 'credits' | 'classrooms' | 'repair' | 'notices' | 'library' | 'dining' | 'shuttle'
 
 const workspace = useWorkspaceStore()
@@ -385,6 +385,62 @@ function onMarkdownClick(event: MouseEvent) {
   if (/^https?:\/\//i.test(href)) void openSourceUrl(href)
 }
 
+const lastAssistantIndex = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'assistant') return i
+  }
+  return -1
+})
+
+async function copyAnswer(message: Message) {
+  const text = message.text || ''
+  if (!text) return
+  try {
+    await navigator.clipboard.writeText(text)
+    ElMessage.success(t('chat.copied'))
+  } catch {
+    const area = document.createElement('textarea')
+    area.value = text
+    area.style.position = 'fixed'
+    area.style.opacity = '0'
+    document.body.appendChild(area)
+    area.select()
+    const ok = document.execCommand('copy')
+    document.body.removeChild(area)
+    if (ok) ElMessage.success(t('chat.copied'))
+    else ElMessage.warning(t('chat.copyFailed'))
+  }
+}
+
+async function syncMessageIds() {
+  if (!workspace.conversationId) return
+  try {
+    const result = await api.conversation(workspace.conversationId)
+    if (result.messages.length !== messages.value.length) return
+    result.messages.forEach((row, index) => {
+      const local = messages.value[index]
+      if (!local) return
+      if (typeof row.id === 'number') local.id = row.id
+      if (row.feedback === 'up' || row.feedback === 'down') local.feedback = row.feedback
+    })
+  } catch { /* 同步消息 ID 是尽力而为 */ }
+}
+
+async function submitFeedback(message: Message, value: 'up' | 'down') {
+  if (chatBusy.value) return
+  if (message.id === undefined) await syncMessageIds()
+  if (message.id === undefined || !workspace.conversationId) { ElMessage.warning(t('chat.feedbackFailed')); return }
+  const next = message.feedback === value ? null : value
+  const previous = message.feedback
+  message.feedback = next || undefined
+  try {
+    await api.setFeedback(workspace.conversationId, message.id, next)
+  } catch {
+    message.feedback = previous
+    ElMessage.warning(t('chat.feedbackFailed'))
+  }
+}
+
 function selectView(view: View) {
   workspace.view = view
   mobileNavOpen.value = false
@@ -653,19 +709,18 @@ async function restoreConversation() {
   historyError.value = ''
   try {
     const result = await api.conversation(workspace.conversationId)
-    messages.value = result.messages.map(message => ({ role: message.role, text: message.content, sources: message.sources, tools: message.tool_calls?.map(call => call.name), demo: message.mode === 'demo', stopped: Boolean(message.partial), thinking: message.thinking || undefined }))
+    messages.value = result.messages.map(message => ({ role: message.role, text: message.content, sources: message.sources, tools: message.tool_calls?.map(call => call.name), demo: message.mode === 'demo', stopped: Boolean(message.partial), thinking: message.thinking || undefined, id: typeof message.id === 'number' ? message.id : undefined, feedback: message.feedback === 'up' || message.feedback === 'down' ? message.feedback : undefined }))
     scrollChat()
   } catch (error) { historyError.value = t('history.loadErrorHint', { error: friendlyError(error) }) }
   finally { historyBusy.value = false }
 }
 
-async function sendChat(value = prompt.value) {
-  const text = value.trim()
-  if (!workspace.ready || !text || chatBusy.value || historyBusy.value || historyError.value) return
-  if (localChatProblem.value) { ElMessage.warning(localChatProblem.value); return }
+async function streamAnswer(text: string, options: { pushUser: boolean; reasoning: 'fast' | 'deep'; regenerate?: boolean }) {
   const useWeb = workspace.webSearch && webAvailable.value
-  messages.value.push({ role: 'user', text })
-  prompt.value = ''
+  if (options.pushUser) {
+    messages.value.push({ role: 'user', text })
+    prompt.value = ''
+  }
   const index = messages.value.push({ role: 'assistant', text: '', streaming: true }) - 1
   const assistant = messages.value[index]
   chatBusy.value = true
@@ -674,7 +729,7 @@ async function sendChat(value = prompt.value) {
   scrollChat()
   try {
     const answer = await chatStream(
-      { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId, web: useWeb, reasoning: workspace.reasoning },
+      { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId, web: useWeb, reasoning: options.reasoning, regenerate: options.regenerate },
       {
         onMeta: id => { if (id) workspace.setConversationId(id) },
         onThinking: chunk => {
@@ -703,20 +758,20 @@ async function sendChat(value = prompt.value) {
       assistant.stopped = true
       if (!assistant.text.trim()) {
         assistant.text = t('chat.stopped')
-        if (!prompt.value.trim()) prompt.value = text
+        if (options.pushUser && !prompt.value.trim()) prompt.value = text
       }
     } else if (error instanceof ChatStreamError) {
       assistant.error = true
       assistant.note = error.message
       if (error.partial) assistant.text = error.partial
-      if (!assistant.text.trim() && !prompt.value.trim()) prompt.value = text
+      if (options.pushUser && !assistant.text.trim() && !prompt.value.trim()) prompt.value = text
     } else {
       const message = friendlyError(error)
       assistant.error = true
       if (assistant.text.trim()) assistant.note = message
       else {
         assistant.text = message
-        if (!prompt.value.trim()) prompt.value = text
+        if (options.pushUser && !prompt.value.trim()) prompt.value = text
       }
     }
   } finally {
@@ -726,6 +781,31 @@ async function sendChat(value = prompt.value) {
     scrollChat()
     void loadConversations()
   }
+}
+
+async function sendChat(value = prompt.value) {
+  const text = value.trim()
+  if (!workspace.ready || !text || chatBusy.value || historyBusy.value || historyError.value) return
+  if (localChatProblem.value) { ElMessage.warning(localChatProblem.value); return }
+  await streamAnswer(text, { pushUser: true, reasoning: workspace.reasoning })
+}
+
+async function regenerateMessage(forceDeep = false) {
+  if (!workspace.ready || chatBusy.value || historyBusy.value || historyError.value) return
+  if (localChatProblem.value) { ElMessage.warning(localChatProblem.value); return }
+  let assistantIndex = -1
+  for (let i = messages.value.length - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'assistant') { assistantIndex = i; break }
+  }
+  if (assistantIndex < 0) return
+  let userIndex = -1
+  for (let i = assistantIndex - 1; i >= 0; i--) {
+    if (messages.value[i].role === 'user') { userIndex = i; break }
+  }
+  if (userIndex < 0 || !messages.value[userIndex].text.trim()) return
+  const text = messages.value[userIndex].text
+  messages.value.splice(userIndex + 1)
+  await streamAnswer(text, { pushUser: false, reasoning: forceDeep ? 'deep' : workspace.reasoning, regenerate: true })
 }
 
 function onChatKeydown(event: KeyboardEvent) {
@@ -1193,6 +1273,7 @@ onUnmounted(() => {
               <div class="message-body"><div class="message-author">{{ message.role === 'user' ? '你' : 'Mens' }}<span v-if="message.demo" class="inline-demo">演示回答</span><span v-if="message.error" class="inline-demo">请求失败</span><span v-if="message.stopped" class="inline-demo">已停止</span></div><div class="message-text"><template v-if="message.role === 'assistant'"><div v-if="message.thinking" class="thinking-block"><button type="button" class="thinking-toggle" :aria-expanded="Boolean(message.thinkingOpen)" @click="message.thinkingOpen = !message.thinkingOpen"><el-icon :size="10"><ArrowDown v-if="message.thinkingOpen" /><ArrowRight v-else /></el-icon>{{ message.thinkingOpen ? t('chat.hideThinking') : t('chat.showThinking') }}</button><pre v-if="message.thinkingOpen" class="thinking-text">{{ message.thinking }}<span v-if="message.streaming && !message.text" class="stream-caret" /></pre></div><div class="markdown-body" @click="onMarkdownClick" v-html="markdownHtml(message)"></div></template><template v-else>{{ message.text }}</template><span v-if="message.streaming && message.text" class="stream-caret" /></div><p v-if="message.note" class="message-note">{{ message.note }}</p>
                 <div v-if="message.tools?.length" class="tool-note"><el-icon><Connection /></el-icon> 已调用 {{ message.tools.join('、') }}</div>
                 <div v-if="message.sources?.length" class="source-list"><div class="source-label">{{ message.sources.some(source => source.kind === 'web') ? t('chat.sourceLabelWeb') : t('chat.sourceLabel') }}</div><div v-for="(source, sourceIndex) in message.sources" :key="sourceIndex" class="source-item"><el-icon><Link v-if="source.kind === 'web'" /><Document v-else /></el-icon><div><strong>{{ source.title || source.source }}</strong><small v-if="source.snippet">{{ source.snippet }}</small><small v-if="source.url" class="source-url"><a v-if="!desktop" :href="source.url" target="_blank" rel="noopener noreferrer">{{ sourceHost(source.url) }} ↗</a><button v-else type="button" class="link-button" @click="openSourceUrl(source.url)">{{ sourceHost(source.url) }} ↗</button></small></div></div></div>
+                <div v-if="message.role === 'assistant' && message.text && !message.streaming" class="message-actions"><button type="button" class="message-action" @click="copyAnswer(message)">{{ t('chat.copy') }}</button><button v-if="index === lastAssistantIndex && !chatBusy" type="button" class="message-action" @click="regenerateMessage()">{{ t('chat.regenerate') }}</button><button v-if="index === lastAssistantIndex && !chatBusy && workspace.reasoning !== 'deep'" type="button" class="message-action" @click="regenerateMessage(true)">{{ t('chat.deepRetry') }}</button><button type="button" class="message-action" :class="{ active: message.feedback === 'up' }" :disabled="chatBusy" @click="submitFeedback(message, 'up')">{{ t('chat.helpful') }}</button><button type="button" class="message-action" :class="{ active: message.feedback === 'down' }" :disabled="chatBusy" @click="submitFeedback(message, 'down')">{{ t('chat.notHelpful') }}</button></div>
               </div>
             </div>
             <div v-if="chatBusy && !streamingMessage?.text && !streamingMessage?.thinking" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
