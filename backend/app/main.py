@@ -26,13 +26,13 @@ from .agent import prepare_stream_state, run_agent, stream_model
 from . import auth, campus_data, mcp_registry, web_search
 from .config import get_settings
 from .desktop_runtime import desktop_enabled, install_desktop_routes
-from .db import Base, SessionLocal, engine, ensure_conversation_client_id, get_db
+from .db import Base, SessionLocal, engine, ensure_conversation_columns, get_db
 from .models import Conversation, Document, Message, Plugin, User
 from .model_runtime import configuration as model_configuration, update_provider, test_provider, local_models, start_download, get_download, cancel_download, resolve_local_model, LocalModelError
 from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
 from .plugin_catalog import catalog_list, install_curated_plugin
 from .rag import knowledge_index
-from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, DocumentCreate, DocumentUpdate, FeedbackRequest, ImportUrlRequest, McpServerCreate, McpServerUpdate, PasswordChange, PasswordReset, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, UserCreate, UserUpdate, WebSearchConfigUpdate
+from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, ConversationBatchDelete, ConversationUpdate, DocumentCreate, DocumentUpdate, FeedbackRequest, ImportUrlRequest, McpServerCreate, McpServerUpdate, PasswordChange, PasswordReset, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, UserCreate, UserUpdate, WebSearchConfigUpdate
 from .seed import seed_demo_documents
 from . import services
 
@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     Base.metadata.create_all(bind=engine)
-    ensure_conversation_client_id()
+    ensure_conversation_columns()
     with SessionLocal() as db:
         seed_demo_documents(db)
         auth.ensure_bootstrap_admin(db)
@@ -444,12 +444,76 @@ def list_conversations(db: Session = Depends(get_db), client_id: str = Query(def
         first_user = next((row for row in rows if row.role == "user" and row.content.strip()), None)
         items.append({
             "id": conversation.id,
-            "title": first_user.content.strip().splitlines()[0][:40] if first_user else "新对话",
+            "title": conversation.title or (first_user.content.strip().splitlines()[0][:40] if first_user else "新对话"),
             "message_count": len(rows),
             "updated_at": iso_utc(rows[-1].created_at or conversation.created_at),
+            "pinned": bool(conversation.pinned),
         })
     items.sort(key=lambda item: item["updated_at"], reverse=True)
+    items.sort(key=lambda item: item["pinned"], reverse=True)
     return items[:limit]
+
+
+@app.get("/api/conversations/search")
+def search_conversations(db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64),
+                         q: str = Query(min_length=1, max_length=100), limit: int = Query(default=20, ge=1, le=50)):
+    """全文检索历史对话（提问与回答都参与匹配）；中文短词可用、% 与 _ 按字面义转义。"""
+    query = q.strip()
+    if not query:
+        return []
+    escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{escaped}%"
+    owned = select(Conversation.id).where(Conversation.client_id == client_id)
+    rows = db.scalars(select(Message).where(Message.conversation_id.in_(owned), Message.content.like(pattern, escape="\\"))
+                      .order_by(Message.id.desc()).limit(500)).all()
+    results: list[dict] = []
+    seen: dict[str, dict] = {}
+    for row in rows:
+        entry = seen.get(row.conversation_id)
+        index = row.content.lower().find(query.lower())
+        if index < 0:
+            index = 0
+        snippet = row.content[max(0, index - 30): index + len(query) + 60].replace("\n", " ").strip()
+        if entry is None:
+            if len(results) >= limit:
+                continue
+            entry = {"conversation_id": row.conversation_id, "snippet": snippet, "matches": 0}
+            seen[row.conversation_id] = entry
+            results.append(entry)
+        entry["matches"] += 1
+    for item in results:
+        conversation = db.get(Conversation, item["conversation_id"])
+        first = db.scalars(select(Message).where(Message.conversation_id == item["conversation_id"], Message.role == "user")
+                           .order_by(Message.id).limit(1)).first()
+        item["title"] = (conversation.title if conversation and conversation.title
+                         else (first.content.strip().splitlines()[0][:40] if first else "新对话"))
+    return results
+
+
+@app.patch("/api/conversations/{conversation_id}")
+def update_conversation(conversation_id: str, body: ConversationUpdate, db: Session = Depends(get_db),
+                        client_id: str = Query(default="", max_length=64)):
+    conversation = db.get(Conversation, conversation_id)
+    if conversation is None or conversation.client_id != client_id:
+        raise HTTPException(404, "对话不存在")
+    if body.title is not None:
+        title = body.title.strip()
+        conversation.title = title[:120] if title else None
+    if body.pinned is not None:
+        conversation.pinned = body.pinned
+    db.commit()
+    return {"id": conversation.id, "title": conversation.title, "pinned": bool(conversation.pinned)}
+
+
+@app.post("/api/conversations/batch-delete")
+def batch_delete_conversations(body: ConversationBatchDelete, db: Session = Depends(get_db)):
+    ids = list(dict.fromkeys(body.ids))
+    owned = list(db.scalars(select(Conversation.id).where(Conversation.id.in_(ids), Conversation.client_id == body.client_id)).all())
+    if owned:
+        db.execute(delete(Message).where(Message.conversation_id.in_(owned)))
+        db.execute(delete(Conversation).where(Conversation.id.in_(owned)))
+        db.commit()
+    return {"deleted": len(owned)}
 
 
 @app.delete("/api/conversations/{conversation_id}")
@@ -1096,7 +1160,7 @@ async def import_backup(file: UploadFile = File(...)):
             raise HTTPException(400, "备份中的数据库无法读取") from exc
         finally:
             staging.unlink(missing_ok=True)
-        ensure_conversation_client_id()
+        ensure_conversation_columns()
         restored.append("campus.db")
     for name in BACKUP_CONFIG_FILES:
         if name in payloads:

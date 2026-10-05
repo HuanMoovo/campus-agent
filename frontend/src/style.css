@@ -232,9 +232,17 @@ button { cursor: pointer; }
 .history-item-main { flex: 1; min-width: 0; }
 .history-item-main strong { display: block; font-size: 12px; color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .history-item-main small { display: block; margin-top: 3px; color: var(--text-muted); font-size: 10px; }
-.history-delete, .history-export { opacity: 0; flex: 0 0 auto; padding: 4px 6px; }
-.history-item:hover .history-delete, .history-item.active .history-delete, .history-delete:focus-visible,
-.history-item:hover .history-export, .history-item.active .history-export, .history-export:focus-visible { opacity: 1; }
+.history-more { opacity: 0; flex: 0 0 auto; padding: 4px 6px; }
+.history-item:hover .history-more, .history-item.active .history-more, .history-more:focus-visible { opacity: 1; }
+@media (hover: none) { .history-more { opacity: .8; } }
+.history-tools { display: flex; align-items: center; gap: 6px; padding: 8px 10px 6px 12px; }
+.history-tools .el-input { flex: 1; min-width: 0; }
+.history-tools .el-button { margin: 0; padding: 4px 6px; flex: 0 0 auto; }
+.history-select-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 2px 12px 6px; font-size: 11px; color: var(--text-muted); }
+.history-item.selected { background: var(--accent-soft); border-color: var(--accent-border); }
+.history-check { margin-right: 2px; flex: 0 0 auto; }
+.pin-badge { display: inline-block; margin-right: 5px; padding: 1px 5px; border-radius: 3px; background: var(--accent-soft); color: var(--accent-text); font-size: 10px; font-weight: 600; vertical-align: 1px; }
+.search-item small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .stream-caret { display: inline-block; width: 7px; height: 15px; margin-left: 3px; vertical-align: -2px; background: var(--accent-text); animation: caret-blink 1s steps(2, start) infinite; }
 .thinking-block { margin: 2px 0 6px; }
 .thinking-toggle { display: inline-flex; align-items: center; gap: 5px; border: 0; background: transparent; color: var(--text-muted); font-size: 11px; font-family: inherit; cursor: pointer; padding: 2px 0; }

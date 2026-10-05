@@ -144,8 +144,8 @@ def test_client_id_column_is_added_to_pre_existing_databases(monkeypatch, tmp_pa
         connection.exec_driver_sql("CREATE TABLE conversations (id VARCHAR(36) PRIMARY KEY, created_at DATETIME)")
         connection.exec_driver_sql("INSERT INTO conversations (id) VALUES ('legacy-1')")
     monkeypatch.setattr(db_module, "engine", legacy)
-    db_module.ensure_conversation_client_id()
-    db_module.ensure_conversation_client_id()
+    db_module.ensure_conversation_columns()
+    db_module.ensure_conversation_columns()
     assert "client_id" in {column["name"] for column in inspect(legacy).get_columns("conversations")}
     with legacy.begin() as connection:
         assert connection.exec_driver_sql("SELECT client_id FROM conversations").scalar() == ""

@@ -127,6 +127,14 @@ export interface ConversationSummary {
   title: string
   message_count: number
   updated_at: string
+  pinned?: boolean
+}
+
+export interface ConversationSearchResult {
+  conversation_id: string
+  title: string
+  snippet: string
+  matches: number
 }
 
 export interface ChatStreamCallbacks {
@@ -350,6 +358,12 @@ export const api = {
     request<{ deleted: number }>(`/conversations?client_id=${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
   setFeedback: (conversationId: string, messageId: number, value: 'up' | 'down' | null) =>
     request<{ ok: boolean; feedback: string | null }>(`/conversations/${encodeURIComponent(conversationId)}/messages/${messageId}/feedback`, json('POST', { value })),
+  searchConversations: (clientId: string, q: string) =>
+    request<ConversationSearchResult[]>(`/conversations/search?client_id=${encodeURIComponent(clientId)}&q=${encodeURIComponent(q)}`),
+  updateConversation: (id: string, clientId: string, patch: { title?: string; pinned?: boolean }) =>
+    request<{ id: string; title: string | null; pinned: boolean }>(`/conversations/${encodeURIComponent(id)}?client_id=${encodeURIComponent(clientId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }),
+  batchDeleteConversations: (ids: string[], clientId: string) =>
+    request<{ deleted: number }>('/conversations/batch-delete', json('POST', { ids, client_id: clientId })),
   chat: (message: string, conversationId: string, model: string, localModel?: string, clientId = '', web = false) =>
     request<ChatResponse>('/chat', json('POST', chatPayload(message, conversationId, model, localModel, clientId, web))),
   webStatus: () => request<WebStatus>('/web/status'),

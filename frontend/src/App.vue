@@ -2,10 +2,10 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
-  ArrowDown, ArrowRight, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, FolderOpened,
-  Grid, Link, Plus, Refresh, Search, Setting, Upload, Download,
+  ArrowDown, ArrowRight, Bottom, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, EditPen, FolderOpened,
+  Grid, Link, MoreFilled, Plus, Refresh, Search, Setting, Top, Upload, Download,
 } from '@element-plus/icons-vue'
-import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source, type WebStatus } from './api'
+import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSearchResult, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source, type WebStatus } from './api'
 import { useWorkspaceStore, type Model, type View } from './store'
 import { applyLocale, t } from './i18n'
 import { desktop, type DesktopInfo } from './desktop'
@@ -89,6 +89,14 @@ const chatAbort = ref<AbortController | null>(null)
 const conversations = ref<ConversationSummary[]>([])
 const conversationsBusy = ref(false)
 const conversationsError = ref('')
+const historyQuery = ref('')
+const historyResults = ref<ConversationSearchResult[]>([])
+const historySearchBusy = ref(false)
+const historySearchError = ref('')
+const historySelectMode = ref(false)
+const historySelected = ref<string[]>([])
+let historySearchTimer: ReturnType<typeof setTimeout> | undefined
+let historySearchToken = 0
 const historyOpen = ref(typeof window !== 'undefined' && window.matchMedia('(min-width: 900px)').matches)
 const streamingMessage = computed(() => {
   const last = messages.value[messages.value.length - 1]
@@ -441,6 +449,14 @@ async function submitFeedback(message: Message, value: 'up' | 'down') {
   }
 }
 
+function notifyAnswerReady() {
+  // 桌面端：窗口不在前台时用系统通知提醒回答完成；网页端需浏览器授权，未授权时静默跳过。
+  if (!desktop || !document.hidden || typeof Notification === 'undefined') return
+  try {
+    new Notification('Mens', { body: t('chat.notifyDone') })
+  } catch { /* 系统通知不可用时静默忽略 */ }
+}
+
 function selectView(view: View) {
   workspace.view = view
   mobileNavOpen.value = false
@@ -512,6 +528,109 @@ async function clearConversations() {
   } catch (error) {
     ElMessage.error(friendlyError(error))
   }
+}
+
+const historySearchActive = computed(() => historyQuery.value.trim().length > 0)
+
+function onHistorySearchInput() {
+  clearTimeout(historySearchTimer)
+  historySearchTimer = setTimeout(() => { void runHistorySearch() }, 300)
+}
+
+async function runHistorySearch() {
+  const query = historyQuery.value.trim()
+  if (!query) { historyResults.value = []; historySearchError.value = ''; return }
+  const token = ++historySearchToken
+  historySearchBusy.value = true
+  historySearchError.value = ''
+  try {
+    const results = await api.searchConversations(workspace.clientId, query)
+    if (token === historySearchToken) historyResults.value = results
+  } catch (error) {
+    if (token === historySearchToken) historySearchError.value = t('history.searchFailed', { error: friendlyError(error) })
+  } finally {
+    if (token === historySearchToken) historySearchBusy.value = false
+  }
+}
+
+function clearHistorySearch() {
+  historyQuery.value = ''
+  historyResults.value = []
+  historySearchError.value = ''
+}
+
+function onHistoryItemClick(item: ConversationSummary) {
+  if (historySelectMode.value) {
+    const index = historySelected.value.indexOf(item.id)
+    if (index >= 0) historySelected.value.splice(index, 1)
+    else historySelected.value.push(item.id)
+    return
+  }
+  void openConversation(item.id)
+}
+
+function openHistoryResult(result: ConversationSearchResult) {
+  clearHistorySearch()
+  void openConversation(result.conversation_id)
+}
+
+function toggleHistorySelect() {
+  historySelectMode.value = !historySelectMode.value
+  historySelected.value = []
+}
+
+async function renameConversation(item: ConversationSummary) {
+  if (chatBusy.value) return
+  let title = ''
+  try {
+    const result = await ElMessageBox.prompt(t('history.renamePrompt'), t('history.renameTitle'), {
+      inputValue: item.title,
+      inputValidator: (value: string) => (value ?? '').length <= 120 || t('history.renameTooLong'),
+    })
+    title = (result.value || '').trim()
+  } catch { return }
+  try {
+    await api.updateConversation(item.id, workspace.clientId, { title })
+    ElMessage.success(t('history.renamed'))
+    await loadConversations()
+  } catch (error) {
+    ElMessage.error(friendlyError(error))
+  }
+}
+
+async function togglePinConversation(item: ConversationSummary) {
+  if (chatBusy.value) return
+  try {
+    await api.updateConversation(item.id, workspace.clientId, { pinned: !item.pinned })
+    await loadConversations()
+  } catch (error) {
+    ElMessage.error(friendlyError(error))
+  }
+}
+
+async function batchDeleteConversations() {
+  if (chatBusy.value || !historySelected.value.length) return
+  const count = historySelected.value.length
+  try {
+    await ElMessageBox.confirm(t('history.confirmBatchDelete', { count }), t('history.confirmBatchDeleteTitle'), { type: 'warning', confirmButtonText: t('common.delete'), cancelButtonText: t('common.cancel') })
+  } catch { return }
+  try {
+    await api.batchDeleteConversations(historySelected.value, workspace.clientId)
+    if (workspace.conversationId && historySelected.value.includes(workspace.conversationId)) newConversation()
+    ElMessage.success(t('history.deletedSelected', { count }))
+    historySelectMode.value = false
+    historySelected.value = []
+    await loadConversations()
+  } catch (error) {
+    ElMessage.error(friendlyError(error))
+  }
+}
+
+function onHistoryCommand(item: ConversationSummary, command: string) {
+  if (command === 'rename') void renameConversation(item)
+  else if (command === 'pin') void togglePinConversation(item)
+  else if (command === 'md' || command === 'json') void exportConversation(item, command)
+  else if (command === 'delete') void deleteConversation(item)
 }
 
 async function stopChat() {
@@ -753,6 +872,7 @@ async function streamAnswer(text: string, options: { pushUser: boolean; reasonin
     const web = answer.web || {}
     if (useWeb && web.error) assistant.note = `联网检索未完成：${web.error}`
     else if (assistant.sources.some(source => source.kind === 'web')) assistant.note = `已联网检索（${web.fetched_at || '刚刚'}）`
+    notifyAnswerReady()
   } catch (error) {
     if (controller.signal.aborted) {
       assistant.stopped = true
@@ -1240,22 +1360,36 @@ onUnmounted(() => {
           <div class="chat-body">
             <aside v-show="historyOpen" class="history-panel" :aria-label="t('history.title')">
               <div class="history-head"><strong>{{ t('history.title') }}</strong><span class="history-count">{{ conversations.length }}</span><el-button text :icon="Refresh" :loading="conversationsBusy" :aria-label="t('history.refresh')" @click="loadConversations" /><el-button text :disabled="!conversations.length || chatBusy" @click="clearConversations">{{ t('history.clear') }}</el-button></div>
-              <p v-if="conversationsError" class="history-error">{{ conversationsError }}</p>
-              <div class="history-list" v-loading="conversationsBusy">
+              <div class="history-tools"><el-input v-model="historyQuery" size="small" clearable :prefix-icon="Search" :placeholder="t('history.searchPlaceholder')" :aria-label="t('history.searchPlaceholder')" @input="onHistorySearchInput" @keydown.enter="runHistorySearch" @clear="clearHistorySearch" /><el-button text size="small" :type="historySelectMode ? 'primary' : ''" :disabled="chatBusy" @click="toggleHistorySelect">{{ historySelectMode ? t('history.selectExit') : t('history.select') }}</el-button></div>
+              <div v-if="historySelectMode" class="history-select-bar"><span>{{ t('history.selected', { count: historySelected.length }) }}</span><el-button text type="danger" size="small" :disabled="!historySelected.length || chatBusy" @click="batchDeleteConversations">{{ t('history.deleteSelected') }}</el-button></div>
+              <p v-if="conversationsError && !historySearchActive" class="history-error">{{ conversationsError }}</p>
+              <div class="history-list" v-loading="conversationsBusy || historySearchBusy">
+                <p v-if="historySearchError" class="history-error">{{ historySearchError }}</p>
+                <p v-if="historySearchActive && !historySearchBusy && !historySearchError && !historyResults.length" class="history-empty">{{ t('history.searchEmpty') }}</p>
+                <template v-if="historySearchActive">
+                  <div v-for="result in historyResults" :key="result.conversation_id" class="history-item search-item" role="button" tabindex="0" @click="openHistoryResult(result)" @keydown.enter="openHistoryResult(result)">
+                    <div class="history-item-main"><strong>{{ result.title }}</strong><small>{{ result.snippet }}</small></div>
+                  </div>
+                </template>
+                <template v-else>
                 <p v-if="!conversationsBusy && !conversationsError && conversations.length === 0" class="history-empty">{{ t('history.empty') }}<br />{{ t('history.emptyHint') }}</p>
-                <div v-for="item in conversations" :key="item.id" class="history-item" :class="{ active: item.id === workspace.conversationId, disabled: chatBusy }" role="button" tabindex="0" :aria-disabled="chatBusy" @click="openConversation(item.id)" @keydown.enter="openConversation(item.id)">
-                  <div class="history-item-main"><strong>{{ item.title }}</strong><small>{{ t('history.count', { count: item.message_count }) }} · {{ chatTime(item.updated_at) }}</small></div>
-                  <el-dropdown class="history-export-menu" trigger="click" @command="(format: string) => exportConversation(item, format)" @click.stop>
-                    <el-button class="history-export" text :icon="Download" :disabled="chatBusy" :aria-label="t('history.export', { title: item.title })" />
+                <div v-for="item in conversations" :key="item.id" class="history-item" :class="{ active: item.id === workspace.conversationId, disabled: chatBusy, selected: historySelected.includes(item.id) }" role="button" tabindex="0" :aria-disabled="chatBusy" @click="onHistoryItemClick(item)" @keydown.enter="onHistoryItemClick(item)">
+                  <el-checkbox v-if="historySelectMode" class="history-check" :model-value="historySelected.includes(item.id)" :disabled="chatBusy" @click.stop @change="onHistoryItemClick(item)" />
+                  <div class="history-item-main"><strong><span v-if="item.pinned" class="pin-badge">{{ t('history.pinned') }}</span>{{ item.title }}</strong><small>{{ t('history.count', { count: item.message_count }) }} · {{ chatTime(item.updated_at) }}</small></div>
+                  <el-dropdown v-if="!historySelectMode" class="history-menu" trigger="click" @command="(command: string) => onHistoryCommand(item, command)" @click.stop>
+                    <el-button class="history-more" text :icon="MoreFilled" :disabled="chatBusy" :aria-label="t('history.more', { title: item.title })" />
                     <template #dropdown>
                       <el-dropdown-menu>
-                        <el-dropdown-item command="md">{{ t('history.exportMarkdown') }}</el-dropdown-item>
-                        <el-dropdown-item command="json">{{ t('history.exportJson') }}</el-dropdown-item>
+                        <el-dropdown-item command="rename" :icon="EditPen">{{ t('history.rename') }}</el-dropdown-item>
+                        <el-dropdown-item command="pin" :icon="item.pinned ? Bottom : Top">{{ item.pinned ? t('history.unpin') : t('history.pin') }}</el-dropdown-item>
+                        <el-dropdown-item command="md" :icon="Download" divided>{{ t('history.exportMarkdown') }}</el-dropdown-item>
+                        <el-dropdown-item command="json" :icon="Download">{{ t('history.exportJson') }}</el-dropdown-item>
+                        <el-dropdown-item command="delete" :icon="Delete" divided>{{ t('common.delete') }}</el-dropdown-item>
                       </el-dropdown-menu>
                     </template>
                   </el-dropdown>
-                  <el-button class="history-delete" text type="danger" :icon="Delete" :disabled="chatBusy" :aria-label="t('history.delete', { title: item.title })" @click.stop="deleteConversation(item)" />
                 </div>
+                </template>
               </div>
             </aside>
             <div class="chat-column">

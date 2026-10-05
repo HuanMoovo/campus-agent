@@ -80,6 +80,26 @@ class FeedbackRequest(RequestModel):
     value: Literal["up", "down"] | None = None
 
 
+class ConversationUpdate(RequestModel):
+    """重命名 / 置顶会话；仅提交需要修改的字段，title 留空字符串表示恢复默认标题。"""
+
+    title: str | None = Field(default=None, max_length=120)
+    pinned: bool | None = None
+
+    @model_validator(mode="after")
+    def at_least_one_field(self):
+        if self.title is None and self.pinned is None:
+            raise ValueError("至少提供一个需要更新的字段")
+        return self
+
+
+class ConversationBatchDelete(RequestModel):
+    """批量删除历史对话；只删除属于该 client_id 的会话。"""
+
+    ids: list[str] = Field(min_length=1, max_length=100)
+    client_id: str = Field(default="", max_length=64)
+
+
 class Source(BaseModel):
     title: str
     snippet: str = ""

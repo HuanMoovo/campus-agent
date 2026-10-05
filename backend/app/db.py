@@ -26,17 +26,22 @@ def get_db():
         yield session
 
 
-def ensure_conversation_client_id() -> None:
-    """Add conversations.client_id to databases created before this column existed.
+def ensure_conversation_columns(target_engine=None) -> None:
+    """Additive columns for databases created before they existed.
 
     SQLite and PostgreSQL both accept ADD COLUMN with a constant default, so no
-    migration framework is needed for the single additive column.
+    migration framework is needed for these additive columns.
     """
-    inspector = inspect(engine)
+    target = target_engine or engine
+    inspector = inspect(target)
     if "conversations" not in inspector.get_table_names():
         return
-    if any(column["name"] == "client_id" for column in inspector.get_columns("conversations")):
-        return
-    with engine.begin() as connection:
-        connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN client_id VARCHAR(64) NOT NULL DEFAULT ''")
-        connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_conversations_client_id ON conversations (client_id)")
+    columns = {column["name"] for column in inspector.get_columns("conversations")}
+    with target.begin() as connection:
+        if "client_id" not in columns:
+            connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN client_id VARCHAR(64) NOT NULL DEFAULT ''")
+            connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_conversations_client_id ON conversations (client_id)")
+        if "title" not in columns:
+            connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN title VARCHAR(120)")
+        if "pinned" not in columns:
+            connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT 0")

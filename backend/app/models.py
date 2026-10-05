@@ -15,6 +15,9 @@ class Conversation(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     # Scopes history listing/deletion to the browser or desktop profile that created it.
     client_id: Mapped[str] = mapped_column(String(64), default="", server_default="", index=True)
+    # 用户重命名后的自定义标题；为空时由首条提问推导。
+    title: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
