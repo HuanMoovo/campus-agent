@@ -158,9 +158,10 @@ onMounted(load)
         {{ me.role === 'admin' ? t('account.role.admin') : t('account.role.user') }} ·
         {{ t('account.profile.since', { time: formatTime(me.created_at) }) }}
       </p>
-      <p v-else>{{ t('account.profile.loading') }}</p>
+      <p v-else-if="busy">{{ t('account.profile.loading') }}</p>
+      <p v-else>{{ t('account.profile.noSession') }}</p>
     </div>
-    <div class="settings-form">
+    <div v-if="me" class="settings-form">
       <label class="field"><span>{{ t('account.password.current') }}</span>
         <el-input v-model="passwordForm.current" type="password" show-password autocomplete="current-password" />
       </label>

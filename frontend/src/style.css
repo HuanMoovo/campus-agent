@@ -144,7 +144,11 @@ button { cursor: pointer; }
 
 .chat-main { display: flex; min-height: 0; }
 .chat-view { width: 100%; height: calc(100vh - 61px); display: flex; flex-direction: column; }
-.chat-heading { max-width: 960px; width: 100%; align-self: center; padding: 31px 40px 23px; margin: 0; }
+.chat-heading { width: 100%; padding: 31px 40px 23px; margin: 0; }
+@media (min-width: 681px) {
+  .chat-heading { padding-left: max(40px, calc((100% - 880px) / 2)); padding-right: max(40px, calc((100% - 880px) / 2)); }
+  .chat-view.history-open .chat-heading { padding-left: calc(252px + max(40px, (100% - 1132px) / 2)); padding-right: max(40px, (100% - 1132px) / 2); }
+}
 .chat-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 10px; min-width: 0; }
 .chat-model-picker { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .chat-model-picker .el-select { width: 215px; }
@@ -396,6 +400,7 @@ html[data-theme='dark'] .markdown-body .hljs-title, html[data-theme='dark'] .mar
   .sidebar { width: 190px; flex-basis: 190px; }
   .content-view { padding: 30px 25px 60px; }
   .chat-heading { padding-left: 25px; padding-right: 25px; }
+  .chat-view.history-open .chat-heading { padding-left: calc(252px + 25px); padding-right: 25px; }
   .conversation { padding-left: 25px; padding-right: 25px; }
   .service-layout { grid-template-columns: 155px minmax(0,1fr); gap: 16px; }
   .service-panel { padding: 20px; }
@@ -456,3 +461,7 @@ html[data-theme='dark'] .markdown-body .hljs-title, html[data-theme='dark'] .mar
   position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
   color: var(--el-text-color-secondary, #909399); font-size: 14px;
 }
+
+/* UI polish：容器圆角统一为 6px；服务导航箭头降噪 */
+.service-panel, .composer { border-radius: 6px; }
+.service-nav button .el-icon { font-size: 12px; opacity: .55; }
