@@ -1,4 +1,5 @@
 import { desktop } from './desktop'
+import type { ChatAttachment } from './attachments'
 
 export interface Source {
   title: string
@@ -251,7 +252,7 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
 }
 
-function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false, reasoning: 'fast' | 'deep' = 'fast', regenerate = false) {
+function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false, reasoning: 'fast' | 'deep' = 'fast', regenerate = false, attachments: ChatAttachment[] = []) {
   return {
     message,
     conversation_id: conversationId || undefined,
@@ -260,6 +261,7 @@ function chatPayload(message: string, conversationId: string, model: string, loc
     ...(web ? { web: true } : {}),
     ...(reasoning === 'deep' ? { reasoning: 'deep' } : {}),
     ...(regenerate ? { regenerate: true } : {}),
+    ...(attachments.length ? { attachments } : {}),
     ...(model === 'ollama' && localModel ? { local_model: localModel } : {}),
   }
 }
@@ -270,7 +272,7 @@ function responseError(status: number, detail: string) {
 
 /** Streams an answer over SSE; aborts by passing signal.abort(), partial text is kept by the caller. */
 export async function chatStream(
-  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean; reasoning?: 'fast' | 'deep'; regenerate?: boolean },
+  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean; reasoning?: 'fast' | 'deep'; regenerate?: boolean; attachments?: ChatAttachment[] },
   callbacks: ChatStreamCallbacks,
   signal: AbortSignal,
 ): Promise<ChatResponse> {
@@ -279,7 +281,7 @@ export async function chatStream(
     response = await fetch(`${base}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web, payload.reasoning, payload.regenerate)),
+      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web, payload.reasoning, payload.regenerate, payload.attachments)),
       signal,
     })
   } catch (error) {
@@ -364,6 +366,11 @@ export const api = {
     request<{ id: string; title: string | null; pinned: boolean }>(`/conversations/${encodeURIComponent(id)}?client_id=${encodeURIComponent(clientId)}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(patch) }),
   batchDeleteConversations: (ids: string[], clientId: string) =>
     request<{ deleted: number }>('/conversations/batch-delete', json('POST', { ids, client_id: clientId })),
+  extractAttachment: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<{ name: string; text: string }>('/chat/attachments/extract', { method: 'POST', body: form })
+  },
   chat: (message: string, conversationId: string, model: string, localModel?: string, clientId = '', web = false) =>
     request<ChatResponse>('/chat', json('POST', chatPayload(message, conversationId, model, localModel, clientId, web))),
   webStatus: () => request<WebStatus>('/web/status'),

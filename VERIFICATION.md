@@ -2,6 +2,13 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 功能批次：附件提问 / 快速提问窗 / 首次使用引导（2026-10-03）
+
+- **后端（358 passed，65 subtests；+4 项附件测试）**：`ChatRequest.attachments`（`ChatAttachment.name` / `text` 上限 20 万字符，最多 3 个）；`attachments_augmented` 将附件拼为 fenced block 注入模型提示——**落库仍为提问原文**（单测断言回读内容不含附件正文块）；新增 `POST /api/chat/attachments/extract`（复用上传解析管线，TXT/MD/PDF/DOCX ≤5MB，返回 `{name,text}` 并截断至 20 万字符）。
+- **前端（29 passed，+4 项附件逻辑测试；vue-tsc/生产构建通过）**：新增 `src/attachments.ts`（扩展名分类 / accept 列表 / 后缀拼接 / 文本校验纯函数）、`QuickAsk.vue`（Ctrl+Shift+K 浮层，Enter/Shift+Enter/Esc）、`OnboardingModal.vue`（4 步引导 + localStorage 标记）；`App.vue` 接入拖拽（含子元素 dragleave 防抖）、粘贴、点选三条通路与 chips 展示/移除；发送时正文以「含 [附件] 后缀的显示文本」入库，保证气泡、落库、刷新回读三处一致（由 QA 发现并修复的不一致项）；文案三语。
+- **真实浏览器（Edge + Playwright，0 控制台错误；5 张截图逐张核验）**：首次启动引导弹出（4 步）→「开始使用」关闭 → 刷新不再出现；Ctrl+Shift+K 打开快速提问 → Enter 发送 → 浮层关闭且回答流式出现；附件通路——图片被拒（`不支持的文件类型：image.png`，0 chip）→ 点选 note.txt（1 chip）→ 拖拽 drag.md（2 chip）→ 260KB 超限被拒（`文件过大`，chip 不增）→ 粘贴 paste.txt（3 chip，`ClipboardEvent` 注入验证）→ 移除单个 chip → 重加 → 发送「请总结附件要点」：chips 清空、气泡含「[附件] drag.md、paste.txt、note.txt」、刷新后后缀仍在；mock 侧请求体证明带附件请求含注入块且提示字符数增加。
+- **未验证**：云端真实 key 下同一流程（仅 mock 覆盖）；桌面安装版未重新打包（随发版统一执行）；拖拽验证经 `DragEvent` 注入（真实 OS 拖拽未覆盖）。
+
 ## 功能批次：命令面板与斜杠指令（2026-10-03）
 
 - **前端（25 passed，+3 项指令匹配测试；vue-tsc/生产构建通过）**：新增 `CommandPalette.vue`（过滤 / 键盘导航 / 点击 / 遮罩关闭）与 `src/commands.ts`（`matchSlashCommands` / `filterCommands` 纯函数）；`App.vue` 全局 Ctrl+K 监听、斜杠状态机（与发送互斥的 ↑/↓/Enter/Esc 处理）、顶部栏入口按钮；文案三语。

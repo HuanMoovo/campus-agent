@@ -294,6 +294,14 @@ def replace_trailing_exchange(db, conversation_id: str, question: str) -> bool:
     return False
 
 
+def attachments_augmented(question: str, attachments) -> str:
+    """把随提问附带的文件内容拼进发给模型的提问；落库仍是原始提问文本。"""
+    if not attachments:
+        return question
+    blocks = "\n\n".join(f"文件：{item.name}\n```\n{item.text}\n```" for item in attachments)
+    return f"{question}\n\n---\n以下是用户随提问附上的文件内容：\n\n{blocks}"
+
+
 def public_sources(rows) -> list[dict]:
     """Normalize agent source rows for responses and storage (drops fetched page text)."""
     return [Source(**row).model_dump() for row in (rows or [])]
@@ -336,7 +344,7 @@ def chat(body: ChatRequest, db: Session = Depends(get_db)):
     past = db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(8)).all()
     history = [{"role": item.role, "content": item.content} for item in reversed(past)]
     try:
-        result = run_agent(db, body.message.strip(), history, model, local_model=local_model, use_web=body.web, reasoning=body.reasoning)
+        result = run_agent(db, attachments_augmented(body.message.strip(), body.attachments), history, model, local_model=local_model, use_web=body.web, reasoning=body.reasoning)
     except LocalModelError as exc:
         db.rollback()
         raise HTTPException(exc.status_code, str(exc)) from exc
@@ -389,7 +397,7 @@ async def chat_stream(body: ChatRequest):
         yield sse_event("meta", {"conversation_id": conversation_id})
         try:
             with SessionLocal() as db:
-                prepared = await run_in_threadpool(prepare_stream_state, db, question, history, model, local_model, body.web, body.reasoning)
+                prepared = await run_in_threadpool(prepare_stream_state, db, attachments_augmented(question, body.attachments), history, model, local_model, body.web, body.reasoning)
                 if "direct" in prepared:
                     final = dict(prepared["direct"])
                     parts.append(final["answer"])
@@ -658,6 +666,13 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
     db.add(doc)
     db.commit()
     return indexed_document_json(doc)
+
+
+@app.post("/api/chat/attachments/extract")
+async def extract_chat_attachment(file: UploadFile = File(...)):
+    """解析随提问上传的文件（TXT/Markdown/PDF/Word，≤5 MB）为纯文本，供前端随消息正文发送。"""
+    filename, content = await parse_upload(file)
+    return {"name": filename, "text": content.strip()[:200_000]}
 
 
 @app.post("/api/documents/import-url", dependencies=[Depends(require_admin)])

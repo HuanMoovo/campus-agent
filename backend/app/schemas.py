@@ -56,6 +56,13 @@ class RequestModel(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
 
+class ChatAttachment(RequestModel):
+    """随提问附带的文本内容（前端本地读取，或经 /api/chat/attachments/extract 解析 PDF/Word 得到）。"""
+
+    name: str = Field(min_length=1, max_length=255)
+    text: str = Field(min_length=1, max_length=200_000)
+
+
 class ChatRequest(RequestModel):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
@@ -66,6 +73,7 @@ class ChatRequest(RequestModel):
                                     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
     reasoning: Literal["fast", "deep"] | None = None
     regenerate: bool = False
+    attachments: list[ChatAttachment] | None = Field(default=None, max_length=3)
 
     @model_validator(mode="after")
     def local_model_requires_ollama(self):

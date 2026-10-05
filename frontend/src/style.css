@@ -480,3 +480,12 @@ html[data-theme='dark'] .markdown-body .hljs-title, html[data-theme='dark'] .mar
 .slash-item strong { color: var(--accent-text); font-size: 12px; font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
 .slash-item small { color: var(--text-muted); font-size: 11px; }
 .slash-item.active { background: var(--accent-soft); }
+
+/* 附件提问：chips 与拖拽态 */
+.attach-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 2px; }
+.attach-chip { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 3px 6px 3px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-muted); color: var(--text-secondary); font-size: 11px; }
+.attach-chip .el-icon { color: var(--accent-text); flex: 0 0 auto; }
+.attach-name { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attach-remove { border: 0; background: transparent; color: var(--text-muted); font-size: 13px; line-height: 1; padding: 0 2px; cursor: pointer; }
+.attach-remove:hover { color: var(--danger-text); }
+.composer-wrap.drag-active .composer { border-color: var(--accent-text); border-style: dashed; background: var(--accent-soft); }

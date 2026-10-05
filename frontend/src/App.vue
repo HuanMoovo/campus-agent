@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowDown, ArrowRight, Bottom, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, EditPen, FolderOpened,
-  Grid, Link, MoreFilled, Plus, Refresh, Search, Setting, Top, Upload, Download,
+  Grid, Link, MoreFilled, Paperclip, Plus, Refresh, Search, Setting, Top, Upload, Download,
 } from '@element-plus/icons-vue'
 import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSearchResult, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source, type WebStatus } from './api'
 import { useWorkspaceStore, type Model, type View } from './store'
@@ -15,7 +15,10 @@ import McpSettings from './components/McpSettings.vue'
 import LoginView from './components/LoginView.vue'
 import AccountSettings from './components/AccountSettings.vue'
 import CommandPalette from './components/CommandPalette.vue'
+import QuickAsk from './components/QuickAsk.vue'
+import OnboardingModal from './components/OnboardingModal.vue'
 import { matchSlashCommands, SLASH_COMMANDS } from './commands'
+import { attachmentAccept, attachmentKind, attachmentSuffix, attachmentTextProblem, ATTACHMENT_MAX_COUNT, type ChatAttachment } from './attachments'
 import { User as UserIcon } from '@element-plus/icons-vue'
 import { authLogout, authMe, healthInfo, type AuthUser } from './api'
 import { applyAppearance } from './appearance'
@@ -471,6 +474,8 @@ const paletteCommands = computed(() => {
     { id: 'new', label: t('cmd.new'), hint: t('cmd.newHint') },
     { id: 'history', label: t('cmd.history'), hint: t('cmd.historyHint') },
     { id: 'focus', label: t('cmd.focus'), hint: t('cmd.focusHint') },
+    { id: 'quick', label: t('cmd.quick'), hint: t('cmd.quickHint') },
+    { id: 'onboarding', label: t('cmd.onboarding'), hint: t('cmd.onboardingHint') },
     { id: 'theme', label: t('cmd.themeToggle'), hint: t('cmd.themeToggleHint') },
   ]
   if (currentConversation.value) {
@@ -489,6 +494,8 @@ function runPaletteCommand(id: string) {
   if (id === 'new') { newConversation(); return }
   if (id === 'history') { historyOpen.value = true; return }
   if (id === 'focus') { void nextTick(() => composerRef.value?.focus()); return }
+  if (id === 'quick') { quickOpen.value = true; return }
+  if (id === 'onboarding') { onboardingOpen.value = true; return }
   if (id === 'theme') { toggleTheme(); return }
   if (id === 'export-md' || id === 'export-json') {
     if (currentConversation.value) void exportConversation(currentConversation.value, id === 'export-md' ? 'md' : 'json')
@@ -498,6 +505,11 @@ function runPaletteCommand(id: string) {
 }
 
 function onGlobalKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    quickOpen.value = true
+    return
+  }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
     event.preventDefault()
     paletteOpen.value = !paletteOpen.value
@@ -519,6 +531,88 @@ function runSlashCommand(id: string) {
   else if (id === 'history') historyOpen.value = true
   else if (id === 'export') { if (currentConversation.value) void exportConversation(currentConversation.value, 'md') }
   else if (id === 'theme') toggleTheme()
+}
+
+const attachments = ref<ChatAttachment[]>([])
+const dragActive = ref(false)
+const attachInput = ref<HTMLInputElement | null>(null)
+const quickOpen = ref(false)
+const onboardingOpen = ref(false)
+const attachAccept = attachmentAccept()
+
+function attachmentWarn(key: string, params?: Record<string, string>) {
+  ElMessage.warning(t(key, params))
+}
+
+async function addAttachments(files: FileList | File[]) {
+  for (const file of Array.from(files)) {
+    if (attachments.value.length >= ATTACHMENT_MAX_COUNT) {
+      attachmentWarn('chat.attachTooMany', { count: String(ATTACHMENT_MAX_COUNT) })
+      return
+    }
+    const kind = attachmentKind(file.name)
+    if (kind === 'reject') { attachmentWarn('chat.attachType', { name: file.name }); continue }
+    try {
+      if (kind === 'text') {
+        const text = await file.text()
+        const problem = attachmentTextProblem(text)
+        if (problem) { attachmentWarn(problem, { name: file.name }); continue }
+        attachments.value.push({ name: file.name, text })
+      } else {
+        const result = await api.extractAttachment(file)
+        if (!result.text.trim()) { attachmentWarn('chat.attachEmpty', { name: file.name }); continue }
+        attachments.value.push({ name: result.name || file.name, text: result.text })
+      }
+    } catch (error) {
+      attachmentWarn('chat.attachFailed', { name: file.name, error: friendlyError(error) })
+    }
+  }
+}
+
+function removeAttachment(index: number) {
+  attachments.value.splice(index, 1)
+}
+
+function onComposerDragOver() {
+  dragActive.value = true
+}
+
+function onComposerDragLeave(event: DragEvent) {
+  const next = event.relatedTarget as Node | null
+  if (next && (event.currentTarget as HTMLElement).contains(next)) return
+  dragActive.value = false
+}
+
+function onComposerDrop(event: DragEvent) {
+  dragActive.value = false
+  const files = event.dataTransfer?.files
+  if (files?.length) void addAttachments(files)
+}
+
+function onComposerPaste(event: ClipboardEvent) {
+  const files = event.clipboardData?.files
+  if (files?.length) {
+    event.preventDefault()
+    void addAttachments(files)
+  }
+}
+
+function onAttachPick(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (input.files?.length) void addAttachments(input.files)
+  input.value = ''
+}
+
+async function submitQuickAsk(question: string) {
+  if (chatBusy.value) { ElMessage.warning(t('quick.busy')); return }
+  selectView('chat')
+  await nextTick()
+  await sendChat(question)
+}
+
+function completeOnboarding() {
+  onboardingOpen.value = false
+  try { localStorage.setItem('mens-onboarding-done', '1') } catch { /* 隐私模式忽略 */ }
 }
 
 function selectView(view: View) {
@@ -898,10 +992,12 @@ async function restoreConversation() {
   finally { historyBusy.value = false }
 }
 
-async function streamAnswer(text: string, options: { pushUser: boolean; reasoning: 'fast' | 'deep'; regenerate?: boolean }) {
+async function streamAnswer(text: string, options: { pushUser: boolean; reasoning: 'fast' | 'deep'; regenerate?: boolean; attachments?: ChatAttachment[] }) {
   const useWeb = workspace.webSearch && webAvailable.value
+  // 带附件时，正文（含 [附件] 后缀）一并作为消息内容发送，保证落库、刷新与气泡展示一致。
+  const display = options.attachments?.length ? `${text}\n\n${attachmentSuffix(options.attachments.map(item => item.name))}` : text
   if (options.pushUser) {
-    messages.value.push({ role: 'user', text })
+    messages.value.push({ role: 'user', text: display })
     prompt.value = ''
   }
   const index = messages.value.push({ role: 'assistant', text: '', streaming: true }) - 1
@@ -912,7 +1008,7 @@ async function streamAnswer(text: string, options: { pushUser: boolean; reasonin
   scrollChat()
   try {
     const answer = await chatStream(
-      { message: text, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId, web: useWeb, reasoning: options.reasoning, regenerate: options.regenerate },
+      { message: display, conversationId: workspace.conversationId, model: workspace.model, localModel: currentLocalModel.value, clientId: workspace.clientId, web: useWeb, reasoning: options.reasoning, regenerate: options.regenerate, attachments: options.attachments },
       {
         onMeta: id => { if (id) workspace.setConversationId(id) },
         onThinking: chunk => {
@@ -971,7 +1067,9 @@ async function sendChat(value = prompt.value) {
   const text = value.trim()
   if (!workspace.ready || !text || chatBusy.value || historyBusy.value || historyError.value) return
   if (localChatProblem.value) { ElMessage.warning(localChatProblem.value); return }
-  await streamAnswer(text, { pushUser: true, reasoning: workspace.reasoning })
+  const pending = attachments.value.slice()
+  attachments.value = []
+  await streamAnswer(text, { pushUser: true, reasoning: workspace.reasoning, attachments: pending })
 }
 
 async function regenerateMessage(forceDeep = false) {
@@ -1393,6 +1491,7 @@ onMounted(async () => {
   void loadWebStatus()
   void loadDesktopInfo()
   await workspace.initialize()
+  try { if (!localStorage.getItem('mens-onboarding-done')) onboardingOpen.value = true } catch { /* 隐私模式忽略 */ }
   void loadModelConfig()
   void loadLocalModels()
   void restoreConversation()
@@ -1415,6 +1514,8 @@ onUnmounted(() => {
   <div v-else-if="authState === 'checking'" class="auth-checking">{{ t('auth.checking') }}</div>
   <div v-else class="app-shell" :class="{ 'desktop-app': desktop }">
     <CommandPalette v-model:open="paletteOpen" :items="paletteCommands" @select="runPaletteCommand" />
+    <QuickAsk v-model:open="quickOpen" @submit="submitQuickAsk" />
+    <OnboardingModal v-model:open="onboardingOpen" @done="completeOnboarding" />
     <div v-if="mobileNavOpen" class="mobile-scrim" @click="mobileNavOpen = false" />
     <aside class="sidebar" :class="{ 'sidebar-open': mobileNavOpen }">
       <div class="brand">
@@ -1503,7 +1604,7 @@ onUnmounted(() => {
             <div v-if="chatBusy && !streamingMessage?.text && !streamingMessage?.thinking" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
             <div ref="chatEnd" />
           </div>
-          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" ref="composerRef" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" :placeholder="t('chat.placeholder')" :aria-label="t('chat.placeholder')" @input="onPromptInput" @keydown="onChatKeydown" /><div v-if="slashOptions.length" class="slash-menu" role="listbox" :aria-label="t('palette.slashTitle')"><button v-for="(option, index) in slashOptions" :key="option.id" type="button" class="slash-item" :class="{ active: index === slashActive }" @mousedown.prevent="runSlashCommand(option.id)" @mousemove="slashActive = index"><strong>{{ option.slash }}</strong><small>{{ t(option.labelKey) }}</small></button></div><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>{{ t('chat.webToggle') }}</span></label></el-tooltip><span>{{ t('chat.disclaimer') }}</span><div class="composer-actions"><el-tooltip :content="reasoningHint" placement="top"><el-dropdown trigger="click" placement="top-end" :disabled="!workspace.ready || chatBusy" @command="setReasoning"><button type="button" class="reasoning-pill" :disabled="!workspace.ready || chatBusy" :aria-label="reasoningHint"><span>{{ reasoningLabel }}</span><el-icon class="reasoning-caret" :size="10"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="fast"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningFast') }}</strong><small>{{ t('chat.reasoningFastDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'fast'"><Check /></el-icon></div></el-dropdown-item><el-dropdown-item command="deep"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningDeep') }}</strong><small>{{ t('chat.reasoningDeepDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'deep'"><Check /></el-icon></div></el-dropdown-item></el-dropdown-menu></template></el-dropdown></el-tooltip><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">{{ t('chat.stop') }}</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">{{ t('chat.send') }}</el-button></div></div></div></div>
+          <div class="composer-wrap" :class="{ 'drag-active': dragActive }" @dragover.prevent="onComposerDragOver" @dragleave="onComposerDragLeave" @drop.prevent="onComposerDrop"><div class="composer"><textarea v-model="prompt" ref="composerRef" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" :placeholder="t('chat.placeholder')" :aria-label="t('chat.placeholder')" @input="onPromptInput" @paste="onComposerPaste" @keydown="onChatKeydown" /><div v-if="slashOptions.length" class="slash-menu" role="listbox" :aria-label="t('palette.slashTitle')"><button v-for="(option, index) in slashOptions" :key="option.id" type="button" class="slash-item" :class="{ active: index === slashActive }" @mousedown.prevent="runSlashCommand(option.id)" @mousemove="slashActive = index"><strong>{{ option.slash }}</strong><small>{{ t(option.labelKey) }}</small></button></div><div v-if="attachments.length" class="attach-chips"><span v-for="(item, index) in attachments" :key="`${item.name}-${index}`" class="attach-chip"><el-icon :size="12"><Paperclip /></el-icon><span class="attach-name">{{ item.name }}</span><button type="button" class="attach-remove" :aria-label="t('chat.attachRemove', { name: item.name })" @click="removeAttachment(index)">×</button></span></div><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>{{ t('chat.webToggle') }}</span></label></el-tooltip><span>{{ t('chat.disclaimer') }}</span><div class="composer-actions"><input ref="attachInput" type="file" class="hidden-input attach-input" multiple :accept="attachAccept" @change="onAttachPick" /><el-tooltip :content="t('chat.attachHint')" placement="top"><el-button class="attach-button" text :icon="Paperclip" :disabled="!workspace.ready || chatBusy" :aria-label="t('chat.attach')" @click="attachInput?.click()" /></el-tooltip><el-tooltip :content="reasoningHint" placement="top"><el-dropdown trigger="click" placement="top-end" :disabled="!workspace.ready || chatBusy" @command="setReasoning"><button type="button" class="reasoning-pill" :disabled="!workspace.ready || chatBusy" :aria-label="reasoningHint"><span>{{ reasoningLabel }}</span><el-icon class="reasoning-caret" :size="10"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="fast"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningFast') }}</strong><small>{{ t('chat.reasoningFastDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'fast'"><Check /></el-icon></div></el-dropdown-item><el-dropdown-item command="deep"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningDeep') }}</strong><small>{{ t('chat.reasoningDeepDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'deep'"><Check /></el-icon></div></el-dropdown-item></el-dropdown-menu></template></el-dropdown></el-tooltip><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">{{ t('chat.stop') }}</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">{{ t('chat.send') }}</el-button></div></div></div></div>
             </div>
           </div>
         </section>
