@@ -5,7 +5,7 @@ import {
   ArrowDown, ArrowRight, Bottom, ChatLineRound, Check, CircleClose, Clock, Connection, Delete, Document, EditPen, FolderOpened,
   Grid, Link, MoreFilled, Paperclip, Plus, Refresh, Search, Setting, Top, Upload, Download,
 } from '@element-plus/icons-vue'
-import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSearchResult, type ConversationSummary, type CuratedPlugin, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source, type WebStatus } from './api'
+import { api, ChatStreamError, chatStream, type CampusSource, type ConversationSearchResult, type ConversationSummary, type Health, type KnowledgeDocument, type LocalModels, type ModelConfig, type ModelDownload, type Plugin, type RepairRecord, type Source, type WebStatus } from './api'
 import { useWorkspaceStore, type Model, type View } from './store'
 import { applyLocale, t } from './i18n'
 import { desktop, type DesktopInfo } from './desktop'
@@ -142,8 +142,6 @@ const testResult = ref<unknown>(null)
 const baikeUrl = ref('')
 const testError = ref('')
 const testBusy = ref(false)
-const curatedPlugins = ref<CuratedPlugin[]>([])
-const catalogError = ref('')
 const modelConfig = ref<ModelConfig | null>(null)
 const provider = ref<'qwen' | 'deepseek'>('qwen')
 const modelForm = ref({ api_key: '', base_url: '', model: '' })
@@ -619,7 +617,7 @@ function selectView(view: View) {
   workspace.view = view
   mobileNavOpen.value = false
   if (view === 'knowledge') void loadDocuments()
-  if (view === 'plugins') { void loadPlugins(); void loadCuratedPlugins() }
+  if (view === 'plugins') void loadPlugins()
   if (view === 'chat') { void loadLocalModels(); void loadConversations() }
   if (view === 'settings') { void loadModelConfig(); void loadLocalModels(); void loadCampusSources() }
 }
@@ -1327,24 +1325,6 @@ async function loadPlugins() {
   finally { pluginsBusy.value = false }
 }
 
-async function loadCuratedPlugins() {
-  catalogError.value = ''
-  try { curatedPlugins.value = await api.curatedPlugins() }
-  catch (error) { catalogError.value = friendlyError(error) }
-}
-
-async function installCuratedPlugin(id: string) {
-  if (pluginAction.value) return
-  pluginAction.value = id
-  try {
-    await api.installCuratedPlugin(id)
-    await loadPlugins()
-    await loadCuratedPlugins()
-    ElMessage.success('插件已安装')
-  } catch (error) { ElMessage.error(friendlyError(error)) }
-  finally { pluginAction.value = '' }
-}
-
 async function installPlugin() {
   const source = pluginSource.value.trim()
   if (!source || pluginAction.value) return
@@ -1377,7 +1357,6 @@ async function removePlugin(item: Plugin) {
   try {
     await api.removePlugin(item.id)
     plugins.value = plugins.value.filter(plugin => plugin.id !== item.id)
-    await loadCuratedPlugins()
     if (testPlugin.value?.id === item.id) testPlugin.value = null
     ElMessage.success('插件已卸载')
   } catch (error) { ElMessage.error(friendlyError(error)) }
@@ -1498,7 +1477,6 @@ onMounted(async () => {
   void loadConversations()
   if (workspace.view === 'knowledge') void loadDocuments()
   if (workspace.view === 'plugins') void loadPlugins()
-  if (workspace.view === 'plugins') void loadCuratedPlugins()
   if (workspace.view === 'settings') { void loadModelConfig(); void loadLocalModels(); void loadCampusSources(); void loadWebStatus() }
 })
 
@@ -1639,10 +1617,18 @@ onUnmounted(() => {
 
         <section v-else-if="workspace.view === 'plugins'" class="content-view">
           <div class="page-heading"><div><div class="eyebrow">MENS EXTENSIONS</div><h1>插件</h1><p>按需安装和管理可用工具。</p></div></div>
-          <div class="section-toolbar"><div><strong>推荐插件</strong><span>按需安装</span></div><el-button text :icon="Refresh" @click="loadCuratedPlugins">刷新</el-button></div>
-          <el-alert v-if="catalogError" class="alert" :title="catalogError" type="error" show-icon :closable="false" />
-          <div class="plugin-list curated-list"><div v-for="item in curatedPlugins" :key="item.id" class="plugin-row"><div class="plugin-icon"><el-icon :size="20"><Connection /></el-icon></div><div class="plugin-info"><strong>{{ item.name }}</strong><p>{{ item.description }}</p></div><span v-if="item.installed" class="status-text">已安装</span><el-button v-else type="primary" plain :icon="Download" :loading="pluginAction === item.id" :disabled="Boolean(pluginAction)" @click="installCuratedPlugin(item.id)">安装</el-button></div></div>
-          <div class="install-band"><div><h2>安装插件</h2><p>输入 HTTPS 插件清单地址；主机需在后端白名单中。</p></div><div class="install-controls"><el-input v-model="pluginSource" placeholder="https://example.edu/plugin.json" clearable @keyup.enter="installPlugin" /><el-button type="primary" :icon="Plus" :loading="pluginAction === 'install'" :disabled="!pluginSource.trim()" @click="installPlugin">安装</el-button></div></div>
+          <div class="install-band"><div><h2>GitHub 自定义安装</h2><p>输入 GitHub 仓库地址，将读取仓库根目录的插件清单 plugin.json；也支持 /tree/&lt;分支&gt; 链接与 HTTPS 清单地址。</p></div><div class="install-controls"><el-input v-model="pluginSource" placeholder="https://github.com/owner/repo" clearable @keyup.enter="installPlugin" /><el-button type="primary" :icon="Plus" :loading="pluginAction === 'install'" :disabled="!pluginSource.trim()" @click="installPlugin">安装</el-button></div></div>
+          <details class="install-manifest"><summary>插件清单示例（仓库根目录 plugin.json）</summary><pre>{
+  "name": "demo_search",
+  "description": "示例插件：调用公开数据接口",
+  "url": "https://api.example.com/search",
+  "parameters": {
+    "type": "object",
+    "properties": { "query": { "type": "string", "minLength": 1, "maxLength": 200 } },
+    "required": ["query"],
+    "additionalProperties": false
+  }
+}</pre></details>
           <div class="section-toolbar"><div><strong>已安装插件</strong><span>{{ plugins.length }} 个</span></div><el-button text :icon="Refresh" :loading="pluginsBusy" @click="loadPlugins">刷新</el-button></div>
           <el-alert v-if="pluginsError" class="alert" :title="pluginsError" type="error" show-icon :closable="false" />
           <p v-if="!desktop" class="management-note">安装、启停和测试调用需在「设置」填写管理员令牌。</p>

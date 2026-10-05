@@ -131,8 +131,8 @@ assistant is meant to be.
 
 | Feature | Notes |
 | --- | --- |
-| Built-in plugins | OpenAlex scholarly search, Crossref lookups and Baidu Baike links (installed on demand; installation only registers the configuration) |
-| Plugin manifests | HTTPS JSON manifests are supported; hosts must be listed in `PLUGIN_ALLOWED_HOSTS` |
+| Plugin install | Custom install from GitHub: paste a repository URL and its root `plugin.json` is read (jsDelivr mirrors first, then raw.githubusercontent.com; resolved addresses are retried); `/tree/<branch>` links and HTTPS manifest URLs also work. Example: `examples/plugin.json` |
+| Plugin manifests | HTTPS JSON manifests; plugin hosts must be public HTTPS (narrow the set with `PLUGIN_ALLOWED_HOSTS`) |
 | Invocation | An administrator invokes them explicitly; plugins may only return JSON, and ordinary Q&A never sends messages to external plugins |
 | Outbound limits | The same HTTPS / pinned-IP / no-redirect / capped policy as web search |
 
@@ -305,7 +305,7 @@ in a phone browser and add it to the home screen for a full-screen, own-icon exp
 | `QWEN_MODEL` / `DEEPSEEK_MODEL` | `qwen3-235b-a22b` / `deepseek-chat` | Set models your account can actually use |
 | `ENABLE_RAG` | `false` | Enables BGE-M3 + Chroma vector retrieval (install `requirements-ai.txt` first) |
 | `BGE_MODEL_NAME` | `BAAI/bge-m3` | May point at a model already downloaded locally |
-| `PLUGIN_ALLOWED_HOSTS` | empty | Host allow-list for plugins (comma separated) |
+| `PLUGIN_ALLOWED_HOSTS` | empty | Optional host allow-list for plugin egress (comma separated; empty adds no restriction, private addresses are always blocked) |
 | `CORS_ORIGINS` | `http://localhost:5173` | Origins allowed for the web app |
 | `WEB_SEARCH_ENABLED` | `false` | Web search master switch |
 | `WEB_SEARCH_PROVIDER` | `auto` | `auto` / `bing` (keyless) / `tavily` / `bocha` |

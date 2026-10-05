@@ -98,4 +98,4 @@ python scripts/build_desktop.py --directory
 
 开源模型在设置页按需下载，支持 Ollama 官方、Hugging Face 和 HF Mirror。首次需安装并启动 Ollama，界面提供官方下载入口。预置 Qwen3 0.6B、Qwen3 1.7B 和 DeepSeek R1 1.5B，镜像文件固定版本并校验 SHA-256。下载可能占用约 0.4–1.1 GB，导入也需额外空间。
 
-推荐插件为 OpenAlex、Crossref、百度百科，可选择安装、停用和卸载。百度百科按关键词打开系统浏览器搜索页，不提供未授权的抓取 API。
+插件改为 GitHub 自定义安装：在插件页粘贴 GitHub 仓库地址（读取仓库根目录 plugin.json，经 jsDelivr 与 raw.githubusercontent.com 依次尝试并自动重试多个地址），或用 `/tree/分支` 链接与 HTTPS 清单地址安装；插件须为公网 HTTPS 主机且只返回 JSON。旧版本已安装的百度百科插件仍按关键词打开系统浏览器搜索页。

@@ -317,6 +317,9 @@ html[data-theme='dark'] .markdown-body .hljs-title, html[data-theme='dark'] .mar
 .install-band { display: flex; align-items: center; justify-content: space-between; gap: 30px; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); padding: 21px 0; margin-bottom: 24px; }
 .install-controls { display: flex; gap: 8px; width: min(480px,55%); }
 .install-controls .el-button { flex: 0 0 auto; }
+.install-manifest { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); padding: 12px 16px; margin: 0 0 24px; }
+.install-manifest summary { cursor: pointer; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.install-manifest pre { margin: 10px 0 0; padding: 12px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-muted); color: var(--text-secondary); font: 11px/1.7 Consolas, "Microsoft YaHei", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 .plugin-list { min-height: 150px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
 .plugin-row { min-height: 82px; display: flex; align-items: center; gap: 15px; padding: 17px 20px; border-bottom: 1px solid var(--border-subtle); }
 .plugin-row:last-child { border-bottom: 0; }

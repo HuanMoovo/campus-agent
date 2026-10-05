@@ -29,8 +29,7 @@ from .desktop_runtime import desktop_enabled, install_desktop_routes
 from .db import Base, SessionLocal, engine, ensure_conversation_columns, get_db
 from .models import Conversation, Document, Message, Plugin, User
 from .model_runtime import configuration as model_configuration, update_provider, test_provider, local_models, start_download, get_download, cancel_download, resolve_local_model, LocalModelError
-from .plugins import fetch_plugin_json, invoke_plugin, validate_plugin_url
-from .plugin_catalog import catalog_list, install_curated_plugin
+from .plugins import GITHUB_HOSTS, fetch_github_manifest, fetch_manifest_json, invoke_plugin, validate_plugin_url
 from .rag import knowledge_index
 from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, ConversationBatchDelete, ConversationUpdate, DocumentCreate, DocumentUpdate, FeedbackRequest, ImportUrlRequest, McpServerCreate, McpServerUpdate, PasswordChange, PasswordReset, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, UserCreate, UserUpdate, WebSearchConfigUpdate
 from .seed import seed_demo_documents
@@ -895,19 +894,6 @@ def list_plugins(db: Session = Depends(get_db)):
     return [plugin_json(plugin) for plugin in db.scalars(select(Plugin).order_by(Plugin.name)).all()]
 
 
-@app.get("/api/plugins/catalog")
-def list_plugin_catalog(db: Session = Depends(get_db)):
-    return catalog_list(db)
-
-
-@app.post("/api/plugins/catalog/install", dependencies=[Depends(require_admin)])
-def install_catalog_plugin(body: dict, db: Session = Depends(get_db)):
-    plugin_id = body.get("id")
-    if not isinstance(plugin_id, str):
-        raise HTTPException(422, "缺少插件编号")
-    return plugin_json(install_curated_plugin(db, plugin_id))
-
-
 @app.post("/api/plugins", dependencies=[Depends(require_admin)])
 def add_plugin(body: PluginCreate, db: Session = Depends(get_db)):
     validate_plugin_url(str(body.url))
@@ -928,10 +914,15 @@ def install_plugin(body: dict, db: Session = Depends(get_db)):
     from pydantic import ValidationError
 
     source = body.get("source")
-    if not isinstance(source, str):
+    if not isinstance(source, str) or not source.strip():
         raise HTTPException(422, "缺少插件清单地址")
+    source = source.strip()
+    if (urlsplit(source).hostname or "").lower() in GITHUB_HOSTS:
+        manifest = fetch_github_manifest(source)
+    else:
+        manifest = fetch_manifest_json(source, use_url_whitelist=True)
     try:
-        manifest = PluginCreate.model_validate(fetch_plugin_json(source, max_bytes=100_000))
+        manifest = PluginCreate.model_validate(manifest)
     except ValidationError as exc:
         raise HTTPException(422, "插件清单格式无效") from exc
     return add_plugin(manifest, db)

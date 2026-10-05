@@ -2,6 +2,15 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 功能批次：插件改版——移除推荐插件，GitHub 自定义安装（2026-10-03）
+
+- **后端（388 passed，65 subtests；净 +30）**：删除推荐插件目录（`GET /api/plugins/catalog` 与一键安装端点；`plugin_catalog.py` 移除，常量并入 `plugins.py`）；`POST /api/plugins/install` 重写——支持 GitHub 仓库地址（含 `.git`、`?tab=`、`/tree/<分支>`、`/blob/<分支>/plugin.json` 形式）解析为 owner/repo/ref，按 **jsDelivr（cdn → fastly，逐解析地址自动重试）→ raw.githubusercontent.com** 顺序读取仓库根目录 `plugin.json`，直接 HTTPS 清单地址仍可用；出站门禁保持公网 HTTPS + 固定 IP + 禁重定向 + 100KB 限额，`PLUGIN_ALLOWED_HOSTS` 改为可选白名单（默认留空不额外限定，内网地址始终禁用）。测试覆盖：URL 解析正反例 18 项、候选顺序与回退链、404/502/422 映射、端点鉴权与输入校验、白名单/内网 IP 门禁、多地址重试（本轮 QA 实测发现 jsDelivr 一个解析地址被重置、另一个正常，据此实现逐地址重试）、百度百科回归 3 组。
+- **前端（29 passed；vue-tsc/生产构建通过）**：插件页移除推荐插件区块与相关客户端方法，新增「GitHub 自定义安装」输入区与可折叠的插件清单示例；空态与已安装列表交互不变。
+- **桌面联调（源码后端 7/7 通过）**：`backend.integration.cjs` 更新——catalog 路由确认移除（桌面模式无 token 为全局 401、带 token 404 静态挂载兜底）、`/api/plugins/install` 鉴权与地址校验（不发起真实 GitHub 访问）。
+- **真实网络实测（隔离数据目录，真实出网）**：查询不存在的清单 `https://github.com/octocat/Hello-World` → **404**「仓库根目录未找到 plugin.json」（修复顺序与重试前 18.5s，现约 8s）；经 jsDelivr 直读真实文件 `three.js@HEAD/package.json` → **422** 清单格式无效（0.2s，边缘缓存生效）；种子 OpenAlex 插件真实调用 `api.openalex.org` → **200**、25 条结果（首条 “Machine Learning”，2–3s）。
+- **真实浏览器（Edge + Playwright，11 项断言全绿；5 张截图逐张核验）**：插件页无推荐区块、「GitHub 自定义安装」+ 清单示例展示正常；`http://` 地址 → 400「仅支持 https://github.com/…」提示；真实缺失仓库 → 404 提示且列表不变；已安装行测试调用 → 真实返回且无错误弹窗；卸载确认 → 列表清空。控制台仅 2 条失败请求记录，分别对应两笔刻意发起的被拒安装（400/404），无其他错误。
+- **未验证**：桌面安装版未重新打包（随发版统一执行）；jsDelivr 对分支引用的缓存时效未计时验证（新推送后立刻安装可能读到旧内容或短暂 404，可用 `/tree/<提交>` 固定）；拖拽式“把仓库链接拖进窗口”等便捷入口未做。
+
 ## 功能批次：附件提问 / 快速提问窗 / 首次使用引导（2026-10-03）
 
 - **后端（358 passed，65 subtests；+4 项附件测试）**：`ChatRequest.attachments`（`ChatAttachment.name` / `text` 上限 20 万字符，最多 3 个）；`attachments_augmented` 将附件拼为 fenced block 注入模型提示——**落库仍为提问原文**（单测断言回读内容不含附件正文块）；新增 `POST /api/chat/attachments/extract`（复用上传解析管线，TXT/MD/PDF/DOCX ≤5MB，返回 `{name,text}` 并截断至 20 万字符）。

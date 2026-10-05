@@ -1,0 +1,13 @@
+{
+  "name": "openalex_search",
+  "description": "检索开放学术论文与作者元数据（OpenAlex 开源项目）。",
+  "url": "https://api.openalex.org/works",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "search": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "required": ["search"],
+    "additionalProperties": false
+  }
+}

@@ -130,8 +130,8 @@ Mens は「学内規定・手続きの質問応答」「ローカルのナレッ
 
 | 機能 | 説明 |
 | --- | --- |
-| 内蔵プラグイン | OpenAlex の学術検索、Crossref の文献照会、百度百科へのリンク（必要時にインストール。インストールは設定の登録のみです） |
-| プラグインマニフェスト | HTTPS JSON マニフェストに対応。ホストは `PLUGIN_ALLOWED_HOSTS` に登録します |
+| プラグイン導入 | GitHub からカスタム導入：リポジトリ URL を貼るとルートの `plugin.json` を読み込みます（jsDelivr → raw.githubusercontent.com の順で試行、複数アドレスを自動リトライ）。`/tree/ブランチ` リンクや HTTPS マニフェスト URL にも対応。例：`examples/plugin.json` |
+| プラグインマニフェスト | HTTPS JSON マニフェスト。プラグインのホストは公開 HTTPS であることが必要（`PLUGIN_ALLOWED_HOSTS` で限定可能） |
 | 呼び出し | 管理者が明示的に実行します。プラグインは JSON しか返せず、通常の質問応答が外部プラグインへ自動送信することはありません |
 | 送信の制約 | ウェブ検索と同じ HTTPS / IP 固定 / リダイレクト禁止 / 上限のポリシーを適用します |
 
@@ -301,7 +301,7 @@ docker compose logs -f backend
 | `QWEN_MODEL` / `DEEPSEEK_MODEL` | `qwen3-235b-a22b` / `deepseek-chat` | アカウントで実際に使えるモデルに変更します |
 | `ENABLE_RAG` | `false` | BGE-M3 + Chroma のベクトル検索を有効化（先に `requirements-ai.txt` をインストール） |
 | `BGE_MODEL_NAME` | `BAAI/bge-m3` | ダウンロード済みのローカルモデルを指定しても構いません |
-| `PLUGIN_ALLOWED_HOSTS` | 空 | プラグインがアクセスできるホストの許可リスト（カンマ区切り） |
+| `PLUGIN_ALLOWED_HOSTS` | 空 | プラグイン接続先ホストの任意許可リスト（カンマ区切り。空なら追加制限なし、プライベートアドレスは常に拒否） |
 | `CORS_ORIGINS` | `http://localhost:5173` | ウェブ版の許可オリジン |
 | `WEB_SEARCH_ENABLED` | `false` | ウェブ検索の全体スイッチ |
 | `WEB_SEARCH_PROVIDER` | `auto` | `auto` / `bing`（キー不要）/ `tavily` / `bocha` |

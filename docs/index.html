@@ -343,8 +343,8 @@
       </div>
       <div class="card">
         <span class="tag" data-i18n="card11.tag">插件</span>
-        <h3 data-i18n="card11.title">可选的公开数据插件</h3>
-        <p data-i18n="card11.body">内置 OpenAlex 学术检索、Crossref 文献查询与百度百科词条跳转；插件必须使用白名单内的 HTTPS 主机，且只能返回 JSON。</p>
+        <h3 data-i18n="card11.title">GitHub 自定义插件</h3>
+        <p data-i18n="card11.body">插件改为 GitHub 自定义安装：粘贴仓库地址即读取仓库根目录 plugin.json（自动经 jsDelivr 与 raw 重试抓取）；插件必须使用公网 HTTPS 主机，且只能返回 JSON。</p>
       </div>
       <div class="card">
         <span class="tag" data-i18n="card12.tag">运维</span>
@@ -556,7 +556,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       'card8.tag': 'DATA', 'card8.title': 'Backup export and import', 'card8.body': 'One click exports a zip with the knowledge base, conversations, model and campus-endpoint settings (SQLite is snapshotted consistently with VACUUM INTO and a SHA-256 manifest of every file is attached), so a new machine or a reinstall can be restored completely.',
       'card9.tag': 'DESKTOP', 'card9.title': 'Runs standalone, works out of the box', 'card9.body': 'The installer bundles the Python runtime, so no separate Python, Node or database install is needed. Window size and position are remembered, and the settings page can show backend logs or open the data folder.',
       'card10.tag': 'LOOK', 'card10.title': 'Customisable theme', 'card10.body': 'Light, dark or follow the system, with a custom accent colour; text colours are derived from contrast automatically, and the sidebar and mobile layouts are adapted separately.',
-      'card11.tag': 'PLUGINS', 'card11.title': 'Optional open-data plugins', 'card11.body': 'OpenAlex scholarly search, Crossref lookups and Baidu Baike links ship in the box. Plugins may only use allow-listed HTTPS hosts and may only return JSON.',
+      'card11.tag': 'PLUGINS', 'card11.title': 'Custom plugins from GitHub', 'card11.body': 'Plugins install from GitHub: paste a repository URL and its root plugin.json is read (jsDelivr mirrors first, then raw). Plugins must use public HTTPS hosts and may only return JSON.',
       'card12.tag': 'OPS', 'card12.title': 'Update checks and version consistency', 'card12.body': 'Once an administrator sets the HTTPS manifest, the settings page can check for a newer version and open the download page; the build script verifies that the desktop, frontend and backend versions agree and only produces an installer when every test passes.',
       'screens.title': 'Interface',
       'screens.sub': 'Screenshots of the running app (development copy, light theme).',
@@ -667,7 +667,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       'card8.tag': 'データ', 'card8.title': 'バックアップの書き出し・読み込み', 'card8.body': 'ナレッジベース・会話・モデル・学内連携の設定を含む zip をワンクリックで書き出します（SQLite は VACUUM INTO で一貫性のあるスナップショットを作成し、各ファイルの SHA-256 一覧を同梱）。機種変更や再インストール後も完全に復元できます。',
       'card9.tag': 'デスクトップ', 'card9.title': '単体で動作、すぐ使える', 'card9.body': 'インストーラーに Python ランタイムを内蔵しているため、Python / Node / データベースを別途インストールする必要はありません。ウィンドウのサイズと位置を記憶し、設定画面からバックエンドのログ閲覧とデータフォルダの表示ができます。',
       'card10.tag': '外観', 'card10.title': 'カスタマイズ可能なテーマ', 'card10.body': 'ライト / ダーク / システム連動に加えてテーマカラーを変更でき、文字色はコントラストから自動導出します。サイドバーとモバイル向けレイアウトはそれぞれ調整しています。',
-      'card11.tag': 'プラグイン', 'card11.title': '任意のオープンデータプラグイン', 'card11.body': 'OpenAlex の学術検索、Crossref の文献照会、百度百科へのリンクを内蔵。プラグインは許可リストにある HTTPS ホストのみ利用でき、返せるのは JSON だけです。',
+      'card11.tag': 'プラグイン', 'card11.title': 'GitHub からのカスタムプラグイン', 'card11.body': 'プラグインは GitHub からカスタム導入：リポジトリ URL を貼るとルートの plugin.json を読み込みます（jsDelivr → raw の順で試行）。公開 HTTPS ホストのみ利用でき、返せるのは JSON だけです。',
       'card12.tag': '運用', 'card12.title': '更新確認とバージョンの整合性', 'card12.body': '管理者が HTTPS マニフェストを設定すると、設定画面で新しいバージョンを確認しダウンロードページを開けます。ビルドスクリプトはデスクトップ・フロントエンド・バックエンドのバージョン一致を検証し、すべてのテストに合格したときだけインストーラーを生成します。',
       'screens.title': '画面',
       'screens.sub': '実際に動作している画面のスクリーンショットです（開発版・ライトテーマ）。',

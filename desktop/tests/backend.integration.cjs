@@ -83,7 +83,7 @@ test('desktop backend supports authenticated knowledge, chat history and clean s
     assert.equal(schema.info.version, expectedVersion)
   })
 
-  await t.test('model and campus configuration plus optional Baike plugin work in the shipped backend', async () => {
+  await t.test('model and campus configuration work in the shipped backend; the plugin catalog is gone', async () => {
     const key = 'mens-integration-not-a-real-key'
     const configure = { method: 'PUT', body: { api_key: key, model: 'qwen-test' } }
     assert.equal((await send(origin, '/api/models/config/qwen', undefined, configure)).status, 401)
@@ -96,20 +96,13 @@ test('desktop backend supports authenticated knowledge, chat history and clean s
     const sources = await json(origin, '/api/campus-sources', token)
     assert.equal(sources.length, 9)
     assert.ok(sources.every(source => !source.configured && !source.has_token))
-    const catalog = await json(origin, '/api/plugins/catalog', token)
-    assert.deepEqual(catalog.map(plugin => plugin.id), ['openalex', 'crossref', 'baidu_baike'])
-    const install = { method: 'POST', body: { id: 'baidu_baike' } }
-    assert.equal((await send(origin, '/api/plugins/catalog/install', undefined, install)).status, 401)
-    const plugin = await json(origin, '/api/plugins/catalog/install', token, install)
-    const response = await json(origin, '/api/plugins/baidu_baike_search/invoke', token, {
-      method: 'POST', body: { bk_key: '人工智能' },
-    })
-    assert.equal(response.result.external, true)
-    const url = new URL(response.result.url)
-    assert.equal(url.origin, 'https://baike.baidu.com')
-    assert.equal(url.searchParams.get('word'), '人工智能')
-    await json(origin, `/api/plugins/${plugin.id}`, token, { method: 'DELETE' })
-    assert.equal((await json(origin, '/api/plugins/catalog', token)).find(row => row.id === 'baidu_baike').installed, false)
+    // 推荐插件目录已移除；GitHub 自定义安装端点保留管理员鉴权与地址校验（此处不发起真实 GitHub 访问）。
+    // 桌面模式无 token 先被全局 401 拦截；带 token 若端点仍存在会返回 200，这里 404（静态挂载兜底）证明已移除。
+    assert.equal((await send(origin, '/api/plugins/catalog', token)).status, 404)
+    assert.deepEqual(await json(origin, '/api/plugins', token), [])
+    const install = { method: 'POST', body: { source: 'http://github.com/octocat/Hello-World' } }
+    assert.equal((await send(origin, '/api/plugins/install', undefined, install)).status, 401)
+    assert.equal((await send(origin, '/api/plugins/install', token, install)).status, 400)
   })
 
   const title = '桌面打包验收：冰晶图书馆通行证'

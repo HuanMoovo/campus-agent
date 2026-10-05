@@ -114,15 +114,6 @@ export interface CampusSource {
   has_token: boolean
 }
 
-export interface CuratedPlugin {
-  id: string
-  name: string
-  description: string
-  source?: string
-  installed?: boolean
-  enabled?: boolean
-}
-
 export interface ConversationSummary {
   id: string
   title: string
@@ -430,8 +421,6 @@ export const api = {
     const result = await request<Plugin[] | { items: Plugin[] }>('/plugins')
     return Array.isArray(result) ? result : result.items
   },
-  curatedPlugins: () => request<CuratedPlugin[]>('/plugins/catalog'),
-  installCuratedPlugin: (id: string) => request<Plugin>('/plugins/catalog/install', json('POST', { id })),
   installPlugin: (source: string) => request<Plugin>('/plugins/install', json('POST', { source })),
   togglePlugin: (id: string, enabled: boolean) => request<Plugin>(`/plugins/${encodeURIComponent(id)}`, json('PATCH', { enabled })),
   removePlugin: (id: string) => request<void>(`/plugins/${encodeURIComponent(id)}`, { method: 'DELETE' }),

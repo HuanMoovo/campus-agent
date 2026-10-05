@@ -128,8 +128,8 @@ Mens 把「校园政策与办事流程问答」「本地知识库检索」「校
 
 | 功能 | 说明 |
 | --- | --- |
-| 内置插件 | OpenAlex 学术检索、Crossref 文献查询、百度百科词条跳转（按需安装，仅登记配置） |
-| 插件清单 | 支持 HTTPS JSON 清单；主机需写入 `PLUGIN_ALLOWED_HOSTS` 白名单 |
+| 插件安装 | GitHub 自定义安装：粘贴 GitHub 仓库地址即读取仓库根目录 `plugin.json`（经 jsDelivr 与 raw.githubusercontent.com 依次尝试并自动重试多个解析地址）；也支持 `/tree/<分支>` 链接与 HTTPS 清单地址，示例见 `examples/plugin.json` |
+| 插件清单 | HTTPS JSON 清单；插件地址须为公网 HTTPS 主机，`PLUGIN_ALLOWED_HOSTS` 可进一步限定 |
 | 调用方式 | 由管理员显式试调用；插件只能返回 JSON，普通问答不会自动向外部插件发送消息 |
 | 出站约束 | 与联网搜索相同的 HTTPS / 固定 IP / 禁跳转 / 限额策略 |
 
@@ -308,7 +308,7 @@ docker compose logs -f backend
 | `QWEN_MODEL` / `DEEPSEEK_MODEL` | `qwen3-235b-a22b` / `deepseek-chat` | 改成账号实际有权限的模型 |
 | `ENABLE_RAG` | `false` | 启用 BGE-M3 + Chroma 向量检索（需先安装 `requirements-ai.txt`） |
 | `BGE_MODEL_NAME` | `BAAI/bge-m3` | 也可指向已下载到本机的模型 |
-| `PLUGIN_ALLOWED_HOSTS` | 空 | 允许插件访问的主机白名单（逗号分隔） |
+| `PLUGIN_ALLOWED_HOSTS` | 空 | 插件访问主机的可选白名单（逗号分隔；留空不额外限定，内网地址始终禁用） |
 | `CORS_ORIGINS` | `http://localhost:5173` | 网页版跨域来源 |
 | `WEB_SEARCH_ENABLED` | `false` | 联网搜索总开关 |
 | `WEB_SEARCH_PROVIDER` | `auto` | `auto` / `bing`（免密钥）/ `tavily` / `bocha` |

@@ -40,7 +40,7 @@ stubs = {
     "sqlalchemy": module("sqlalchemy", select=lambda model: model),
     "sqlalchemy.orm": module("sqlalchemy.orm", Session=object),
     "fastapi": module("fastapi", HTTPException=HTTPException),
-    "httpx": module("httpx", HTTPError=type("HTTPError", (Exception,), {})),
+    "httpx": module("httpx", HTTPError=type("HTTPError", (Exception,), {}), Timeout=lambda *args, **kwargs: SimpleNamespace()),
 }
 
 

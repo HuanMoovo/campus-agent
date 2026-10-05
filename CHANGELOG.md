@@ -5,6 +5,14 @@
 
 ## 未发布
 
+### 插件改版：移除推荐插件，GitHub 自定义安装
+
+- **移除推荐插件**：插件页不再提供内置的 OpenAlex / Crossref / 百度百科推荐列表（`GET /api/plugins/catalog` 与对应一键安装端点一并删除）；已安装的插件、启停、试调用与卸载不受影响。
+- **GitHub 自定义安装**：在插件页粘贴 GitHub 仓库地址即可安装——自动读取仓库根目录 `plugin.json`，按 jsDelivr（cdn / fastly，自动重试多个解析地址）→ raw.githubusercontent.com 顺序尝试（适配不同网络环境）；同时支持 `/tree/<分支>`、`/blob/<分支>/plugin.json` 链接与任意公网 HTTPS 插件清单地址。
+- **网络与安全**：插件清单与调用仅允许公网 HTTPS 主机（禁止内网地址与重定向，清单限 100KB）；`PLUGIN_ALLOWED_HOSTS` 改为可选白名单（留空即不额外限定，内网地址始终禁用）。
+- 仓库新增 `examples/plugin.json` 示例清单（OpenAlex 学术检索），可直接以 `https://github.com/HuanMoovo/campus-agent/tree/main/examples` 安装体验；测试：后端 +30（388 passed）、桌面联调脚本同步更新。
+
+
 ### 附件提问 / 快速提问窗 / 首次使用引导
 
 - **附件提问（⑨）**：输入框支持拖拽、粘贴或点选文件随提问发送——文本类（TXT/MD/CSV/JSON/代码等 27 种扩展名）在前端直接读取，PDF/Word 走 `POST /api/chat/attachments/extract` 解析（≤5MB）；最多 3 个附件，超出或类型不支持给出明确提示；已选附件以 chip 列表显示（可单个移除），发送后正文自动追加以「[附件] …」后缀落库。附件内容以 fenced block 注入本次模型提示，**落库仍为提问文本本身**；接口上限 3 个、单附件 20 万字符。
