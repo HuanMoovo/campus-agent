@@ -14,6 +14,8 @@ import AppearanceSettings from './components/AppearanceSettings.vue'
 import McpSettings from './components/McpSettings.vue'
 import LoginView from './components/LoginView.vue'
 import AccountSettings from './components/AccountSettings.vue'
+import CommandPalette from './components/CommandPalette.vue'
+import { matchSlashCommands, SLASH_COMMANDS } from './commands'
 import { User as UserIcon } from '@element-plus/icons-vue'
 import { authLogout, authMe, healthInfo, type AuthUser } from './api'
 import { applyAppearance } from './appearance'
@@ -455,6 +457,68 @@ function notifyAnswerReady() {
   try {
     new Notification('Mens', { body: t('chat.notifyDone') })
   } catch { /* 系统通知不可用时静默忽略 */ }
+}
+
+const paletteOpen = ref(false)
+const composerRef = ref<HTMLTextAreaElement | null>(null)
+const slashDismissed = ref(false)
+const slashActive = ref(0)
+
+const currentConversation = computed(() => conversations.value.find(item => item.id === workspace.conversationId))
+
+const paletteCommands = computed(() => {
+  const items: { id: string; label: string; hint?: string }[] = [
+    { id: 'new', label: t('cmd.new'), hint: t('cmd.newHint') },
+    { id: 'history', label: t('cmd.history'), hint: t('cmd.historyHint') },
+    { id: 'focus', label: t('cmd.focus'), hint: t('cmd.focusHint') },
+    { id: 'theme', label: t('cmd.themeToggle'), hint: t('cmd.themeToggleHint') },
+  ]
+  if (currentConversation.value) {
+    items.push({ id: 'export-md', label: t('cmd.exportMd'), hint: t('cmd.exportMdHint') })
+    items.push({ id: 'export-json', label: t('cmd.exportJson'), hint: t('cmd.exportJsonHint') })
+  }
+  for (const item of nav) items.push({ id: `view:${item.key}`, label: t(item.labelKey), hint: t('palette.viewHint') })
+  return items
+})
+
+function toggleTheme() {
+  workspace.setAppearance(workspace.appearance === 'dark' ? 'light' : 'dark')
+}
+
+function runPaletteCommand(id: string) {
+  if (id === 'new') { newConversation(); return }
+  if (id === 'history') { historyOpen.value = true; return }
+  if (id === 'focus') { void nextTick(() => composerRef.value?.focus()); return }
+  if (id === 'theme') { toggleTheme(); return }
+  if (id === 'export-md' || id === 'export-json') {
+    if (currentConversation.value) void exportConversation(currentConversation.value, id === 'export-md' ? 'md' : 'json')
+    return
+  }
+  if (id.startsWith('view:')) selectView(id.slice(5) as View)
+}
+
+function onGlobalKeydown(event: KeyboardEvent) {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k') {
+    event.preventDefault()
+    paletteOpen.value = !paletteOpen.value
+  }
+}
+
+const slashOptions = computed(() => (slashDismissed.value ? [] : matchSlashCommands(SLASH_COMMANDS, prompt.value)))
+
+function onPromptInput() {
+  slashDismissed.value = false
+  slashActive.value = 0
+}
+
+function runSlashCommand(id: string) {
+  prompt.value = ''
+  slashDismissed.value = false
+  slashActive.value = 0
+  if (id === 'new') newConversation()
+  else if (id === 'history') historyOpen.value = true
+  else if (id === 'export') { if (currentConversation.value) void exportConversation(currentConversation.value, 'md') }
+  else if (id === 'theme') toggleTheme()
 }
 
 function selectView(view: View) {
@@ -929,6 +993,29 @@ async function regenerateMessage(forceDeep = false) {
 }
 
 function onChatKeydown(event: KeyboardEvent) {
+  if (slashOptions.value.length) {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      slashActive.value = (slashActive.value + 1) % slashOptions.value.length
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      slashActive.value = (slashActive.value - 1 + slashOptions.value.length) % slashOptions.value.length
+      return
+    }
+    if (event.key === 'Escape') {
+      event.preventDefault()
+      slashDismissed.value = true
+      return
+    }
+    if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
+      event.preventDefault()
+      const option = slashOptions.value[slashActive.value]
+      if (option) runSlashCommand(option.id)
+      return
+    }
+  }
   if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) {
     event.preventDefault()
     void sendChat()
@@ -1301,6 +1388,7 @@ async function restartDesktop() {
 onMounted(async () => {
   await checkAuth()
   applyLocale()
+  window.addEventListener('keydown', onGlobalKeydown)
   void loadHealth()
   void loadWebStatus()
   void loadDesktopInfo()
@@ -1318,6 +1406,7 @@ onMounted(async () => {
 onUnmounted(() => {
   if (downloadTimer) clearTimeout(downloadTimer)
   systemAppearance.removeEventListener('change', updateAppearance)
+  window.removeEventListener('keydown', onGlobalKeydown)
 })
 </script>
 
@@ -1325,6 +1414,7 @@ onUnmounted(() => {
   <LoginView v-if="authState === 'anonymous'" @authenticated="onAuthenticated" />
   <div v-else-if="authState === 'checking'" class="auth-checking">{{ t('auth.checking') }}</div>
   <div v-else class="app-shell" :class="{ 'desktop-app': desktop }">
+    <CommandPalette v-model:open="paletteOpen" :items="paletteCommands" @select="runPaletteCommand" />
     <div v-if="mobileNavOpen" class="mobile-scrim" @click="mobileNavOpen = false" />
     <aside class="sidebar" :class="{ 'sidebar-open': mobileNavOpen }">
       <div class="brand">
@@ -1351,7 +1441,7 @@ onUnmounted(() => {
       <header class="topbar">
         <button class="mobile-menu icon-button" :aria-label="t('app.menu')" @click="mobileNavOpen = true"><el-icon :size="20"><Grid /></el-icon></button>
         <div class="breadcrumb"><span>Mens</span><el-icon><ArrowRight /></el-icon><strong>{{ viewLabel }}</strong></div>
-        <div class="top-actions"><span class="mode-chip" :class="{ demo: !health }">{{ healthLabel }}</span><span class="model-chip" :title="modelLabel">{{ modelLabel }}</span></div>
+        <div class="top-actions"><el-tooltip :content="t('palette.hint')" placement="bottom"><el-button class="palette-button" text :icon="Search" :aria-label="t('palette.title')" @click="paletteOpen = true" /></el-tooltip><span class="mode-chip" :class="{ demo: !health }">{{ healthLabel }}</span><span class="model-chip" :title="modelLabel">{{ modelLabel }}</span></div>
       </header>
 
       <main class="main-content" :class="{ 'chat-main': workspace.view === 'chat' }">
@@ -1413,7 +1503,7 @@ onUnmounted(() => {
             <div v-if="chatBusy && !streamingMessage?.text && !streamingMessage?.thinking" class="message-row assistant"><div class="message-avatar"><img :src="mensLogo" alt="" /></div><div class="message-body"><div class="message-author">Mens</div><div class="typing"><span /><span /><span /></div></div></div>
             <div ref="chatEnd" />
           </div>
-          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" :placeholder="t('chat.placeholder')" :aria-label="t('chat.placeholder')" @keydown="onChatKeydown" /><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>{{ t('chat.webToggle') }}</span></label></el-tooltip><span>{{ t('chat.disclaimer') }}</span><div class="composer-actions"><el-tooltip :content="reasoningHint" placement="top"><el-dropdown trigger="click" placement="top-end" :disabled="!workspace.ready || chatBusy" @command="setReasoning"><button type="button" class="reasoning-pill" :disabled="!workspace.ready || chatBusy" :aria-label="reasoningHint"><span>{{ reasoningLabel }}</span><el-icon class="reasoning-caret" :size="10"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="fast"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningFast') }}</strong><small>{{ t('chat.reasoningFastDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'fast'"><Check /></el-icon></div></el-dropdown-item><el-dropdown-item command="deep"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningDeep') }}</strong><small>{{ t('chat.reasoningDeepDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'deep'"><Check /></el-icon></div></el-dropdown-item></el-dropdown-menu></template></el-dropdown></el-tooltip><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">{{ t('chat.stop') }}</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">{{ t('chat.send') }}</el-button></div></div></div></div>
+          <div class="composer-wrap"><div class="composer"><textarea v-model="prompt" ref="composerRef" rows="2" maxlength="4000" :disabled="!workspace.ready || historyBusy" :placeholder="t('chat.placeholder')" :aria-label="t('chat.placeholder')" @input="onPromptInput" @keydown="onChatKeydown" /><div v-if="slashOptions.length" class="slash-menu" role="listbox" :aria-label="t('palette.slashTitle')"><button v-for="(option, index) in slashOptions" :key="option.id" type="button" class="slash-item" :class="{ active: index === slashActive }" @mousedown.prevent="runSlashCommand(option.id)" @mousemove="slashActive = index"><strong>{{ option.slash }}</strong><small>{{ t(option.labelKey) }}</small></button></div><div class="composer-bottom"><el-tooltip :content="webToggleHint" placement="top"><label class="web-toggle"><el-switch v-model="webSwitch" :disabled="!webAvailable || chatBusy" size="small" /><span>{{ t('chat.webToggle') }}</span></label></el-tooltip><span>{{ t('chat.disclaimer') }}</span><div class="composer-actions"><el-tooltip :content="reasoningHint" placement="top"><el-dropdown trigger="click" placement="top-end" :disabled="!workspace.ready || chatBusy" @command="setReasoning"><button type="button" class="reasoning-pill" :disabled="!workspace.ready || chatBusy" :aria-label="reasoningHint"><span>{{ reasoningLabel }}</span><el-icon class="reasoning-caret" :size="10"><ArrowDown /></el-icon></button><template #dropdown><el-dropdown-menu><el-dropdown-item command="fast"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningFast') }}</strong><small>{{ t('chat.reasoningFastDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'fast'"><Check /></el-icon></div></el-dropdown-item><el-dropdown-item command="deep"><div class="reasoning-option"><div class="reasoning-option-text"><strong>{{ t('chat.reasoningDeep') }}</strong><small>{{ t('chat.reasoningDeepDesc') }}</small></div><el-icon v-if="workspace.reasoning === 'deep'"><Check /></el-icon></div></el-dropdown-item></el-dropdown-menu></template></el-dropdown></el-tooltip><el-button v-if="chatBusy" type="danger" plain :icon="CircleClose" @click="stopChat">{{ t('chat.stop') }}</el-button><el-button v-else type="primary" :icon="ArrowRight" :disabled="!workspace.ready || !prompt.trim() || historyBusy || Boolean(historyError) || Boolean(localChatProblem)" @click="sendChat()">{{ t('chat.send') }}</el-button></div></div></div></div>
             </div>
           </div>
         </section>

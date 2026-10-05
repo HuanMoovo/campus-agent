@@ -2,6 +2,12 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 功能批次：命令面板与斜杠指令（2026-10-03）
+
+- **前端（25 passed，+3 项指令匹配测试；vue-tsc/生产构建通过）**：新增 `CommandPalette.vue`（过滤 / 键盘导航 / 点击 / 遮罩关闭）与 `src/commands.ts`（`matchSlashCommands` / `filterCommands` 纯函数）；`App.vue` 全局 Ctrl+K 监听、斜杠状态机（与发送互斥的 ↑/↓/Enter/Esc 处理）、顶部栏入口按钮；文案三语。
+- **真实浏览器（Edge + Playwright，0 控制台错误；4 张截图逐张核验）**：Ctrl+K 打开且输入框聚焦 → 过滤「设置」→ Enter 切换到设置页（`.settings-view` 出现）；Esc 关闭；点击条目执行；斜杠菜单 4 条指令、↓ 选中 `/history`、`/ne` 过滤为 1 条；普通文本不弹菜单；`/export` 触发真实下载 `mens-conversation-<id>-<ts>.md`；`/theme` 使 `data-theme` 由 light→dark；`/history` 重开面板；`/new` 清空会话（空状态出现）、输入框清空、菜单收起。
+- **未验证**：桌面安装版未重打包（随发版统一执行）；全局快捷键经 `Control+k` 注入验证，物理键盘未覆盖。
+
 ## 功能批次：历史对话管理增强（2026-10-03）
 
 - **后端（354 passed，65 subtests；+5 项历史测试）**：新增 `GET /api/conversations/search`（LIKE 全文匹配 + 通配符转义 + 大小写不敏感片段）、`PATCH /api/conversations/{id}`（重命名/置顶，空标题恢复默认，404/422 覆盖）、`POST /api/conversations/batch-delete`（仅删本 client，越权 id 静默跳过并返回实际删除数）；`ensure_conversation_columns` 对旧库自动补齐 `title`/`pinned`（幂等，含旧表迁移单测）。
