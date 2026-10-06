@@ -1,7 +1,9 @@
 name: CI
 
 # The packaging workflow (build-desktop.yml) only runs on version tags, so this one keeps
-# day-to-day work honest: every push to main and every pull request runs the three suites.
+# day-to-day work honest: every push to main and every pull request runs the three suites
+# on Ubuntu, macOS and Windows. The Compose validation stays on Ubuntu because only that
+# runner ships Docker.
 on:
   push:
     branches: [main]
@@ -17,9 +19,19 @@ concurrency:
 
 jobs:
   tests:
-    name: Backend, frontend and desktop suites
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    name: Suites (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            venv_python: ./.venv/bin/python
+          - os: macos-latest
+            venv_python: ./.venv/bin/python
+          - os: windows-latest
+            venv_python: ./.venv/Scripts/python.exe
     steps:
       - uses: actions/checkout@v4
 
@@ -35,9 +47,9 @@ jobs:
         working-directory: backend
         run: |
           python -m venv .venv
-          .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -r requirements.txt
-          .venv/bin/python -m pytest -q
+          ${{ matrix.venv_python }} -m pip install --upgrade pip
+          ${{ matrix.venv_python }} -m pip install -r requirements.txt
+          ${{ matrix.venv_python }} -m pytest -q
 
       - name: Frontend tests and production build
         working-directory: frontend
@@ -55,6 +67,7 @@ jobs:
           node --test tests/main.test.cjs tests/policy.test.cjs tests/version.test.cjs
 
       - name: Compose file is valid
+        if: matrix.os == 'ubuntu-latest'
         run: |
           cp .env.example .env
           sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-placeholder-password/' .env
