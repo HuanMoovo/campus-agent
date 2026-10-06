@@ -2,6 +2,13 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 跨平台验证：三平台测试矩阵 + 四平台构建冒烟（2026-10-06）
+
+- **三平台测试矩阵（CI run 37412010625，success）**：日常流水线扩展为 ubuntu / macos / windows（提交 `7864ed0`）——`Suites (ubuntu-latest)`、`Suites (macos-latest)`、`Suites (windows-latest)` 全部通过：后端 393（65 subtests）、前端 29 + 生产构建、桌面 9 在三个系统上各跑一遍；Compose 校验仅在 ubuntu 执行（success），macOS / Windows 按设计跳过。
+- **四平台构建 + 产物冒烟（CI run 37412010682，success）**：对最新 main 手动触发（含联网搜索过滤改动）——Windows x64（NSIS 静默安装后启动）、macOS x64、macOS arm64（挂载 dmg 启动 .app）、Linux x64（xvfb 运行 AppImage）四个目标全部成功；每个目标先跑全套测试再打包，「Smoke-test the packaged app」步骤在四个目标上均 completed/success（启动产物 → 探测内置后端与界面 → 正常退出）；四个平台产物已上传 Actions Artifacts（127–327 MB）。
+- **本机 Linux 复测**：用本机已有的 `campus-agent-backend` 镜像（python:3.11-slim + 完整依赖）在 Docker 容器中跑后端全量测试——**393 passed，65 subtests passed**（本机直连 PyPI / Docker Hub 拉取受限，前端与桌面的 Linux 复测未在本机进行，由 CI ubuntu 运行器覆盖）。
+- **范围说明**：以上为 GitHub 托管运行器（真实 macOS / Windows / Linux 系统环境）与本地 Docker Linux 上的执行结果；物理真机（校内设备、实际用户环境）仍未覆盖。
+
 ## 功能批次：联网搜索相关性过滤（2026-10-05）
 
 - **后端（393 passed，65 subtests；+5 项过滤测试）**：`parse_bing_results` 跳过广告标记条目（`b_ad` 类名 / 「广告」标签）；新增 `filter_results(query, results)`——分词抽为 `app/text_terms.py`（知识库检索同步改为引用），标题命中 ≥2 个提问关键词（单关键词提问 ≥1）且同站去重（仅保留排名最前一条）；`search()` 对全部服务商统一应用过滤，抓取正文的目标也来自过滤后列表；全部被过滤时提示「没有找到与问题相关的内容」。测试覆盖：广告块跳过、无关条目 + 同站去重、SERP 垃圾与广告不进入结果、全过滤时的明确提示、仅摘要命中不放行（防「校内网」类漏网）。
