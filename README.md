@@ -287,7 +287,7 @@ docker compose logs -f backend
 - 根目录 `.env` 的变量会透传给后端，联网搜索、更新清单与插件白名单的配置方式与本地安装一致（见[配置参考](#配置参考)）。
 - `ENABLE_RAG=true` 会把向量检索依赖打进镜像（`INSTALL_VECTOR` 构建参数），需要重新构建。
 - 数据都在命名卷里：`docker compose down` 保留数据，`docker compose down -v` 删除数据；升级前请先备份数据库。
-- 该 compose 面向单机或可信网络；对公网开放仍需自行加上 HTTPS、前置认证与限流。
+- 该 compose 默认免登录，适合单机或可信网络；对公网开放时在根目录 `.env` 设置 `AUTH_REQUIRED=true` 启用内置登录（首次启动创建管理员；全部登录变量见 `.env.example`），并自行加上 HTTPS 与限流。
 - **本机已实测**（Docker Desktop 29.1.3）：两个镜像构建通过；database / backend / frontend 三个服务全部启动，前两者通过健康检查；`http://localhost:8080/` 返回 200，`/api/health` 返回 `{"status":"ok",...}`；后端在容器内确认连接 **PostgreSQL 16.15**；真实浏览器打开「Mens 工作台」，零失败请求、零页面错误。
 
 ### 5. 不用 Docker 的手机 / 平板（PWA）

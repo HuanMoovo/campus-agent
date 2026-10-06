@@ -5,6 +5,12 @@
 
 ## 未发布
 
+### 部署体验：自建部署可开启内置登录
+
+- `compose.yaml` 增加登录变量透传：在根目录 `.env` 设置 `AUTH_REQUIRED=true` 即可为自建网站启用登录门禁（`AUTH_ADMIN_USERNAME`、`AUTH_ADMIN_PASSWORD`、`SESSION_DAYS`、`COOKIE_SECURE`、`ALLOW_REGISTRATION`、`REGISTER_CODE`；默认全部关闭即免登录，桌面版不受影响）。
+- `frontend/nginx.conf` 为 `/api/` 关闭响应缓冲并改用 HTTP/1.1：修复组合部署下聊天流式回答可能被 Nginx 缓冲、答复「整段出现」的问题（重建前端镜像后生效）。
+- `.env.example` 补全全部登录变量与注释；README（中/英/日）Docker 部署节与 DEPLOY.md 注明「默认免登录，公网开放先开 `AUTH_REQUIRED`」。
+
 ### CI：三平台测试矩阵
 
 - 日常流水线从单一 ubuntu 扩展为 ubuntu / macos / windows 三个系统：每次推送与 PR 在各系统上各跑一遍三套测试（后端 393、前端 29 + 生产构建、桌面 9）；Compose 配置校验仍只在 ubuntu 执行（macOS / Windows 运行器不提供 Docker）。

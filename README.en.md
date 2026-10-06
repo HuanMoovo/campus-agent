@@ -284,7 +284,7 @@ Notes:
 - All variables in the root `.env` are passed through, so web search, the update manifest and the plugin allow-list can be configured the same way as in a local install (see the configuration reference).
 - `ENABLE_RAG=true` builds the vector-retrieval dependencies into the image (`INSTALL_VECTOR` build argument) and needs a rebuild.
 - Data lives in named volumes, so `docker compose down` keeps it and `docker compose down -v` removes it. Back up the database before upgrading.
-- The compose stack is meant for a single machine or a trusted network; exposing it to the internet still requires HTTPS, authentication in front and a rate limit.
+- The compose stack has no login by default and is meant for a single machine or a trusted network; to expose it, set `AUTH_REQUIRED=true` in the root `.env` to turn on the built-in login (the first start creates the admin account; all login variables are documented in `.env.example`), and add HTTPS and rate limiting yourself.
 - **Verified locally** (Docker Desktop 29.1.3): both images build; the database, backend and frontend services all start, the first two passing their health checks; `http://localhost:8080/` returns 200 and `/api/health` returns `{"status":"ok",…}`; the backend confirms a **PostgreSQL 16.15** connection inside the container; and a real browser loads the workbench with no failed requests and no page errors.
 
 ### 5. Phone / tablet (PWA) without Docker

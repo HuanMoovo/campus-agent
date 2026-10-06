@@ -32,6 +32,14 @@ services:
       WEB_SEARCH_MAX_RESULTS: ${WEB_SEARCH_MAX_RESULTS:-5}
       WEB_SEARCH_FETCH_PAGES: ${WEB_SEARCH_FETCH_PAGES:-2}
       UPDATE_MANIFEST_URL: ${UPDATE_MANIFEST_URL:-}
+      # 网站登录（默认关闭 = 免登录，桌面版不受影响）：在根目录 .env 打开 AUTH_REQUIRED=true
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-false}
+      AUTH_ADMIN_USERNAME: ${AUTH_ADMIN_USERNAME:-admin}
+      AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-}
+      SESSION_DAYS: ${SESSION_DAYS:-14}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-false}
+      REGISTER_CODE: ${REGISTER_CODE:-}
       CORS_ORIGINS: http://localhost:8080
     volumes:
       - backend_data:/app/data
