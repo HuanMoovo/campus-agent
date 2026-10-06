@@ -5,6 +5,11 @@
 
 ## 未发布
 
+### 质量检查：依赖审计与数据库兼容复核
+
+- 依赖审计：前端 `npm audit` 发现 1 项 high（`source-map-js` 事件循环 DoS，经 jsdom / vite / vue 传递依赖）→ `npm audit fix` 升级并复核**归零**，前端 29 项测试与生产构建通过；后端 `pip-audit -r requirements.txt` **无已知漏洞**。
+- 数据库兼容：在全新 PostgreSQL 16.15 库上实测 `create_all` 建表与应用路径 ORM 写入（用户 / 登录会话 / 对话 / 消息、JSON 列、时区时间戳）全部通过；配合此前的旧库迁移修复（`DEFAULT FALSE`），PostgreSQL 的「新库 + 旧库升级」两条路径均验证完毕。
+
 ### 修复：PostgreSQL 部署旧库迁移失败（pinned 列）
 
 - `ensure_conversation_columns` 里 `pinned BOOLEAN NOT NULL DEFAULT 0` 在 PostgreSQL 上类型不匹配（boolean vs integer），带旧数据库升级的 compose / PostgreSQL 部署启动即退出（SQLite 宽松未暴露）；改为 `DEFAULT FALSE`，两种数据库一致通过。

@@ -2,6 +2,12 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 质量检查批次：依赖审计与全新 PG 建库（2026-10-06）
+
+- **依赖审计**：前端 `npm audit`（--omit=dev）发现 1 项 high——`source-map-js` 事件循环 DoS（GHSA-68fv-2mgg-jv7q，经 jsdom / vite / vue 传递）；`npm audit fix` 升级锁文件后复核归零，前端 29 项测试与生产构建通过。后端 `pip-audit -r requirements.txt`：无已知漏洞。
+- **全新 PostgreSQL 路径**：`Base.metadata.create_all` 在全新库建表成功（`pinned` 布尔默认在 DDL 上为 `false`）；按应用真实路径 ORM 写入——创建用户（uuid）、会话令牌、对话（`pinned=False`、带时区时间戳）、两条消息（自增 id、JSON `result_data`）——全部通过，会话解析为 True。旧库迁移路径见下节修复记录。
+- **代码扫描（本轮）**：无 TODO/FIXME、无调试 print / console.log 残留、无 eval / shell 注入面、无 `verify=False`、无 f-string SQL；桌面端 `isOwnUrl` 为精确 origin 判定且令牌仅注入自家后端 URL；`/api/desktop/*` 由独立 DesktopGuard（一次性令牌）保护；MCP 子进程为管理员登记受控特性。
+
 ## 修复验证：PostgreSQL 旧库迁移与自建部署登录（2026-10-06）
 
 - **发现**：验证「自建部署开启登录」时，带旧数据库的 compose（PostgreSQL 16.15）栈启动失败——`ensure_conversation_columns` 的 `pinned BOOLEAN NOT NULL DEFAULT 0` 在 PostgreSQL 上报 `DatatypeMismatch`（SQLite 宽松未暴露）。用临时库复现原错误，并验证修复语句（`DEFAULT FALSE`，插入行 `pinned=f`）。
