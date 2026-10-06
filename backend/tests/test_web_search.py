@@ -42,7 +42,7 @@ BING_FIXTURE = """
 <ol id="b_results">
 <li class="b_algo" data-id iid=SERP.1><h2><a href="https://www.example.edu.cn/notice/1">关于2026年秋季学期<strong>选课</strong>的通知</a></h2>
 <div class="b_caption"><p class="b_lineclamp2">教务处将于9月1日开放选课系统，请同学们按时完成选课，逾期不予补选。</p></div></li>
-<li class="b_algo"><h2><a href="https://news.example.com/a?b=1&amp;c=2">校园新闻：选课指南</a></h2><p>新生选课指南与常见问题解答。</p></li>
+<li class="b_algo"><h2><a href="https://news.example.com/a?b=1&amp;c=2">选课通知：新学期选课安排指南</a></h2><p>新生选课指南与常见问题解答。</p></li>
 <li class="b_algo"><h2><a href="http://insecure.example.com/x">明文站点结果</a></h2><p>该结果不是 HTTPS，应被忽略。</p></li>
 </ol>
 """
@@ -116,6 +116,15 @@ class ParsingTests(WebSearchTestCase):
         self.assertIn("选课系统", results[0]["snippet"])
         self.assertEqual(results[1]["url"], "https://news.example.com/a?b=1&c=2")
         self.assertEqual(web_search.parse_bing_results(BING_FIXTURE, 1), results[:1])
+
+    def test_ad_marked_blocks_are_skipped(self):
+        markup = ('<ol id="b_results">'
+                  '<li class="b_algo b_ad"><h2><a href="https://ads.example/promo">限时优惠</a></h2>'
+                  '<p><span class="b_adlabel">广告</span>立即购买</p></li>'
+                  '<li class="b_algo"><h2><a href="https://www.example.edu.cn/notice/2">正常结果</a></h2>'
+                  '<p>正文内容。</p></li></ol>')
+        results = web_search.parse_bing_results(markup, 5)
+        self.assertEqual([row["url"] for row in results], ["https://www.example.edu.cn/notice/2"])
 
     def test_page_text_extraction_skips_scripts_and_keeps_structure(self):
         title, text = web_search.html_to_text(PAGE_FIXTURE)
@@ -231,20 +240,21 @@ class SearchDispatchTests(WebSearchTestCase):
             with self.assertRaises(web_search.WebSearchError):
                 web_search.search("x" * 201)
 
-    def test_tavily_results_are_normalized(self):
+    def test_tavily_results_are_normalized_and_irrelevant_rows_dropped(self):
         self.enable(provider="tavily", api_key="tvly-key")
         captured = {}
 
         def fake_post(url, payload, api_key, timeout=12):
             captured.update(url=url, payload=payload, key=api_key)
-            return {"results": [{"title": "T", "url": "https://a.example/1", "content": "内容 A"},
+            return {"results": [{"title": "测试页面", "url": "https://a.example/1", "content": "测试内容 A"},
+                                {"title": "无关门户", "url": "https://junk.example/9", "content": "综艺与游戏下载"},
                                 {"title": "bad", "url": "http://insecure.example/"}]}
 
         with patch.object(web_search, "_post_json", fake_post):
             payload = web_search.search("测试")
         self.assertEqual(captured["url"], web_search.TAVILY_SEARCH_URL)
         self.assertEqual(captured["key"], "tvly-key")
-        self.assertEqual(payload["results"], [{"title": "T", "url": "https://a.example/1", "snippet": "内容 A"}])
+        self.assertEqual(payload["results"], [{"title": "测试页面", "url": "https://a.example/1", "snippet": "测试内容 A"}])
 
     def test_live_context_reads_top_pages_and_never_raises(self):
         self.enable(fetch_pages=1)
@@ -264,6 +274,55 @@ class SearchDispatchTests(WebSearchTestCase):
             failed = web_search.live_context("选课")
         self.assertEqual(failed["results"], [])
         self.assertEqual(failed["error"], "搜索服务不可用")
+
+
+class RelevanceFilterTests(WebSearchTestCase):
+    def test_irrelevant_and_duplicate_hosts_are_dropped(self):
+        rows = [
+            {"title": "校园一卡通补办指南", "url": "https://www.campus.edu/a", "snippet": "补办材料：学生证或身份证。"},
+            {"title": "校园一卡通补办常见问题", "url": "https://www.campus.edu/b", "snippet": "补办窗口在一卡通服务中心。"},
+            {"title": "在线帮助中心", "url": "https://help.example.com/x", "snippet": "常见问题与联系我们。"},
+        ]
+        kept = web_search.filter_results("校园一卡通补办需要什么材料？", rows)
+        self.assertEqual([row["url"] for row in kept], ["https://www.campus.edu/a"])
+
+    def test_serp_junk_and_ads_never_reach_the_results(self):
+        markup = """
+<ol id="b_results">
+<li class="b_algo b_ad"><h2><a href="https://ads.example/promo">限时优惠广告</a></h2><p><span class="b_adlabel">广告</span>立即购买</p></li>
+<li class="b_algo"><h2><a href="https://www.library.edu.cn/borrow">图书馆借阅与续借规则</a></h2><p>借阅期限与续借次数说明。</p></li>
+<li class="b_algo"><h2><a href="https://www.bilibili.com/download">哔哩哔哩下载中心</a></h2><p>视频客户端下载。</p></li>
+<li class="b_algo"><h2><a href="https://news.example.com/lib">图书馆借阅新规解读</a></h2><p>续借次数调整为两次。</p></li>
+</ol>
+"""
+
+        def fake_fetch(url, **kwargs):
+            return "text/html; charset=utf-8", markup.encode("utf-8")
+
+        self.enable()
+        with patch.object(web_search, "fetch_bytes", fake_fetch):
+            payload = web_search.search("图书馆借阅和续借有什么规则？")
+        self.assertEqual([row["url"] for row in payload["results"]],
+                         ["https://www.library.edu.cn/borrow", "https://news.example.com/lib"])
+
+    def test_snippet_only_matches_do_not_rescue_a_result(self):
+        rows = [{"title": "人人网已经倒闭了", "url": "https://www.zhihu.com/question/1",
+                 "snippet": "校内网 图书馆 借阅 续借 规则 什么"}]
+        self.assertEqual(web_search.filter_results("校内图书馆的借阅与续借规则是什么？", rows), [])
+
+    def test_all_filtered_results_report_a_clear_message(self):
+        markup = ('<ol id="b_results"><li class="b_algo">'
+                  '<h2><a href="https://junk.example/x">休闲娱乐门户</a></h2>'
+                  '<p>综艺与游戏下载。</p></li></ol>')
+
+        def fake_fetch(url, **kwargs):
+            return "text/html; charset=utf-8", markup.encode("utf-8")
+
+        self.enable()
+        with patch.object(web_search, "fetch_bytes", fake_fetch):
+            with self.assertRaises(web_search.WebSearchError) as exc:
+                web_search.search("校园一卡通补办")
+        self.assertIn("相关", str(exc.exception))
 
 
 class ChatWiringTests(WebSearchTestCase):

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .models import Document
+from .text_terms import terms
 
 logger = logging.getLogger(__name__)
 
@@ -17,13 +18,6 @@ def chunks(text: str, size: int = 650, overlap: int = 90) -> list[str]:
         raise ValueError("Chunk size must be positive and overlap must be smaller than size")
     text = re.sub(r"\s+", " ", text).strip()
     return [text[i:i + size] for i in range(0, len(text), size - overlap)] if text else []
-
-
-def terms(text: str) -> set[str]:
-    lowered = text.lower()
-    cjk = re.findall(r"[\u4e00-\u9fff]", lowered)
-    words = re.findall(r"[a-z0-9]+", lowered)
-    return set(words + ["".join(cjk[i:i + 2]) for i in range(len(cjk) - 1)])
 
 
 class KnowledgeIndex:

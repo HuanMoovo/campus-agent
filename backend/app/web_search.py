@@ -24,6 +24,7 @@ import httpx
 
 from .config import get_settings
 from .model_runtime import _decrypt, _encrypt
+from .text_terms import terms as text_terms
 
 BING_SEARCH_URL = "https://cn.bing.com/search"
 TAVILY_SEARCH_URL = "https://api.tavily.com/search"
@@ -328,6 +329,9 @@ def parse_bing_results(markup: str, limit: int) -> list[dict]:
     results = []
     blocks = re.findall(r'<li class="b_algo".*?(?=<li class="b_algo"|</ol>)', markup, re.S)
     for block in blocks:
+        # 广告位（b_ad 类名或“广告”标签）不进入候选，从源头去掉
+        if re.search(r'b_adlabel|class="b_algo[^"]*\bb_ad\b', block):
+            continue
         title_match = re.search(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
         if not title_match:
             continue
@@ -346,13 +350,40 @@ def parse_bing_results(markup: str, limit: int) -> list[dict]:
     return results
 
 
+def filter_results(query: str, results: list[dict]) -> list[dict]:
+    """过滤检索结果：去掉广告位、同站重复和与提问无关的条目。
+
+    相关性用与知识库检索相同的分词判断（中文二元组 + 英文单词）：标题里
+    至少命中 2 个提问关键词才保留（单关键词提问命中该词即可）。只算标题
+    是因为摘要经常夹带泛词，会把无关结果放进来。同一站点只保留排名最前
+    的一条；分词为空（如单字提问）时不过滤。
+    """
+    query_terms = text_terms(query or "")
+    if not query_terms:
+        return list(results)
+    minimum = min(2, len(query_terms))
+    kept: list[dict] = []
+    seen_hosts: set[str] = set()
+    for row in results:
+        host = (urlparse(str(row.get("url", ""))).hostname or "").lower()
+        if host and host in seen_hosts:
+            continue
+        title_terms = text_terms(str(row.get("title", "")))
+        if len(query_terms & title_terms) < minimum:
+            continue
+        seen_hosts.add(host)
+        kept.append(row)
+    return kept
+
+
 # ------------------------------------------------------------------------- providers
 
 
 def _bing_search(query: str, limit: int, config: dict) -> list[dict]:
     url = BING_SEARCH_URL + "?" + urlencode({"q": query, "setlang": "zh-CN", "ensearch": "0"})
     content_type, data = fetch_bytes(url, accept="text/html,application/xhtml+xml")
-    results = parse_bing_results(_decode(data, content_type), limit)
+    # 多解析一些候选，过滤无关结果后仍能凑齐所需条数
+    results = parse_bing_results(_decode(data, content_type), limit * 3)
     if not results:
         raise WebSearchError("搜索服务没有返回可解析的结果，请稍后重试")
     return results
@@ -430,9 +461,12 @@ def search(query: str, limit: int | None = None, config: dict | None = None) -> 
         raise WebSearchError("所选搜索服务缺少 API Key，请在设置中补充", 400)
     limit = _bounded(limit if limit is not None else config["max_results"], config["max_results"], 1, MAX_RESULTS)
     results = SEARCHERS[provider](query, limit, config)
-    if not results:
+    filtered = filter_results(query, results)
+    if not filtered:
+        if results:
+            raise WebSearchError("没有找到与问题相关的内容")
         raise WebSearchError("没有检索到相关网页")
-    return {"provider": provider, "results": results[:limit]}
+    return {"provider": provider, "results": filtered[:limit]}
 
 
 def live_context(query: str, config: dict | None = None) -> dict:
