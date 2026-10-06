@@ -5,6 +5,11 @@
 
 ## 未发布
 
+### 修复：PostgreSQL 部署旧库迁移失败（pinned 列）
+
+- `ensure_conversation_columns` 里 `pinned BOOLEAN NOT NULL DEFAULT 0` 在 PostgreSQL 上类型不匹配（boolean vs integer），带旧数据库升级的 compose / PostgreSQL 部署启动即退出（SQLite 宽松未暴露）；改为 `DEFAULT FALSE`，两种数据库一致通过。
+- 已在 compose（PostgreSQL 16.15）上完成端到端验证：临时库复现原错误 → 修复语句验证（插入行 `pinned=f`）→ 真实旧卷由迁移自动补列、三服务启动、登录门禁与登录链路（经 nginx）全部通过；后端 393 项测试通过。
+
 ### 部署体验：自建部署可开启内置登录
 
 - `compose.yaml` 增加登录变量透传：在根目录 `.env` 设置 `AUTH_REQUIRED=true` 即可为自建网站启用登录门禁（`AUTH_ADMIN_USERNAME`、`AUTH_ADMIN_PASSWORD`、`SESSION_DAYS`、`COOKIE_SECURE`、`ALLOW_REGISTRATION`、`REGISTER_CODE`；默认全部关闭即免登录，桌面版不受影响）。

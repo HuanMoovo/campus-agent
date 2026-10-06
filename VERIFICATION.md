@@ -2,6 +2,13 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 修复验证：PostgreSQL 旧库迁移与自建部署登录（2026-10-06）
+
+- **发现**：验证「自建部署开启登录」时，带旧数据库的 compose（PostgreSQL 16.15）栈启动失败——`ensure_conversation_columns` 的 `pinned BOOLEAN NOT NULL DEFAULT 0` 在 PostgreSQL 上报 `DatatypeMismatch`（SQLite 宽松未暴露）。用临时库复现原错误，并验证修复语句（`DEFAULT FALSE`，插入行 `pinned=f`）。
+- **compose 端到端（登录链路，经 nginx）**：`AUTH_REQUIRED=true` 由 `.env`/shell 透传进容器全链路生效——health `auth_required=true`；未登录业务接口 401「请先登录」；登录 200（首次启动创建 admin）；带会话 `me` 200；浏览器：登录页 → 登录 → 刷新保持（截图 `build/qa-auth/03、04`）。修复后的迁移在真实旧卷上自动补列成功，三服务全部启动。
+- **测试**：后端 393 项（65 subtests）通过。
+- **说明**：前端镜像本机构建受 npm 网络限制未重建，验证以挂载方式加载新 `nginx.conf` 与本地 dist（`nginx -t` 语法通过）；compose 配置校验（含新登录变量）通过。
+
 ## 跨平台验证：三平台测试矩阵 + 四平台构建冒烟（2026-10-06）
 
 - **三平台测试矩阵（CI run 37412010625，success）**：日常流水线扩展为 ubuntu / macos / windows（提交 `7864ed0`）——`Suites (ubuntu-latest)`、`Suites (macos-latest)`、`Suites (windows-latest)` 全部通过：后端 393（65 subtests）、前端 29 + 生产构建、桌面 9 在三个系统上各跑一遍；Compose 校验仅在 ubuntu 执行（success），macOS / Windows 按设计跳过。

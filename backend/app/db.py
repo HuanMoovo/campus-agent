@@ -44,4 +44,5 @@ def ensure_conversation_columns(target_engine=None) -> None:
         if "title" not in columns:
             connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN title VARCHAR(120)")
         if "pinned" not in columns:
-            connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT 0")
+            # FALSE 而不是 0：PostgreSQL 的 BOOLEAN 默认值不接受整数（SQLite 两者皆可）
+            connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN pinned BOOLEAN NOT NULL DEFAULT FALSE")
