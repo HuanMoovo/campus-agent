@@ -8,7 +8,7 @@
 Electron 桌面外壳 + Vue 3 界面 + FastAPI 后端，可在单机上离线运行
 
 <a href="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml"><img src="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml/badge.svg" alt="桌面构建状态" /></a>
-<img src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-1.2.1-0e7c74" alt="版本 1.2.1" />
+<img src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-1.2.2-0e7c74" alt="版本 1.2.2" />
 <img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="平台" />
 
@@ -190,23 +190,23 @@ python -m app.cli serve --port 8000                    # 只启动本地后端
 
 | 平台 | 状态 | 交付物与数据目录 |
 | --- | --- | --- |
-| Windows 10/11 x64 | **已构建并真机验收** | `Mens-Setup-1.2.1-x64.exe`（NSIS，用户级安装到 `%LOCALAPPDATA%\Programs\Mens`），数据在 `%APPDATA%\CampusAgent` |
-| macOS 12+（Intel） | CI 构建，未真机验收 | `Mens-1.2.1-x64.dmg` / `.zip`；未签名未公证，首次打开需右键「打开」 |
-| macOS 12+（Apple silicon） | CI 构建，未真机验收 | `Mens-1.2.1-arm64.dmg` / `.zip`；数据在 `~/Library/Application Support/CampusAgent` |
-| Linux x64 | CI 构建，未真机验收 | `Mens-1.2.1-x86_64.AppImage`（免安装）、`Mens-1.2.1-amd64.deb`；数据在 `~/.config/CampusAgent` |
+| Windows 10/11 x64 | **已构建并真机验收** | `Mens-Setup-1.2.2-x64.exe`（NSIS，用户级安装到 `%LOCALAPPDATA%\Programs\Mens`），数据在 `%APPDATA%\CampusAgent` |
+| macOS 12+（Intel） | CI 构建，未真机验收 | `Mens-1.2.2-x64.dmg` / `.zip`；未签名未公证，首次打开需右键「打开」 |
+| macOS 12+（Apple silicon） | CI 构建，未真机验收 | `Mens-1.2.2-arm64.dmg` / `.zip`；数据在 `~/Library/Application Support/CampusAgent` |
+| Linux x64 | CI 构建，未真机验收 | `Mens-1.2.2-x86_64.AppImage`（免安装）、`Mens-1.2.2-amd64.deb`；数据在 `~/.config/CampusAgent` |
 | Android / iOS | 不提供原生应用 | 使用可安装网页版（PWA）：浏览器打开部署好的站点 → 添加到主屏幕；推理由服务端完成 |
 
 > 「已验收」指在对应系统上真实安装、启动并完成界面检查；「CI 构建」指由 GitHub Actions 生成产物但尚未真机运行。
 > 平台矩阵、构建命令与原因说明见 [PLATFORMS.md](PLATFORMS.md)，实际结果与验收范围见 [VERIFICATION.md](VERIFICATION.md)。
 
-### Release 资产（v1.2.1）
+### Release 资产（v1.2.2）
 
 | 资产 | 大小 | 说明 |
 | --- | --- | --- |
-| `Mens-Setup-1.2.1-x64.exe`（+ `.blockmap`） | 126,409,577 B | Windows 安装包，本机安装验收使用的就是这一份 |
-| `Mens-1.2.1-x64.dmg` / `Mens-1.2.1-x64.zip` | ≈ 158 MB | macOS Intel |
-| `Mens-1.2.1-arm64.dmg` / `Mens-1.2.1-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
-| `Mens-1.2.1-x86_64.AppImage` / `Mens-1.2.1-amd64.deb` | 191 MB / 153 MB | Linux |
+| `Mens-Setup-1.2.2-x64.exe`（+ `.blockmap`） | 126,409,577 B | Windows 安装包，本机安装验收使用的就是这一份 |
+| `Mens-1.2.2-x64.dmg` / `Mens-1.2.2-x64.zip` | ≈ 158 MB | macOS Intel |
+| `Mens-1.2.2-arm64.dmg` / `Mens-1.2.2-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
+| `Mens-1.2.2-x86_64.AppImage` / `Mens-1.2.2-amd64.deb` | 191 MB / 153 MB | Linux |
 
 安装包内含 `LICENSE`、`NOTICE` 与 `THIRD-PARTY-NOTICES.md`（安装后位于 `resources/`）。
 
@@ -215,7 +215,7 @@ python -m app.cli serve --port 8000                    # 只启动本地后端
 ### 1. 安装 Windows 桌面版
 
 下载 [最新 Release](https://github.com/HuanMoovo/campus-agent/releases/latest) 中的
-`Mens-Setup-1.2.1-x64.exe`，双击安装（用户级安装，无需管理员权限），从开始菜单或桌面启动。
+`Mens-Setup-1.2.2-x64.exe`，双击安装（用户级安装，无需管理员权限），从开始菜单或桌面启动。
 首次启动后在设置页填写模型 API Key（或选择 Ollama 本地模型）即可开始问答。
 
 ### 2. 从源码构建桌面版
@@ -315,7 +315,7 @@ docker compose logs -f backend
 | `WEB_SEARCH_API_KEY` | 空 | Tavily 或博查的密钥 |
 | `WEB_SEARCH_MAX_RESULTS` | `5` | 每次检索返回的结果条数 |
 | `WEB_SEARCH_FETCH_PAGES` | `2` | 抓取正文的网页数（最多 3） |
-| `UPDATE_MANIFEST_URL` | 空 | 可选的 HTTPS 更新清单，例如 `{"version":"1.2.1","url":"https://…","notes":"…"}`；留空则不做更新检查 |
+| `UPDATE_MANIFEST_URL` | 空 | 可选的 HTTPS 更新清单，例如 `{"version":"1.2.2","url":"https://…","notes":"…"}`；留空则不做更新检查 |
 
 桌面版由外壳注入 `CAMPUS_DESKTOP_MODE`、`CAMPUS_DESKTOP_TOKEN`、`CAMPUS_DESKTOP_NONCE`、
 `CAMPUS_DATA_DIR`、`CAMPUS_FRONTEND_DIR`、`CAMPUS_CONFIG_FILE`（无需手填；仅接受绝对路径）。

@@ -25,7 +25,7 @@ from . import mcp_registry
 from .db import Base, SessionLocal, engine
 from .models import Conversation, Message
 
-VERSION = "1.2.1"
+VERSION = "1.2.2"
 MODELS = ("auto", "qwen", "deepseek", "ollama")
 
 

@@ -8,7 +8,7 @@
 Electron desktop shell + Vue 3 interface + FastAPI backend, able to run offline on a single machine
 
 <a href="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml"><img src="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml/badge.svg" alt="Desktop build status" /></a>
-<img src="https://img.shields.io/badge/version-1.2.1-0e7c74" alt="Version 1.2.1" />
+<img src="https://img.shields.io/badge/version-1.2.2-0e7c74" alt="Version 1.2.2" />
 <img src="https://img.shields.io/badge/license-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="Platforms" />
 
@@ -181,10 +181,10 @@ Next to the desktop build, Mens can run as a website with sign-in:
 
 | Platform | Status | Artefacts and data directory |
 | --- | --- | --- |
-| Windows 10/11 x64 | **Built and verified on a real machine** | `Mens-Setup-1.2.1-x64.exe` (NSIS, per-user install into `%LOCALAPPDATA%\Programs\Mens`), data in `%APPDATA%\CampusAgent` |
-| macOS 12+ (Intel) | Built by CI, not verified on hardware | `Mens-1.2.1-x64.dmg` / `.zip`; unsigned and not notarised, so the first launch needs a right-click Open |
-| macOS 12+ (Apple silicon) | Built by CI, not verified on hardware | `Mens-1.2.1-arm64.dmg` / `.zip`; data in `~/Library/Application Support/CampusAgent` |
-| Linux x64 | Built by CI, not verified on hardware | `Mens-1.2.1-x86_64.AppImage` (no install needed) and `Mens-1.2.1-amd64.deb`; data in `~/.config/CampusAgent` |
+| Windows 10/11 x64 | **Built and verified on a real machine** | `Mens-Setup-1.2.2-x64.exe` (NSIS, per-user install into `%LOCALAPPDATA%\Programs\Mens`), data in `%APPDATA%\CampusAgent` |
+| macOS 12+ (Intel) | Built by CI, not verified on hardware | `Mens-1.2.2-x64.dmg` / `.zip`; unsigned and not notarised, so the first launch needs a right-click Open |
+| macOS 12+ (Apple silicon) | Built by CI, not verified on hardware | `Mens-1.2.2-arm64.dmg` / `.zip`; data in `~/Library/Application Support/CampusAgent` |
+| Linux x64 | Built by CI, not verified on hardware | `Mens-1.2.2-x86_64.AppImage` (no install needed) and `Mens-1.2.2-amd64.deb`; data in `~/.config/CampusAgent` |
 | Android / iOS | No native app | Use the installable web app (PWA): open the deployed site in a browser and add it to the home screen; inference happens on the server |
 
 > "Verified" means the build was installed, launched and checked on that system; "built by CI"
@@ -192,14 +192,14 @@ Next to the desktop build, Mens can run as a website with sign-in:
 > See [PLATFORMS.md](PLATFORMS.md) for the matrix, build commands and the reasoning, and
 > [VERIFICATION.md](VERIFICATION.md) for results and scope.
 
-### Release assets (v1.2.1)
+### Release assets (v1.2.2)
 
 | Asset | Size | Notes |
 | --- | --- | --- |
-| `Mens-Setup-1.2.1-x64.exe` (+ `.blockmap`) | 126,409,577 B | Windows installer — this is the file used for the local install check |
-| `Mens-1.2.1-x64.dmg` / `Mens-1.2.1-x64.zip` | ≈ 158 MB | macOS Intel |
-| `Mens-1.2.1-arm64.dmg` / `Mens-1.2.1-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
-| `Mens-1.2.1-x86_64.AppImage` / `Mens-1.2.1-amd64.deb` | 191 MB / 153 MB | Linux |
+| `Mens-Setup-1.2.2-x64.exe` (+ `.blockmap`) | 126,409,577 B | Windows installer — this is the file used for the local install check |
+| `Mens-1.2.2-x64.dmg` / `Mens-1.2.2-x64.zip` | ≈ 158 MB | macOS Intel |
+| `Mens-1.2.2-arm64.dmg` / `Mens-1.2.2-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
+| `Mens-1.2.2-x86_64.AppImage` / `Mens-1.2.2-amd64.deb` | 191 MB / 153 MB | Linux |
 
 The installer also carries `LICENSE`, `NOTICE` and `THIRD-PARTY-NOTICES.md` (they end up in
 `resources/` after installation).
@@ -208,7 +208,7 @@ The installer also carries `LICENSE`, `NOTICE` and `THIRD-PARTY-NOTICES.md` (the
 
 ### 1. Install the Windows desktop app
 
-Download `Mens-Setup-1.2.1-x64.exe` from the
+Download `Mens-Setup-1.2.2-x64.exe` from the
 [latest release](https://github.com/HuanMoovo/campus-agent/releases/latest), run it (per-user
 install, no administrator rights needed) and launch Mens from the Start menu or the desktop.
 Add a model API key in Settings (or pick a local Ollama model) and start asking questions.
@@ -312,7 +312,7 @@ in a phone browser and add it to the home screen for a full-screen, own-icon exp
 | `WEB_SEARCH_API_KEY` | empty | Key for Tavily or Bocha |
 | `WEB_SEARCH_MAX_RESULTS` | `5` | Results per search |
 | `WEB_SEARCH_FETCH_PAGES` | `2` | Pages whose text is fetched (maximum 3) |
-| `UPDATE_MANIFEST_URL` | empty | Optional HTTPS update manifest, e.g. `{"version":"1.2.1","url":"https://…","notes":"…"}`; empty means no update check at all |
+| `UPDATE_MANIFEST_URL` | empty | Optional HTTPS update manifest, e.g. `{"version":"1.2.2","url":"https://…","notes":"…"}`; empty means no update check at all |
 
 The desktop shell injects `CAMPUS_DESKTOP_MODE`, `CAMPUS_DESKTOP_TOKEN`, `CAMPUS_DESKTOP_NONCE`,
 `CAMPUS_DATA_DIR`, `CAMPUS_FRONTEND_DIR` and `CAMPUS_CONFIG_FILE` (nothing to fill in; only

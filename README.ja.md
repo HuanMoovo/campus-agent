@@ -8,7 +8,7 @@
 Electron デスクトップシェル + Vue 3 インターフェース + FastAPI バックエンド。1 台の端末でオフラインでも動作します
 
 <a href="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml"><img src="https://github.com/HuanMoovo/campus-agent/actions/workflows/build-desktop.yml/badge.svg" alt="デスクトップビルドの状態" /></a>
-<img src="https://img.shields.io/badge/%E3%83%90%E3%83%BC%E3%82%B8%E3%83%A7%E3%83%B3-1.2.1-0e7c74" alt="バージョン 1.2.1" />
+<img src="https://img.shields.io/badge/%E3%83%90%E3%83%BC%E3%82%B8%E3%83%A7%E3%83%B3-1.2.2-0e7c74" alt="バージョン 1.2.2" />
 <img src="https://img.shields.io/badge/%E3%83%A9%E3%82%A4%E3%82%BB%E3%83%B3%E3%82%B9-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/%E5%AF%BE%E5%BF%9C-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="対応プラットフォーム" />
 
@@ -176,10 +176,10 @@ python -m app.cli serve --port 8000                    # バックエンドの�
 
 | プラットフォーム | 状態 | 成果物とデータフォルダ |
 | --- | --- | --- |
-| Windows 10/11 x64 | **ビルド済み・実機検証済み** | `Mens-Setup-1.2.1-x64.exe`（NSIS、ユーザー単位で `%LOCALAPPDATA%\Programs\Mens` にインストール）、データは `%APPDATA%\CampusAgent` |
-| macOS 12+（Intel） | CI ビルド・実機未検証 | `Mens-1.2.1-x64.dmg` / `.zip`。署名・公証なしのため初回は右クリックから「開く」 |
-| macOS 12+（Apple silicon） | CI ビルド・実機未検証 | `Mens-1.2.1-arm64.dmg` / `.zip`。データは `~/Library/Application Support/CampusAgent` |
-| Linux x64 | CI ビルド・実機未検証 | `Mens-1.2.1-x86_64.AppImage`（インストール不要）と `Mens-1.2.1-amd64.deb`。データは `~/.config/CampusAgent` |
+| Windows 10/11 x64 | **ビルド済み・実機検証済み** | `Mens-Setup-1.2.2-x64.exe`（NSIS、ユーザー単位で `%LOCALAPPDATA%\Programs\Mens` にインストール）、データは `%APPDATA%\CampusAgent` |
+| macOS 12+（Intel） | CI ビルド・実機未検証 | `Mens-1.2.2-x64.dmg` / `.zip`。署名・公証なしのため初回は右クリックから「開く」 |
+| macOS 12+（Apple silicon） | CI ビルド・実機未検証 | `Mens-1.2.2-arm64.dmg` / `.zip`。データは `~/Library/Application Support/CampusAgent` |
+| Linux x64 | CI ビルド・実機未検証 | `Mens-1.2.2-x86_64.AppImage`（インストール不要）と `Mens-1.2.2-amd64.deb`。データは `~/.config/CampusAgent` |
 | Android / iOS | ネイティブアプリなし | インストール可能なウェブ版（PWA）を使います。ブラウザで配備済みサイトを開き、ホーム画面に追加してください。推論はサーバー側で実行します |
 
 > 「実機検証済み」はその OS で実際にインストール・起動し画面確認まで行ったことを指し、
@@ -187,14 +187,14 @@ python -m app.cli serve --port 8000                    # バックエンドの�
 > マトリクス・ビルドコマンド・理由は [PLATFORMS.md](PLATFORMS.md)、結果と範囲は
 > [VERIFICATION.md](VERIFICATION.md) を参照してください。
 
-### Release 成果物（v1.2.1）
+### Release 成果物（v1.2.2）
 
 | 成果物 | サイズ | 説明 |
 | --- | --- | --- |
-| `Mens-Setup-1.2.1-x64.exe`（+ `.blockmap`） | 126,409,577 B | Windows インストーラー。実機のインストール検証で使ったのはこのファイルです |
-| `Mens-1.2.1-x64.dmg` / `Mens-1.2.1-x64.zip` | 約 158 MB | macOS Intel |
-| `Mens-1.2.1-arm64.dmg` / `Mens-1.2.1-arm64.zip` | 約 151 MB | macOS Apple silicon |
-| `Mens-1.2.1-x86_64.AppImage` / `Mens-1.2.1-amd64.deb` | 191 MB / 153 MB | Linux |
+| `Mens-Setup-1.2.2-x64.exe`（+ `.blockmap`） | 126,409,577 B | Windows インストーラー。実機のインストール検証で使ったのはこのファイルです |
+| `Mens-1.2.2-x64.dmg` / `Mens-1.2.2-x64.zip` | 約 158 MB | macOS Intel |
+| `Mens-1.2.2-arm64.dmg` / `Mens-1.2.2-arm64.zip` | 約 151 MB | macOS Apple silicon |
+| `Mens-1.2.2-x86_64.AppImage` / `Mens-1.2.2-amd64.deb` | 191 MB / 153 MB | Linux |
 
 インストーラーには `LICENSE`、`NOTICE`、`THIRD-PARTY-NOTICES.md` も含まれます（インストール後は
 `resources/` にあります）。
@@ -204,7 +204,7 @@ python -m app.cli serve --port 8000                    # バックエンドの�
 ### 1. Windows デスクトップ版のインストール
 
 [最新リリース](https://github.com/HuanMoovo/campus-agent/releases/latest) から
-`Mens-Setup-1.2.1-x64.exe` をダウンロードして実行します（ユーザー単位インストール、管理者権限は
+`Mens-Setup-1.2.2-x64.exe` をダウンロードして実行します（ユーザー単位インストール、管理者権限は
 不要）。スタートメニューまたはデスクトップから起動し、設定画面でモデルの API キーを入力するか
 ローカルの Ollama モデルを選べば、すぐに質問できます。
 
@@ -308,7 +308,7 @@ docker compose logs -f backend
 | `WEB_SEARCH_API_KEY` | 空 | Tavily または博查のキー |
 | `WEB_SEARCH_MAX_RESULTS` | `5` | 1 回の検索で返す件数 |
 | `WEB_SEARCH_FETCH_PAGES` | `2` | 本文を取得するページ数（最大 3） |
-| `UPDATE_MANIFEST_URL` | 空 | 任意の HTTPS 更新マニフェスト（例：`{"version":"1.2.1","url":"https://…","notes":"…"}`）。空なら更新確認を一切行いません |
+| `UPDATE_MANIFEST_URL` | 空 | 任意の HTTPS 更新マニフェスト（例：`{"version":"1.2.2","url":"https://…","notes":"…"}`）。空なら更新確認を一切行いません |
 
 デスクトップ版ではシェルが `CAMPUS_DESKTOP_MODE`、`CAMPUS_DESKTOP_TOKEN`、`CAMPUS_DESKTOP_NONCE`、
 `CAMPUS_DATA_DIR`、`CAMPUS_FRONTEND_DIR`、`CAMPUS_CONFIG_FILE` を注入します（入力不要。絶対パスのみ

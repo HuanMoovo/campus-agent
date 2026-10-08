@@ -24,7 +24,7 @@ body:
     id: version
     attributes:
       label: 版本
-      description: 设置页显示的应用版本，或安装包文件名（如 1.2.1）
+      description: 设置页显示的应用版本，或安装包文件名（如 1.2.2）
     validations:
       required: true
   - type: textarea
