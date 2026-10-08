@@ -369,7 +369,7 @@ campus-agent/
 ├─ DESKTOP.md       デスクトップ版の説明
 ├─ ARCHITECTURE.md  アーキテクチャと主要インターフェース
 ├─ CAMPUS-DATA.md   学内エンドポイントの形式
-├─ VERIFICATION.md  検証記録（サイズ、SHA-256、範囲）
+├─ VERIFICATION.md  検証記録（範囲と結果）
 └─ LICENSE / NOTICE / THIRD-PARTY-NOTICES.md
 ```
 
@@ -403,8 +403,8 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 ```
 
 これらは中核の検証と判断ロジックを対象としますが、実際の FastAPI、LangGraph、Chroma、モデルサービス、
-ブラウザ連携の代替にはなりません。バグが絶対にないことを保証するテストはありません。完了した検証範囲、
-インストーラーのサイズと SHA-256 は [VERIFICATION.md](VERIFICATION.md) にあります。
+ブラウザ連携の代替にはなりません。バグが絶対にないことを保証するテストはありません。完了した検証範囲は
+[VERIFICATION.md](VERIFICATION.md) に、インストーラーは [Releases](https://github.com/HuanMoovo/campus-agent/releases) にあります。
 
 ## 画面
 
@@ -445,5 +445,5 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 | [DESKTOP.md](DESKTOP.md) | デスクトップ版の実行方法、データフォルダ、IPC とセキュリティ設定 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | アーキテクチャ、モジュールの役割、主要インターフェース |
 | [CAMPUS-DATA.md](CAMPUS-DATA.md) | 9 種類の学内エンドポイントのフィールドと連携形式 |
-| [VERIFICATION.md](VERIFICATION.md) | 各バッチの検証方法、インストーラーのサイズと SHA-256、未検証の範囲 |
+| [VERIFICATION.md](VERIFICATION.md) | 各バージョンの検証範囲・結果と既知の範囲 |
 | [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | サードパーティコンポーネントとライセンス |

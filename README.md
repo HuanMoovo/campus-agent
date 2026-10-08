@@ -375,7 +375,7 @@ campus-agent/
 ├─ DESKTOP.md       桌面版说明
 ├─ ARCHITECTURE.md  架构与主要接口
 ├─ CAMPUS-DATA.md   校园接口接入格式
-├─ VERIFICATION.md  验证记录（含大小、SHA-256 与验收范围）
+├─ VERIFICATION.md  验证记录（验收范围与结论）
 └─ LICENSE / NOTICE / THIRD-PARTY-NOTICES.md
 ```
 
@@ -408,7 +408,7 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 ```
 
 这些测试覆盖核心校验与决策逻辑，但不能替代真实 FastAPI、LangGraph、Chroma、模型服务或浏览器联调；
-没有任何测试能保证绝对无 Bug。已完成的验证范围、安装包大小与 SHA-256 见 [VERIFICATION.md](VERIFICATION.md)。
+没有任何测试能保证绝对无 Bug。已完成的验证范围与结论见 [VERIFICATION.md](VERIFICATION.md)，安装包见 [Releases](https://github.com/HuanMoovo/campus-agent/releases)。
 
 ## 界面
 
@@ -448,5 +448,5 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 | [DESKTOP.md](DESKTOP.md) | 桌面版运行方式、数据目录、IPC 与安全设置 |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | 架构、模块职责与主要接口 |
 | [CAMPUS-DATA.md](CAMPUS-DATA.md) | 九类校园接口的字段与接入格式 |
-| [VERIFICATION.md](VERIFICATION.md) | 每批改动的验证方式、安装包大小与 SHA-256、未验证范围 |
+| [VERIFICATION.md](VERIFICATION.md) | 各版本的验证范围、结论与已知边界 |
 | [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | 第三方组件与许可证清单 |

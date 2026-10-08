@@ -374,7 +374,7 @@ campus-agent/
 ├─ DESKTOP.md       Desktop notes
 ├─ ARCHITECTURE.md  Architecture and main interfaces
 ├─ CAMPUS-DATA.md   Campus endpoint formats
-├─ VERIFICATION.md  Verification record (sizes, SHA-256, scope)
+├─ VERIFICATION.md  Verification record (scope and results)
 └─ LICENSE / NOTICE / THIRD-PARTY-NOTICES.md
 ```
 
@@ -408,8 +408,8 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 ```
 
 These cover core validation and decision logic but cannot replace real FastAPI, LangGraph, Chroma,
-model-service or browser testing — and no test guarantees the absence of bugs. The completed scope,
-installer size and SHA-256 are in [VERIFICATION.md](VERIFICATION.md).
+model-service or browser testing — and no test guarantees the absence of bugs. The completed scope is summarised in [VERIFICATION.md](VERIFICATION.md);
+installers are on the [Releases](https://github.com/HuanMoovo/campus-agent/releases) page.
 
 ## Screenshots
 
@@ -450,5 +450,5 @@ are in [`NOTICE`](NOTICE).
 | [DESKTOP.md](DESKTOP.md) | Desktop runtime, data directories, IPC and security settings |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Architecture, module responsibilities and main interfaces |
 | [CAMPUS-DATA.md](CAMPUS-DATA.md) | Field layouts and integration formats for the nine campus endpoints |
-| [VERIFICATION.md](VERIFICATION.md) | How each batch was verified, installer sizes and SHA-256, unverified areas |
+| [VERIFICATION.md](VERIFICATION.md) | How each release was verified, results and known limits |
 | [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | Third-party components and their licences |

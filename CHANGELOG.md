@@ -1,7 +1,7 @@
 # 变更记录
 
-本文件按时间倒序记录对外可见的变化。每个版本的验收范围、安装包大小与 SHA-256 见
-[VERIFICATION.md](VERIFICATION.md)。
+本文件按时间倒序记录对外可见的变化。每个版本的验收范围与结论见
+[VERIFICATION.md](VERIFICATION.md)，安装包见 [Releases](https://github.com/HuanMoovo/campus-agent/releases)。
 
 ## 1.2.2 — 2026-10-08
 
