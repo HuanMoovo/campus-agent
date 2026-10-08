@@ -2,6 +2,15 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 发布批次：Mens 1.2.2（2026-10-08）
+
+- **版本统一为 1.2.2**：`desktop/package.json`、`frontend/package.json`（含两个 lock 文件的根包）、`backend/app/main.py`（FastAPI 版本）、`backend/app/cli.py`；README（中/英/日）、`DESKTOP.md`、站点徽标与 issue 模板示例同步；CHANGELOG 的「未发布」全部结转为本版。
+- **本机构建（Windows）**：`scripts/build_desktop.py --skip-install --os win --arch x64` 全流程通过（构建内已跑：后端 394、前端 29 + 生产构建、桌面 9、冻结后端联调）→ `release/Mens-Setup-1.2.2-x64.exe`，**126,502,970 B，SHA-256 `7a0b9b9c3d5880606206eb571b53b7a4ab92fb438bbc7a1215517db3b0a7e93e`**；`latest.yml` 版本 1.2.2；打包内 `frontend/sw.js` 缓存名为 `mens-shell-1.2.2`（构建时注入）。
+  - 构建备注：本机 electron-builder 的 asar 完整性注入对 `win-unpacked/Mens.exe` 的首次写入偶发 `UNKNOWN`（刚复制改名后的短暂文件占用；独立复现与随后重试均正常）。已在本地依赖中为该步骤加入退避重试（第 1 次失败、2 秒后重试成功），写入内容与常规路径一致。
+- **静默升级安装**：从已安装的 1.2.1 覆盖升级到 1.2.2（安装目录 `%LOCALAPPDATA%\Programs\Mens`，`Mens.exe` 文件版本 1.2.2），升级后 `LICENSE`、`NOTICE`、`THIRD-PARTY-NOTICES.md` 均在。
+- **安装版界面验收（CDP，真机）**：侧栏显示「后端已连接 v1.2.2」；本机历史对话保留；首次使用引导正常展示。
+- **产物冒烟**：`scripts/smoke_package.py` 对已安装的 1.2.2 执行——内部地址取到、界面入口 401（桌面鉴权生效）→ 通过（exit 0）。
+
 ## 深度代码审查批次：全模块复查与加固（2026-10-08）
 
 - **范围**：后端全模块（main / auth / mcp_client / mcp_registry / plugins / rag / db / models / model_runtime / web_search / schemas / desktop_runtime / config）、桌面三件套（main.cjs / preload.cjs / lib）、前端接口封装与 Markdown 渲染层逐文件复查。
