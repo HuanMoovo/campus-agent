@@ -191,7 +191,7 @@ python -m app.cli serve --port 8000                    # バックエンドの�
 
 | 成果物 | サイズ | 説明 |
 | --- | --- | --- |
-| `Mens-Setup-1.2.2-x64.exe`（+ `.blockmap`） | 126,409,577 B | Windows インストーラー。実機のインストール検証で使ったのはこのファイルです |
+| `Mens-Setup-1.2.2-x64.exe`（+ `.blockmap`） | 126,502,970 B | Windows インストーラー。実機のインストール検証で使ったのはこのファイルです |
 | `Mens-1.2.2-x64.dmg` / `Mens-1.2.2-x64.zip` | 約 158 MB | macOS Intel |
 | `Mens-1.2.2-arm64.dmg` / `Mens-1.2.2-arm64.zip` | 約 151 MB | macOS Apple silicon |
 | `Mens-1.2.2-x86_64.AppImage` / `Mens-1.2.2-amd64.deb` | 191 MB / 153 MB | Linux |

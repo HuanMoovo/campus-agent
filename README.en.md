@@ -196,7 +196,7 @@ Next to the desktop build, Mens can run as a website with sign-in:
 
 | Asset | Size | Notes |
 | --- | --- | --- |
-| `Mens-Setup-1.2.2-x64.exe` (+ `.blockmap`) | 126,409,577 B | Windows installer — this is the file used for the local install check |
+| `Mens-Setup-1.2.2-x64.exe` (+ `.blockmap`) | 126,502,970 B | Windows installer — this is the file used for the local install check |
 | `Mens-1.2.2-x64.dmg` / `Mens-1.2.2-x64.zip` | ≈ 158 MB | macOS Intel |
 | `Mens-1.2.2-arm64.dmg` / `Mens-1.2.2-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
 | `Mens-1.2.2-x86_64.AppImage` / `Mens-1.2.2-amd64.deb` | 191 MB / 153 MB | Linux |

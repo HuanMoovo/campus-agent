@@ -203,7 +203,7 @@ python -m app.cli serve --port 8000                    # 只启动本地后端
 
 | 资产 | 大小 | 说明 |
 | --- | --- | --- |
-| `Mens-Setup-1.2.2-x64.exe`（+ `.blockmap`） | 126,409,577 B | Windows 安装包，本机安装验收使用的就是这一份 |
+| `Mens-Setup-1.2.2-x64.exe`（+ `.blockmap`） | 126,502,970 B | Windows 安装包，本机安装验收使用的就是这一份 |
 | `Mens-1.2.2-x64.dmg` / `Mens-1.2.2-x64.zip` | ≈ 158 MB | macOS Intel |
 | `Mens-1.2.2-arm64.dmg` / `Mens-1.2.2-arm64.zip` | ≈ 151 MB | macOS Apple silicon |
 | `Mens-1.2.2-x86_64.AppImage` / `Mens-1.2.2-amd64.deb` | 191 MB / 153 MB | Linux |
