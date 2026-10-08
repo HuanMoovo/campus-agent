@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0desktop"
+cd /d "%~dp0..\desktop"
 if not exist "node_modules\.bin\electron.cmd" (
   echo Desktop dependencies are missing. Run build-desktop.cmd first.
   pause

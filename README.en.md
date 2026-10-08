@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/img/logo.png" alt="Mens Campus Assistant" width="104" height="104" />
+<img src="site/img/logo.png" alt="Mens Campus Assistant" width="104" height="104" />
 
 # Mens Campus Assistant
 
@@ -17,8 +17,8 @@ Electron desktop shell + Vue 3 interface + FastAPI backend, able to run offline 
 
 [Download for Windows](https://github.com/HuanMoovo/campus-agent/releases/latest) ·
 [Project page](https://huanmoovo.github.io/campus-agent/) ·
-[Platform support](PLATFORMS.md) ·
-[Verification record](VERIFICATION.md) ·
+[Platform support](docs/PLATFORMS.md) ·
+[Verification record](docs/VERIFICATION.md) ·
 [Licence](LICENSE)
 
 </div>
@@ -175,7 +175,7 @@ Next to the desktop build, Mens can run as a website with sign-in:
 
 - The repo ships `Dockerfile.web` (frontend build + FastAPI in one container) and `render.yaml`;
   sign in to Render with GitHub, pick **New → Blueprint** and select this repository — see
-  [DEPLOY.md](DEPLOY.md).
+  [DEPLOY.md](docs/DEPLOY.md).
 - With `AUTH_REQUIRED=true` every API except health and the auth endpoints needs a session:
   passwords are stored as PBKDF2-HMAC-SHA256 hashes and sessions use HttpOnly cookies whose
   tokens are hashed server-side.
@@ -197,8 +197,8 @@ Next to the desktop build, Mens can run as a website with sign-in:
 
 > "Verified" means the build was installed, launched and checked on that system; "built by CI"
 > means GitHub Actions produces the artefact but it has not been run on real hardware yet.
-> See [PLATFORMS.md](PLATFORMS.md) for the matrix, build commands and the reasoning, and
-> [VERIFICATION.md](VERIFICATION.md) for results and scope.
+> See [PLATFORMS.md](docs/PLATFORMS.md) for the matrix, build commands and the reasoning, and
+> [VERIFICATION.md](docs/VERIFICATION.md) for results and scope.
 
 ### Release assets (v1.2.2)
 
@@ -244,8 +244,8 @@ packages with electron-builder; if any step fails it stops without producing an 
 
 ### 3. Run from source (web development)
 
-On Windows you can double-click `install.cmd` (installs dependencies, checks LangGraph, runs the
-backend tests, builds the frontend), then run `start-backend.cmd` and `start-frontend.cmd` and
+On Windows you can double-click `scripts\install.cmd` (installs dependencies, checks LangGraph, runs the
+backend tests, builds the frontend), then run `scripts\start-backend.cmd` and `scripts\start-frontend.cmd` and
 open <http://localhost:5173>.
 
 Manually:
@@ -343,11 +343,11 @@ absolute paths are accepted).
 ### Campus data endpoints
 
 Field layouts, value paths and examples for the nine endpoints are in
-[CAMPUS-DATA.md](CAMPUS-DATA.md). In short:
+[CAMPUS-DATA.md](docs/CAMPUS-DATA.md). In short:
 
 - HTTPS JSON only; Bearer tokens and result paths are supported.
 - Unconfigured endpoints return clearly labelled demo data; the project ships **no** real school endpoint, identity provider or model key.
-- A production deployment needs interfaces the school has authorised and its own acceptance testing; multi-user setups additionally need single sign-on, per-user student IDs, access auditing and rate limiting (see [CAMPUS-DATA.md](CAMPUS-DATA.md) and [ARCHITECTURE.md](ARCHITECTURE.md)).
+- A production deployment needs interfaces the school has authorised and its own acceptance testing; multi-user setups additionally need single sign-on, per-user student IDs, access auditing and rate limiting (see [CAMPUS-DATA.md](docs/CAMPUS-DATA.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md)).
 
 ## Architecture and security boundaries
 
@@ -362,7 +362,7 @@ Field layouts, value paths and examples for the nine endpoints are in
 
 - **Local first**: the desktop backend listens only on a random port on `127.0.0.1` with a one-time token per start; the shell injects an extra request header and tightens Electron (`nodeIntegration:false`, `contextIsolation:true`, `sandbox:true`, `webSecurity:true`, `webviewTag` disabled), so outside pages cannot reach those endpoints.
 - **Outbound discipline** (plugins, web search and update checks share it): HTTPS on 443 only; the connection is pinned to a resolved and validated public address (SNI preserved against DNS rebinding); redirects are refused; responses have size and timeout caps; system proxy environment variables are ignored (`trust_env=False`); anything resolving to a private address is rejected outright.
-- **Key storage**: Windows uses DPAPI; macOS and Linux have no equivalent system facility, so keys go into a plain file with `0600` permissions readable by the same user only — stated plainly in [PLATFORMS.md](PLATFORMS.md).
+- **Key storage**: Windows uses DPAPI; macOS and Linux have no equivalent system facility, so keys go into a plain file with `0600` permissions readable by the same user only — stated plainly in [PLATFORMS.md](docs/PLATFORMS.md).
 - **Backups**: the exported zip contains key files, so keep it safe; imports verify the SHA-256 manifest first.
 - **Nothing is faked**: demo data, degraded retrieval and web sources are always labelled.
 
@@ -373,17 +373,13 @@ campus-agent/
 ├─ backend/         FastAPI backend (app/, tests/, requirements*.txt)
 ├─ frontend/        Vue 3 frontend (src/, tests/, dist/ build output)
 ├─ desktop/         Electron shell (main.cjs, preload.cjs, lib/, assets/ icons)
-├─ scripts/         Build and packaging (build_desktop.py, install.py, create_icon.py, …)
-├─ docs/            Project page (GitHub Pages, zh / en / ja)
+├─ docs/            Project documents (architecture, platforms, deployment, campus data, verification)
+├─ site/            Project page (GitHub Pages, zh / en / ja)
+├─ scripts/         Build, packaging and local helpers (build_desktop.py, install.cmd, verify.ps1, …)
 ├─ assets/          Brand sources
 ├─ examples/        Plugin manifest examples
 ├─ compose.yaml     PostgreSQL + backend + Nginx for Docker deployments
-├─ PLATFORMS.md     Platform matrix and build commands
-├─ DESKTOP.md       Desktop notes
-├─ ARCHITECTURE.md  Architecture and main interfaces
-├─ CAMPUS-DATA.md   Campus endpoint formats
-├─ VERIFICATION.md  Verification record (scope and results)
-└─ LICENSE / NOTICE / THIRD-PARTY-NOTICES.md
+└─ README.md etc.   Trilingual READMEs, CHANGELOG, CONTRIBUTING / LICENSE / NOTICE
 ```
 
 ## Tests and verification
@@ -403,7 +399,7 @@ cd ..\desktop
 npm test
 
 # Everything above at once (Windows)
-.\verify.ps1
+.\scripts\verify.ps1
 ```
 
 Without network access, two logic-only suites run on the system Python (no framework, network or
@@ -416,18 +412,18 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 ```
 
 These cover core validation and decision logic but cannot replace real FastAPI, LangGraph, Chroma,
-model-service or browser testing — and no test guarantees the absence of bugs. The completed scope is summarised in [VERIFICATION.md](VERIFICATION.md);
+model-service or browser testing — and no test guarantees the absence of bugs. The completed scope is summarised in [VERIFICATION.md](docs/VERIFICATION.md);
 installers are on the [Releases](https://github.com/HuanMoovo/campus-agent/releases) page.
 
 ## Screenshots
 
 | Chat (with web sources) | Settings (web search) |
 | --- | --- |
-| <img src="docs/img/chat-web-search.png" alt="Chat with web search results and source links" /> | <img src="docs/img/settings-web-search.png" alt="Settings for web search" /> |
+| <img src="site/img/chat-web-search.png" alt="Chat with web search results and source links" /> | <img src="site/img/settings-web-search.png" alt="Settings for web search" /> |
 
 | Campus services (repair request and local records) |
 | --- |
-| <img src="docs/img/campus-services.png" alt="Campus services with repair request and local records" /> |
+| <img src="site/img/campus-services.png" alt="Campus services with repair request and local records" /> |
 
 ## Known limitations
 
@@ -435,7 +431,7 @@ installers are on the [Releases](https://github.com/HuanMoovo/campus-agent/relea
 - **Unsigned and not notarised** — there is no publisher certificate, so the first launch on Windows or macOS may show a system prompt; signing should be set up before wider distribution.
 - **Campus endpoints and single sign-on** — no real school endpoint, identity provider or model key ships with the project; a production deployment needs interfaces the school has authorised, plus acceptance testing.
 - **Cloud models and web search** — each needs its own API key (the Bing channel is keyless); the availability of the search backend depends on your network environment.
-- **Native Android / iOS apps** — out of scope; see [PLATFORMS.md](PLATFORMS.md) for why (the Python backend cannot ship on mobile stores).
+- **Native Android / iOS apps** — out of scope; see [PLATFORMS.md](docs/PLATFORMS.md) for why (the Python backend cannot ship on mobile stores).
 - **One-click updates** — the update check only reports a version difference and opens the download page; it does not download or install silently.
 - **Multi-user deployments** — demo conversations currently use a random session ID as their access credential, which is fine for local development only; production needs user ownership checks, operation auditing, rate limiting, HTTPS, database migrations and a backup strategy.
 
@@ -460,9 +456,9 @@ are in [`NOTICE`](NOTICE).
 | Document | Contents |
 | --- | --- |
 | [Project page](https://huanmoovo.github.io/campus-agent/) | Illustrated introduction in Chinese, English and Japanese, with the platform matrix and limitations |
-| [PLATFORMS.md](PLATFORMS.md) | Platform matrix, build commands, macOS / Linux key-storage differences, mobile rationale |
-| [DESKTOP.md](DESKTOP.md) | Desktop runtime, data directories, IPC and security settings |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Architecture, module responsibilities and main interfaces |
-| [CAMPUS-DATA.md](CAMPUS-DATA.md) | Field layouts and integration formats for the nine campus endpoints |
-| [VERIFICATION.md](VERIFICATION.md) | How each release was verified, results and known limits |
+| [PLATFORMS.md](docs/PLATFORMS.md) | Platform matrix, build commands, macOS / Linux key-storage differences, mobile rationale |
+| [DESKTOP.md](docs/DESKTOP.md) | Desktop runtime, data directories, IPC and security settings |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, module responsibilities and main interfaces |
+| [CAMPUS-DATA.md](docs/CAMPUS-DATA.md) | Field layouts and integration formats for the nine campus endpoints |
+| [VERIFICATION.md](docs/VERIFICATION.md) | How each release was verified, results and known limits |
 | [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | Third-party components and their licences |

@@ -28,10 +28,10 @@ macOS 与 Linux 安装包由 CI 构建：macOS 为 `Mens-<版本>-<架构>.dmg`�
 
 ## 在 Windows 上构建安装包
 
-构建机需要 Windows 10/11 x64、Python 3.10+、Node.js 22+ 以及访问软件包仓库的网络。直接双击项目根目录的：
+构建机需要 Windows 10/11 x64、Python 3.10+、Node.js 22+ 以及访问软件包仓库的网络。直接双击：
 
 ```text
-build-desktop.cmd
+scripts\build-desktop.cmd
 ```
 
 脚本依次安装构建依赖、执行后端测试与前端单元测试、编译 Vue 前端、运行桌面逻辑/真实后端测试、用 PyInstaller 冻结后端、测试冻结后的实际可执行文件，最后生成 NSIS 安装包。任一步失败都会停止并显示错误。
@@ -65,7 +65,7 @@ python scripts/build_desktop.py --directory
 
 ## 开发启动
 
-前后端和 Electron 依赖安装、前端编译完成后，双击 `run-desktop.cmd`。Electron 会自动从项目虚拟环境启动后端，不需要另开服务器终端。此方式用于开发；交付给普通用户应使用 `release` 中生成的安装程序。
+前后端和 Electron 依赖安装、前端编译完成后，双击 `scripts\run-desktop.cmd`。Electron 会自动从项目虚拟环境启动后端，不需要另开服务器终端。此方式用于开发；交付给普通用户应使用 `release` 中生成的安装程序。
 
 ## 本地数据与模型配置
 

@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/img/logo.png" alt="Mens 校园助手" width="104" height="104" />
+<img src="site/img/logo.png" alt="Mens 校园助手" width="104" height="104" />
 
 # Mens 校园助手
 
@@ -17,8 +17,8 @@ Electron 桌面外壳 + Vue 3 界面 + FastAPI 后端，可在单机上离线运
 
 [下载 Windows 安装包](https://github.com/HuanMoovo/campus-agent/releases/latest) ·
 [项目介绍页](https://huanmoovo.github.io/campus-agent/)（中文 / English / 日本語） ·
-[平台支持](PLATFORMS.md) ·
-[验证记录](VERIFICATION.md) ·
+[平台支持](docs/PLATFORMS.md) ·
+[验证记录](docs/VERIFICATION.md) ·
 [开源协议](LICENSE)
 
 </div>
@@ -185,14 +185,14 @@ python -m app.cli serve --port 8000                    # 只启动本地后端
 除桌面版外，还可以把 Mens 部署成带登录的网站，免费平台即可运行：
 
 - 仓库自带 `Dockerfile.web`（前端构建 + FastAPI 单容器）与 `render.yaml`；
-  在 Render 用 GitHub 登录后 **New → Blueprint** 选中本仓库即可，详见 [DEPLOY.md](DEPLOY.md)。
+  在 Render 用 GitHub 登录后 **New → Blueprint** 选中本仓库即可，详见 [DEPLOY.md](docs/DEPLOY.md)。
 - 打开 `AUTH_REQUIRED=true` 后，除健康检查与登录接口外的所有接口都要求登录：
   口令以 PBKDF2-HMAC-SHA256 散列存储，会话走 HttpOnly Cookie，服务端只存令牌散列。
 - 首次启动会按 `AUTH_ADMIN_USERNAME` / `AUTH_ADMIN_PASSWORD` 创建管理员
   （口令留空则生成随机口令并打印在服务端日志里，仅打印一次）。
 - 「账号」页提供完整用户管理（新建、改角色、禁用、删除、重置口令、强制下线），并支持自助注册与登录后自助改密（`ALLOW_REGISTRATION`、`REGISTER_CODE`）。
 - 桌面版不受影响：`AUTH_REQUIRED` 默认关闭，桌面包继续使用外壳注入的令牌。
-- 免费实例的限制（15 分钟休眠、SQLite 随实例重建重置）已写入 DEPLOY.md。
+- 免费实例的限制（15 分钟休眠、SQLite 随实例重建重置）已写入 docs/DEPLOY.md。
 
 ## 平台支持
 
@@ -205,7 +205,7 @@ python -m app.cli serve --port 8000                    # 只启动本地后端
 | Android / iOS | 不提供原生应用 | 使用可安装网页版（PWA）：浏览器打开部署好的站点 → 添加到主屏幕；推理由服务端完成 |
 
 > 「已验收」指在对应系统上真实安装、启动并完成界面检查；「CI 构建」指由 GitHub Actions 生成产物但尚未真机运行。
-> 平台矩阵、构建命令与原因说明见 [PLATFORMS.md](PLATFORMS.md)，实际结果与验收范围见 [VERIFICATION.md](VERIFICATION.md)。
+> 平台矩阵、构建命令与原因说明见 [PLATFORMS.md](docs/PLATFORMS.md)，实际结果与验收范围见 [VERIFICATION.md](docs/VERIFICATION.md)。
 
 ### Release 资产（v1.2.2）
 
@@ -249,8 +249,8 @@ python scripts/build_desktop.py --os linux --arch x64
 
 ### 3. 源码开发运行（网页版）
 
-Windows 可直接双击 `install.cmd`（安装依赖、检查 LangGraph、跑后端测试、编译前端），
-随后分别运行 `start-backend.cmd` 与 `start-frontend.cmd`，访问 <http://localhost:5173>。
+Windows 可直接双击 `scripts\install.cmd`（安装依赖、检查 LangGraph、跑后端测试、编译前端），
+随后分别运行 `scripts\start-backend.cmd` 与 `scripts\start-frontend.cmd`，访问 <http://localhost:5173>。
 
 也可以手动执行：
 
@@ -344,11 +344,11 @@ docker compose logs -f backend
 
 ### 校园数据接口
 
-九类接口的字段、取值路径与示例见 [CAMPUS-DATA.md](CAMPUS-DATA.md)。要点：
+九类接口的字段、取值路径与示例见 [CAMPUS-DATA.md](docs/CAMPUS-DATA.md)。要点：
 
 - 只接受 HTTPS JSON；支持 Bearer 令牌与结果路径。
 - 未配置的接口使用明确标识的演示数据；项目**不附带**任何真实学校接口、统一身份认证或模型密钥。
-- 生产部署需学校提供已授权接口并完成验收；多人使用前还需补齐统一身份认证、按用户绑定学号、访问审计与限流（详见 [校园数据说明](CAMPUS-DATA.md) 与 [架构说明](ARCHITECTURE.md)）。
+- 生产部署需学校提供已授权接口并完成验收；多人使用前还需补齐统一身份认证、按用户绑定学号、访问审计与限流（详见 [校园数据说明](docs/CAMPUS-DATA.md) 与 [架构说明](docs/ARCHITECTURE.md)）。
 
 ## 架构与安全边界
 
@@ -363,7 +363,7 @@ docker compose logs -f backend
 
 - **本机优先**：桌面版后端只监听 `127.0.0.1` 的随机端口，每次启动生成一次性令牌；外壳注入额外请求头并收紧 Electron 配置（`nodeIntegration:false`、`contextIsolation:true`、`sandbox:true`、`webSecurity:true`、禁用 `webviewTag`），外部页面拿不到这些接口。
 - **出站纪律**（插件 / 联网搜索 / 更新检查共用）：仅 HTTPS + 443；连接固定到解析并经校验的公网地址（保留 SNI，防 DNS 重绑定）；禁止跳转；有响应大小与超时上限；忽略系统代理环境变量（`trust_env=False`）；解析到内网地址直接拒绝。
-- **密钥存储**：Windows 用 DPAPI 加密；macOS / Linux 无等价系统接口，改为 `0600` 权限的明文文件（同一用户可读）——这一点在 [PLATFORMS.md](PLATFORMS.md) 中明确写出。
+- **密钥存储**：Windows 用 DPAPI 加密；macOS / Linux 无等价系统接口，改为 `0600` 权限的明文文件（同一用户可读）——这一点在 [PLATFORMS.md](docs/PLATFORMS.md) 中明确写出。
 - **备份**：导出 zip 内含密钥文件，请自行妥善保管；导入前校验 SHA-256 清单。
 - **不伪造**：演示数据、降级检索、联网来源等状态一律在界面标注。
 
@@ -374,17 +374,13 @@ campus-agent/
 ├─ backend/         FastAPI 后端（app/ 源码、tests/ 测试、requirements*.txt）
 ├─ frontend/        Vue 3 前端（src/、tests/、dist/ 构建产物）
 ├─ desktop/         Electron 外壳（main.cjs、preload.cjs、lib/、assets/ 图标）
-├─ scripts/         构建与打包（build_desktop.py、install.py、create_icon.py 等）
-├─ docs/            项目介绍页（GitHub Pages，中 / 英 / 日）
+├─ docs/            项目文档（架构、平台、部署、校园数据与验证记录）
+├─ site/            项目介绍页（GitHub Pages，中 / 英 / 日）
+├─ scripts/         构建、打包与本地脚本（build_desktop.py、install.cmd、verify.ps1 等）
 ├─ assets/          品牌源图
 ├─ examples/        插件清单示例
 ├─ compose.yaml     Docker 部署（PostgreSQL + 后端 + Nginx）
-├─ PLATFORMS.md     平台矩阵与构建方式
-├─ DESKTOP.md       桌面版说明
-├─ ARCHITECTURE.md  架构与主要接口
-├─ CAMPUS-DATA.md   校园接口接入格式
-├─ VERIFICATION.md  验证记录（验收范围与结论）
-└─ LICENSE / NOTICE / THIRD-PARTY-NOTICES.md
+└─ README.md 等     三语 README、CHANGELOG、CONTRIBUTING / LICENSE / NOTICE
 ```
 
 ## 测试与验证
@@ -404,7 +400,7 @@ cd ..\desktop
 npm test
 
 # 一次跑完以上全部（Windows）
-.\verify.ps1
+.\scripts\verify.ps1
 ```
 
 离线环境可用系统 Python 运行两组纯逻辑测试（不依赖框架 / 网络 / 数据库）：
@@ -416,17 +412,17 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 ```
 
 这些测试覆盖核心校验与决策逻辑，但不能替代真实 FastAPI、LangGraph、Chroma、模型服务或浏览器联调；
-没有任何测试能保证绝对无 Bug。已完成的验证范围与结论见 [VERIFICATION.md](VERIFICATION.md)，安装包见 [Releases](https://github.com/HuanMoovo/campus-agent/releases)。
+没有任何测试能保证绝对无 Bug。已完成的验证范围与结论见 [VERIFICATION.md](docs/VERIFICATION.md)，安装包见 [Releases](https://github.com/HuanMoovo/campus-agent/releases)。
 
 ## 界面
 
 | 聊天（含联网来源） | 设置（联网搜索） |
 | --- | --- |
-| <img src="docs/img/chat-web-search.png" alt="聊天界面：联网搜索结果与来源链接" /> | <img src="docs/img/settings-web-search.png" alt="设置界面：联网搜索配置" /> |
+| <img src="site/img/chat-web-search.png" alt="聊天界面：联网搜索结果与来源链接" /> | <img src="site/img/settings-web-search.png" alt="设置界面：联网搜索配置" /> |
 
 | 校园服务（报修与本机记录） |
 | --- |
-| <img src="docs/img/campus-services.png" alt="校园服务界面：报修与本机记录" /> |
+| <img src="site/img/campus-services.png" alt="校园服务界面：报修与本机记录" /> |
 
 ## 已知限制
 
@@ -434,7 +430,7 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 - **未签名、未公证**：没有发行者证书，Windows / macOS 首次打开可能出现系统提示；正式分发前应配置签名。
 - **校园接口与统一登录**：项目不附带任何真实学校接口、统一身份认证或模型密钥；生产部署需学校提供已授权接口并验收。
 - **云端模型与联网搜索**：需要各自的 API Key（联网搜索的 Bing 通道免密钥）；搜索服务端的可用性受网络环境限制。
-- **原生 Android / iOS 应用**：不在本项目范围，原因见 [PLATFORMS.md](PLATFORMS.md)（Python 后端无法随应用上架移动平台）。
+- **原生 Android / iOS 应用**：不在本项目范围，原因见 [PLATFORMS.md](docs/PLATFORMS.md)（Python 后端无法随应用上架移动平台）。
 - **一键更新**：更新检查只提示版本差异并打开下载页，不做自动下载与静默安装。
 - **多人部署**：当前演示会话以随机会话 ID 作为访问凭据，仅适合本地开发；生产需要用户归属校验、操作审计、限流、HTTPS、数据库迁移与备份策略。
 
@@ -458,9 +454,9 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 | 文档 | 内容 |
 | --- | --- |
 | [项目介绍页](https://huanmoovo.github.io/campus-agent/) | 中 / 英 / 日三语的图文介绍、平台矩阵与已知限制 |
-| [PLATFORMS.md](PLATFORMS.md) | 平台矩阵、构建命令、macOS / Linux 凭据存储差异、移动端方案原因 |
-| [DESKTOP.md](DESKTOP.md) | 桌面版运行方式、数据目录、IPC 与安全设置 |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | 架构、模块职责与主要接口 |
-| [CAMPUS-DATA.md](CAMPUS-DATA.md) | 九类校园接口的字段与接入格式 |
-| [VERIFICATION.md](VERIFICATION.md) | 各版本的验证范围、结论与已知边界 |
+| [PLATFORMS.md](docs/PLATFORMS.md) | 平台矩阵、构建命令、macOS / Linux 凭据存储差异、移动端方案原因 |
+| [DESKTOP.md](docs/DESKTOP.md) | 桌面版运行方式、数据目录、IPC 与安全设置 |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | 架构、模块职责与主要接口 |
+| [CAMPUS-DATA.md](docs/CAMPUS-DATA.md) | 九类校园接口的字段与接入格式 |
+| [VERIFICATION.md](docs/VERIFICATION.md) | 各版本的验证范围、结论与已知边界 |
 | [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | 第三方组件与许可证清单 |

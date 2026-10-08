@@ -33,7 +33,7 @@ Windows 的记录见 `VERIFICATION.md`；macOS 与 Linux 的产物由 GitHub Act
 ## 构建方式
 
 ```bash
-# Windows（PowerShell / cmd，或双击 build-desktop.cmd）
+# Windows（PowerShell / cmd，或双击 scripts\build-desktop.cmd）
 python scripts\build_desktop.py
 
 # macOS（需在 macOS 上执行；Intel 用 --arch x64）

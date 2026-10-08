@@ -289,7 +289,7 @@
 
   <section id="features">
     <h2 data-i18n="features.title">功能一览</h2>
-    <p class="sub" data-i18n="features.sub">以下功能均已在开发副本中实现并有验证记录（含安装后的真机验收），具体证据见仓库中的 VERIFICATION.md。</p>
+    <p class="sub" data-i18n="features.sub">以下功能均已在开发副本中实现并有验证记录（含安装后的真机验收），具体证据见仓库中的 docs/VERIFICATION.md。</p>
     <div class="grid">
       <div class="card">
         <span class="tag" data-i18n="card1.tag">问答</span>
@@ -421,8 +421,8 @@ python scripts/build_desktop.py --os mac --arch arm64
 python scripts/build_desktop.py --os linux --arch x64</code></pre>
     <p data-i18n="start.dev">从源码开发运行：</p>
     <pre><code>python scripts/install.py
-start-backend.cmd
-start-frontend.cmd</code></pre>
+scripts\start-backend.cmd
+scripts\start-frontend.cmd</code></pre>
     <p data-i18n="start.mobile"><b>手机 / 平板：</b>部署后端（见仓库 README 的服务器部署小节），手机浏览器打开站点后“添加到主屏幕”，即可获得全屏、独立图标的类应用体验。</p>
   </section>
 
@@ -458,7 +458,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       </div>
       <div class="card">
         <h3 data-i18n="arch4.title">密钥存储</h3>
-        <p data-i18n="arch4.body">Windows 用 DPAPI 加密保存 API Key；macOS / Linux 无等价系统接口，改为 <code>0600</code> 权限的明文文件（同一用户可读）。这一点在 PLATFORMS.md 中明确写出。</p>
+        <p data-i18n="arch4.body">Windows 用 DPAPI 加密保存 API Key；macOS / Linux 无等价系统接口，改为 <code>0600</code> 权限的明文文件（同一用户可读）。这一点在 docs/PLATFORMS.md 中明确写出。</p>
       </div>
     </div>
   </section>
@@ -494,7 +494,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       <li data-i18n="limit2"><b>未签名、未公证</b>：没有发行者证书，Windows/macOS 首次打开可能出现系统提示；正式分发前应配置签名。</li>
       <li data-i18n="limit3"><b>校园接口与统一登录</b>：项目不附带任何真实学校接口、统一身份认证或模型密钥；生产部署需学校提供已授权接口并验收。</li>
       <li data-i18n="limit4"><b>云端模型与联网搜索</b>：需要各自的 API Key（联网搜索的 Bing 通道免密钥）；搜索结果的服务端可用性受网络环境限制。</li>
-      <li data-i18n="limit5"><b>原生 Android / iOS 应用</b>：不在本项目范围，原因见 PLATFORMS.md（Python 后端无法随应用上架移动平台）。</li>
+      <li data-i18n="limit5"><b>原生 Android / iOS 应用</b>：不在本项目范围，原因见 docs/PLATFORMS.md（Python 后端无法随应用上架移动平台）。</li>
       <li data-i18n="limit6"><b>一键更新</b>：更新检查只提示版本差异并打开下载页，不做自动下载与静默安装。</li>
     </ul>
   </section>
@@ -504,8 +504,8 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       <a href="https://github.com/HuanMoovo/campus-agent" data-i18n="footer.repo">GitHub 仓库</a>
       <a href="https://github.com/HuanMoovo/campus-agent/releases/latest" data-i18n="footer.download">下载 Windows 安装包</a>
       <a href="https://github.com/HuanMoovo/campus-agent/blob/main/README.md" data-i18n="footer.readme">README</a>
-      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/PLATFORMS.md" data-i18n="footer.platforms">平台支持与构建</a>
-      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/VERIFICATION.md" data-i18n="footer.verification">验证记录</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/docs/PLATFORMS.md" data-i18n="footer.platforms">平台支持与构建</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/docs/VERIFICATION.md" data-i18n="footer.verification">验证记录</a>
       <a href="https://github.com/HuanMoovo/campus-agent/blob/main/LICENSE" data-i18n="footer.license">LICENSE (Apache-2.0)</a>
       <a href="https://github.com/HuanMoovo/campus-agent/blob/main/THIRD-PARTY-NOTICES.md" data-i18n="footer.thirdparty">第三方组件</a>
     </div>
@@ -545,7 +545,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       'action.license': 'Licence',
       'action.limits': 'Known limitations',
       'features.title': 'What it does',
-      'features.sub': 'Every item below is implemented in the development copy and backed by a verification record (including checks on an installed build); the evidence is in VERIFICATION.md in the repository.',
+      'features.sub': 'Every item below is implemented in the development copy and backed by a verification record (including checks on an installed build); the evidence is in docs/VERIFICATION.md in the repository.',
       'card1.tag': 'CHAT', 'card1.title': 'Streaming answers you can stop', 'card1.body': 'Text arrives character by character and generation can be interrupted at any time. What was produced is saved together with a stopped marker, so history never pretends an answer was finished; replies can be flagged as demo data instead of pretending a school system is connected.',
       'card2.tag': 'SESSIONS', 'card2.title': 'Conversation history isolated per user', 'card2.body': 'The desktop app keeps each machine separate and the web app keeps each browser separate; any conversation can be restored, deleted individually or cleared in one go. The history panel shows each conversation title and time.',
       'card3.tag': 'KNOWLEDGE', 'card3.title': 'Search across several document formats', 'card3.body': 'PDF, Markdown, TXT and Word (.docx), up to 5 MB each. The document database is the source of truth and the index is validated by version hash, so deleted or updated documents never come back as stale passages.',
@@ -597,7 +597,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       'arch3.title': 'Outbound request limits',
       'arch3.body': 'Plugins, web search and update checks are HTTPS-only, pinned to a validated public address (SNI preserved against DNS rebinding), refuse redirects and have size and timeout caps; anything resolving to a private address is rejected outright.',
       'arch4.title': 'Key storage',
-      'arch4.body': 'Windows encrypts API keys with DPAPI; macOS and Linux have no equivalent system facility, so keys are stored in a plain file with <code>0600</code> permissions readable by the same user only. PLATFORMS.md states this explicitly.',
+      'arch4.body': 'Windows encrypts API keys with DPAPI; macOS and Linux have no equivalent system facility, so keys are stored in a plain file with <code>0600</code> permissions readable by the same user only. docs/PLATFORMS.md states this explicitly.',
       'license.title': 'Licence',
       'license.sub': 'Mens Campus Assistant is released under the <b>Apache License 2.0 (Apache-2.0)</b>; the full text is in <a href=\'https://github.com/HuanMoovo/campus-agent/blob/main/LICENSE\'>LICENSE</a> at the repository root.',
       'lic1.title': 'You may',
@@ -614,7 +614,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       'limit2': '<b>Unsigned and not notarised</b>: there is no publisher certificate, so the first launch on Windows or macOS may show a system prompt; signing should be set up before any wider distribution.',
       'limit3': '<b>Campus endpoints and single sign-on</b>: no real school endpoint, identity provider or model key ships with the project; a production deployment needs interfaces the school has authorised, plus its own acceptance testing.',
       'limit4': '<b>Cloud models and web search</b>: each needs its own API key (the Bing channel of web search is keyless); the availability of the search backend depends on your network environment.',
-      'limit5': '<b>Native Android / iOS apps</b>: out of scope, for the reason given in PLATFORMS.md (the Python backend cannot ship on mobile stores).',
+      'limit5': '<b>Native Android / iOS apps</b>: out of scope, for the reason given in docs/PLATFORMS.md (the Python backend cannot ship on mobile stores).',
       'limit6': '<b>One-click updates</b>: the update check only reports a version difference and opens the download page; it does not download or install silently.',
       'footer.repo': 'GitHub repository',
       'footer.download': 'Download for Windows',
@@ -656,7 +656,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       'action.license': 'ライセンス',
       'action.limits': '既知の制限',
       'features.title': '機能一覧',
-      'features.sub': '以下はすべて開発版に実装済みで、検証記録（インストール後の実機確認を含む）があります。根拠はリポジトリの VERIFICATION.md にあります。',
+      'features.sub': '以下はすべて開発版に実装済みで、検証記録（インストール後の実機確認を含む）があります。根拠はリポジトリの docs/VERIFICATION.md にあります。',
       'card1.tag': '回答', 'card1.title': 'ストリーミング回答・生成の停止', 'card1.body': '文字単位で出力し、いつでも中断できます。中断時は生成済みの内容と「停止」の印を保存し、履歴が完全な回答を装うことはありません。回答には「デモデータ」と表示でき、学校システムに接続済みであるかのように見せることもありません。',
       'card2.tag': '会話', 'card2.title': 'ユーザーごとに分離された履歴', 'card2.body': 'デスクトップ版は端末ごと、ウェブ版はブラウザごとに分離します。任意の会話の復元、1件ずつの削除、一括削除が可能で、履歴パネルには各会話のタイトルと時刻が表示されます。',
       'card3.tag': 'ナレッジ', 'card3.title': '複数形式のドキュメント検索', 'card3.body': 'PDF・Markdown・TXT・Word（.docx、1件 5MB まで）に対応。文書データベースが正であり、索引はバージョンハッシュで検証するため、削除・更新した文書が古い断片として返ることはありません。',
@@ -708,7 +708,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       'arch3.title': '送信リクエストの制約',
       'arch3.body': 'プラグイン、ウェブ検索、更新確認は HTTPS のみ、検証済みのグローバルアドレスに固定（DNS リバインディング対策として SNI を保持）、リダイレクト禁止、サイズとタイムアウトの上限あり。プライベートアドレスに解決した場合は即座に拒否します。',
       'arch4.title': 'キーの保存',
-      'arch4.body': 'Windows は DPAPI で API キーを暗号化して保存します。macOS / Linux には同等の仕組みがないため、<code>0600</code> 権限の平文ファイル（同一ユーザーのみ読取可）に保存します。この点は PLATFORMS.md に明記しています。',
+      'arch4.body': 'Windows は DPAPI で API キーを暗号化して保存します。macOS / Linux には同等の仕組みがないため、<code>0600</code> 権限の平文ファイル（同一ユーザーのみ読取可）に保存します。この点は docs/PLATFORMS.md に明記しています。',
       'license.title': 'ライセンス',
       'license.sub': 'Mens キャンパスアシスタントは <b>Apache License 2.0（Apache-2.0）</b>で公開しています。全文はリポジトリ直下の <a href=\'https://github.com/HuanMoovo/campus-agent/blob/main/LICENSE\'>LICENSE</a> にあります。',
       'lic1.title': 'できること',
@@ -725,7 +725,7 @@ mens serve --port 8000         # 只启动本地后端</code></pre>
       'limit2': '<b>署名・公証なし</b>：発行者の証明書がないため、Windows/macOS の初回起動でシステムの警告が出ることがあります。本格配布の前に署名を設定すべきです。',
       'limit3': '<b>学内連携とシングルサインオン</b>：実際の学校エンドポイント、統合認証、モデルのキーは同梱していません。本番配備には学校が認可したインターフェースと、その受け入れ検証が必要です。',
       'limit4': '<b>クラウドモデルとウェブ検索</b>：それぞれ API キーが必要です（ウェブ検索の Bing 経路はキー不要）。検索バックエンドの可用性はネットワーク環境に左右されます。',
-      'limit5': '<b>Android / iOS のネイティブアプリ</b>：本プロジェクトの対象外です。理由は PLATFORMS.md に記載しています（Python バックエンドはモバイルストアに同梱できません）。',
+      'limit5': '<b>Android / iOS のネイティブアプリ</b>：本プロジェクトの対象外です。理由は docs/PLATFORMS.md に記載しています（Python バックエンドはモバイルストアに同梱できません）。',
       'limit6': '<b>ワンクリック更新</b>：更新確認はバージョン差の通知とダウンロードページの表示のみで、自動ダウンロードやサイレントインストールは行いません。',
       'footer.repo': 'GitHub リポジトリ',
       'footer.download': 'Windows 版をダウンロード',

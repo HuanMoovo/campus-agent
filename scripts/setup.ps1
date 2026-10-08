@@ -1,6 +1,6 @@
 param([switch]$FullRag)
 $ErrorActionPreference = 'Stop'
-$projectRoot = $PSScriptRoot
+$projectRoot = Split-Path $PSScriptRoot -Parent
 function Assert-Exit([string]$step) { if ($LASTEXITCODE -ne 0) { throw "$step failed (exit $LASTEXITCODE)" } }
 
 Push-Location (Join-Path $projectRoot 'backend')

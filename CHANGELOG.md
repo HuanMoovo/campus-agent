@@ -1,7 +1,7 @@
 # 变更记录
 
 本文件按时间倒序记录对外可见的变化。每个版本的验收范围与结论见
-[VERIFICATION.md](VERIFICATION.md)，安装包见 [Releases](https://github.com/HuanMoovo/campus-agent/releases)。
+[VERIFICATION.md](docs/VERIFICATION.md)，安装包见 [Releases](https://github.com/HuanMoovo/campus-agent/releases)。
 
 ## 1.2.2 — 2026-10-08
 
@@ -26,7 +26,7 @@
 
 - `compose.yaml` 增加登录变量透传：在根目录 `.env` 设置 `AUTH_REQUIRED=true` 即可为自建网站启用登录门禁（`AUTH_ADMIN_USERNAME`、`AUTH_ADMIN_PASSWORD`、`SESSION_DAYS`、`COOKIE_SECURE`、`ALLOW_REGISTRATION`、`REGISTER_CODE`；默认全部关闭即免登录，桌面版不受影响）。
 - `frontend/nginx.conf` 为 `/api/` 关闭响应缓冲并改用 HTTP/1.1：修复组合部署下聊天流式回答可能被 Nginx 缓冲、答复「整段出现」的问题（重建前端镜像后生效）。
-- `.env.example` 补全全部登录变量与注释；README（中/英/日）Docker 部署节与 DEPLOY.md 注明「默认免登录，公网开放先开 `AUTH_REQUIRED`」。
+- `.env.example` 补全全部登录变量与注释；README（中/英/日）Docker 部署节与 docs/DEPLOY.md 注明「默认免登录，公网开放先开 `AUTH_REQUIRED`」。
 
 ### CI：三平台测试矩阵
 
@@ -146,7 +146,7 @@
   桌面版自动豁免，管理员角色可执行管理操作。
 - **界面**：新增登录页（三语）与侧栏退出入口；启动时先校验会话再渲染主界面。
 - **部署**：新增 `Dockerfile.web`（前端构建 + FastAPI 单容器）、`render.yaml`（Render 免费实例蓝图）、
-  `.dockerignore` 与 `DEPLOY.md`；后端在设置 `WEB_FRONTEND_DIR` 时托管前端产物，
+  `.dockerignore` 与 `docs/DEPLOY.md`；后端在设置 `WEB_FRONTEND_DIR` 时托管前端产物，
   健康检查返回 `auth_required` 供前端判断是否显示登录页。
 - **修复**：`CAMPUS_DATA_DIR` 现在同时决定 SQLite 位置（此前只改目录不改库，
   导致测试与多实例共用同一个数据库、测试账号污染开发库）。
@@ -175,7 +175,7 @@
 - **产物冒烟**：新增 `scripts/smoke_package.py`，启动打包产物后从调试端口取出内部地址，
   确认内置后端与界面进程就绪（外部请求得到 401 视为鉴权生效）。构建矩阵在
   Windows / macOS / Linux 三个平台的 runner 上都会执行该冒烟，作为“跑得起来”的证据。
-- **校园网关接入**：新增 `CAMPUS-GATEWAY.md`（九类接口约定、登记联调步骤与验收清单），
+- **校园网关接入**：新增 `docs/CAMPUS-GATEWAY.md`（九类接口约定、登记联调步骤与验收清单），
   如实标注适配层已验证、真实网关待校方凭据。
 
 

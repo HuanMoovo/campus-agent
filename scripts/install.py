@@ -1,4 +1,4 @@
-"""Install this project locally; run explicitly with Python or install.cmd."""
+"""Install this project locally; run explicitly with Python or scripts/install.cmd."""
 import argparse
 from pathlib import Path
 import secrets
@@ -58,7 +58,7 @@ def main():
     run([npm, "install", "--cache", ".npm-cache"], frontend)
     run([npm, "run", "build"], frontend)
     print("Installation, backend tests, and frontend build completed.")
-    print("Start with start-backend.cmd and start-frontend.cmd, then open http://localhost:5173")
+    print("Start with scripts\start-backend.cmd and scripts\start-frontend.cmd, then open http://localhost:5173")
 
 
 if __name__ == "__main__":

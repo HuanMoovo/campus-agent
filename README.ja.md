@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/img/logo.png" alt="Mens キャンパスアシスタント" width="104" height="104" />
+<img src="site/img/logo.png" alt="Mens キャンパスアシスタント" width="104" height="104" />
 
 # Mens キャンパスアシスタント
 
@@ -17,8 +17,8 @@ Electron デスクトップシェル + Vue 3 インターフェース + FastAPI 
 
 [Windows 版をダウンロード](https://github.com/HuanMoovo/campus-agent/releases/latest) ·
 [プロジェクト紹介ページ](https://huanmoovo.github.io/campus-agent/) ·
-[対応プラットフォーム](PLATFORMS.md) ·
-[検証記録](VERIFICATION.md) ·
+[対応プラットフォーム](docs/PLATFORMS.md) ·
+[検証記録](docs/VERIFICATION.md) ·
 [ライセンス](LICENSE)
 
 </div>
@@ -171,7 +171,7 @@ python -m app.cli serve --port 8000                    # バックエンドの�
 
 - リポジトリには `Dockerfile.web`（フロントエンドビルド + FastAPI の単一コンテナ）と
   `render.yaml` が含まれます。Render に GitHub でログインし **New → Blueprint** で本リポジトリを
-  選ぶだけです。詳しくは [DEPLOY.md](DEPLOY.md)。
+  選ぶだけです。詳しくは [DEPLOY.md](docs/DEPLOY.md)。
 - `AUTH_REQUIRED=true` では、ヘルスチェックと認証系以外のすべての API にログインが必要です。
   パスワードは PBKDF2-HMAC-SHA256 のハッシュで保存し、セッションは HttpOnly Cookie
   （サーバー側はトークンのハッシュのみ保存）です。
@@ -192,8 +192,8 @@ python -m app.cli serve --port 8000                    # バックエンドの�
 
 > 「実機検証済み」はその OS で実際にインストール・起動し画面確認まで行ったことを指し、
 > 「CI ビルド」は GitHub Actions が成果物を生成したが実機では未実行であることを指します。
-> マトリクス・ビルドコマンド・理由は [PLATFORMS.md](PLATFORMS.md)、結果と範囲は
-> [VERIFICATION.md](VERIFICATION.md) を参照してください。
+> マトリクス・ビルドコマンド・理由は [PLATFORMS.md](docs/PLATFORMS.md)、結果と範囲は
+> [VERIFICATION.md](docs/VERIFICATION.md) を参照してください。
 
 ### Release 成果物（v1.2.2）
 
@@ -239,9 +239,9 @@ python scripts/build_desktop.py --os linux --arch x64
 
 ### 3. ソースからの実行（ウェブ開発）
 
-Windows では `install.cmd` をダブルクリックすると、依存のインストール、LangGraph の確認、
-バックエンドテスト、フロントエンドのビルドまで実行されます。その後 `start-backend.cmd` と
-`start-frontend.cmd` を実行し、<http://localhost:5173> を開きます。
+Windows では `scripts\install.cmd` をダブルクリックすると、依存のインストール、LangGraph の確認、
+バックエンドテスト、フロントエンドのビルドまで実行されます。その後 `scripts\start-backend.cmd` と
+`scripts\start-frontend.cmd` を実行し、<http://localhost:5173> を開きます。
 
 手動の場合：
 
@@ -338,11 +338,11 @@ docker compose logs -f backend
 
 ### 学内データエンドポイント
 
-9 種類のエンドポイントのフィールド、値パス、例は [CAMPUS-DATA.md](CAMPUS-DATA.md) にあります。要点：
+9 種類のエンドポイントのフィールド、値パス、例は [CAMPUS-DATA.md](docs/CAMPUS-DATA.md) にあります。要点：
 
 - HTTPS の JSON のみ。Bearer トークンと結果パスに対応します。
 - 未設定のエンドポイントは明確に表示されたデモデータを返します。本プロジェクトは実際の学校エンドポイント、統合認証、モデルの鍵を**同梱していません**。
-- 本番配備には学校が認可したインターフェースと受け入れ検証が必要です。複数人での利用には、シングルサインオン、ユーザーごとの学籍番号の紐付け、操作の監査、レート制限も必要です（[CAMPUS-DATA.md](CAMPUS-DATA.md) と [ARCHITECTURE.md](ARCHITECTURE.md) を参照）。
+- 本番配備には学校が認可したインターフェースと受け入れ検証が必要です。複数人での利用には、シングルサインオン、ユーザーごとの学籍番号の紐付け、操作の監査、レート制限も必要です（[CAMPUS-DATA.md](docs/CAMPUS-DATA.md) と [ARCHITECTURE.md](docs/ARCHITECTURE.md) を参照）。
 
 ## アーキテクチャとセキュリティ境界
 
@@ -357,7 +357,7 @@ docker compose logs -f backend
 
 - **ローカル優先**：デスクトップ版のバックエンドは `127.0.0.1` のランダムポートのみを待ち受け、起動ごとにワンタイムトークンを発行します。シェルは追加のリクエストヘッダーを注入し、Electron の設定を厳格化します（`nodeIntegration:false`、`contextIsolation:true`、`sandbox:true`、`webSecurity:true`、`webviewTag` 無効）。外部ページからこれらの API には到達できません。
 - **送信の規律**（プラグイン / ウェブ検索 / 更新確認で共通）：HTTPS の 443 のみ。解決済みで検証済みのグローバルアドレスに接続を固定（DNS リバインディング対策として SNI を保持）。リダイレクト禁止。応答サイズとタイムアウトの上限。システムのプロキシ環境変数は無視（`trust_env=False`）。プライベートアドレスに解決した場合は即座に拒否します。
-- **鍵の保存**：Windows は DPAPI。macOS / Linux には同等の仕組みがないため、`0600` 権限の平文ファイル（同一ユーザーのみ読取可）に保存します。この点は [PLATFORMS.md](PLATFORMS.md) に明記しています。
+- **鍵の保存**：Windows は DPAPI。macOS / Linux には同等の仕組みがないため、`0600` 権限の平文ファイル（同一ユーザーのみ読取可）に保存します。この点は [PLATFORMS.md](docs/PLATFORMS.md) に明記しています。
 - **バックアップ**：書き出した zip には鍵ファイルが含まれるため厳重に保管してください。読み込み時は SHA-256 一覧を検証します。
 - **捏造しない**：デモデータ、検索の降格、ウェブの参照元などの状態は必ず画面に表示します。
 
@@ -368,17 +368,13 @@ campus-agent/
 ├─ backend/         FastAPI バックエンド（app/、tests/、requirements*.txt）
 ├─ frontend/        Vue 3 フロントエンド（src/、tests/、dist/）
 ├─ desktop/         Electron シェル（main.cjs、preload.cjs、lib/、assets/ アイコン）
-├─ scripts/         ビルドとパッケージング（build_desktop.py、install.py、create_icon.py など）
-├─ docs/            プロジェクト紹介ページ（GitHub Pages、中 / 英 / 日）
+├─ docs/            プロジェクト文書（アーキテクチャ、プラットフォーム、配備、学内データ、検証記録）
+├─ site/            プロジェクト紹介ページ（GitHub Pages、中 / 英 / 日）
+├─ scripts/         ビルド・パッケージング・ローカルスクリプト（build_desktop.py、install.cmd、verify.ps1 など）
 ├─ assets/          ブランド素材
 ├─ examples/        プラグインマニフェストの例
 ├─ compose.yaml     Docker 配備用（PostgreSQL + バックエンド + Nginx）
-├─ PLATFORMS.md     プラットフォームマトリクスとビルド方法
-├─ DESKTOP.md       デスクトップ版の説明
-├─ ARCHITECTURE.md  アーキテクチャと主要インターフェース
-├─ CAMPUS-DATA.md   学内エンドポイントの形式
-├─ VERIFICATION.md  検証記録（範囲と結果）
-└─ LICENSE / NOTICE / THIRD-PARTY-NOTICES.md
+└─ README.md など   三言語 README、CHANGELOG、CONTRIBUTING / LICENSE / NOTICE
 ```
 
 ## テストと検証
@@ -398,7 +394,7 @@ cd ..\desktop
 npm test
 
 # 上記をまとめて実行（Windows）
-.\verify.ps1
+.\scripts\verify.ps1
 ```
 
 ネットワークがない環境では、システムの Python で 2 組のロジックテスト（フレームワーク / ネットワーク /
@@ -412,17 +408,17 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 
 これらは中核の検証と判断ロジックを対象としますが、実際の FastAPI、LangGraph、Chroma、モデルサービス、
 ブラウザ連携の代替にはなりません。バグが絶対にないことを保証するテストはありません。完了した検証範囲は
-[VERIFICATION.md](VERIFICATION.md) に、インストーラーは [Releases](https://github.com/HuanMoovo/campus-agent/releases) にあります。
+[VERIFICATION.md](docs/VERIFICATION.md) に、インストーラーは [Releases](https://github.com/HuanMoovo/campus-agent/releases) にあります。
 
 ## 画面
 
 | チャット（ウェブ参照元つき） | 設定（ウェブ検索） |
 | --- | --- |
-| <img src="docs/img/chat-web-search.png" alt="チャット画面：ウェブ検索結果と参照リンク" /> | <img src="docs/img/settings-web-search.png" alt="設定画面：ウェブ検索" /> |
+| <img src="site/img/chat-web-search.png" alt="チャット画面：ウェブ検索結果と参照リンク" /> | <img src="site/img/settings-web-search.png" alt="設定画面：ウェブ検索" /> |
 
 | 学内サービス（修理申請と端末内の記録） |
 | --- |
-| <img src="docs/img/campus-services.png" alt="学内サービス画面：修理申請と端末内の記録" /> |
+| <img src="site/img/campus-services.png" alt="学内サービス画面：修理申請と端末内の記録" /> |
 
 ## 既知の制限
 
@@ -430,7 +426,7 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 - **署名・公証なし** — 発行者の証明書がないため、Windows / macOS の初回起動でシステムの警告が出ることがあります。本格配布の前に署名を設定すべきです。
 - **学内連携とシングルサインオン** — 実際の学校エンドポイント、統合認証、モデルの鍵は同梱していません。本番配備には学校が認可したインターフェースと受け入れ検証が必要です。
 - **クラウドモデルとウェブ検索** — それぞれ API キーが必要です（ウェブ検索の Bing 経路はキー不要）。検索バックエンドの可用性はネットワーク環境に左右されます。
-- **Android / iOS のネイティブアプリ** — 対象外です。理由は [PLATFORMS.md](PLATFORMS.md) に記載しています（Python バックエンドはモバイルストアに同梱できません）。
+- **Android / iOS のネイティブアプリ** — 対象外です。理由は [PLATFORMS.md](docs/PLATFORMS.md) に記載しています（Python バックエンドはモバイルストアに同梱できません）。
 - **ワンクリック更新** — 更新確認はバージョン差の通知とダウンロードページの表示のみで、自動ダウンロードやサイレントインストールは行いません。
 - **複数人での配備** — 現在のデモ会話はランダムなセッション ID をアクセス資格情報にしています。ローカル開発のみに適しており、本番にはユーザー所属の検証、操作監査、レート制限、HTTPS、データベース移行、バックアップ方針が必要です。
 
@@ -455,9 +451,9 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 | ドキュメント | 内容 |
 | --- | --- |
 | [プロジェクト紹介ページ](https://huanmoovo.github.io/campus-agent/) | 中・英・日の図解つき紹介、プラットフォームマトリクス、既知の制限 |
-| [PLATFORMS.md](PLATFORMS.md) | プラットフォームマトリクス、ビルドコマンド、macOS / Linux の鍵保存の違い、モバイルの理由 |
-| [DESKTOP.md](DESKTOP.md) | デスクトップ版の実行方法、データフォルダ、IPC とセキュリティ設定 |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | アーキテクチャ、モジュールの役割、主要インターフェース |
-| [CAMPUS-DATA.md](CAMPUS-DATA.md) | 9 種類の学内エンドポイントのフィールドと連携形式 |
-| [VERIFICATION.md](VERIFICATION.md) | 各バージョンの検証範囲・結果と既知の範囲 |
+| [PLATFORMS.md](docs/PLATFORMS.md) | プラットフォームマトリクス、ビルドコマンド、macOS / Linux の鍵保存の違い、モバイルの理由 |
+| [DESKTOP.md](docs/DESKTOP.md) | デスクトップ版の実行方法、データフォルダ、IPC とセキュリティ設定 |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | アーキテクチャ、モジュールの役割、主要インターフェース |
+| [CAMPUS-DATA.md](docs/CAMPUS-DATA.md) | 9 種類の学内エンドポイントのフィールドと連携形式 |
+| [VERIFICATION.md](docs/VERIFICATION.md) | 各バージョンの検証範囲・結果と既知の範囲 |
 | [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) | サードパーティコンポーネントとライセンス |

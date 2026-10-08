@@ -6,7 +6,7 @@
 ## 开发环境
 
 - Python 3.10+（后端与构建脚本）、Node.js 22+（前端与桌面外壳）
-- Windows 可直接双击 `install.cmd`；其他平台：
+- Windows 可直接双击 `scripts\install.cmd`；其他平台：
 
   ```bash
   cd backend && python -m venv .venv
@@ -18,7 +18,7 @@
 ## 提交前必须跑通
 
 ```bash
-# 后端（当前 266 个用例）
+# 后端（当前 394 个用例）
 cd backend && .venv/bin/python -m pytest -q
 
 # 前端（单元测试 + 类型检查 + 构建）
@@ -47,8 +47,8 @@ CI 会对每个 PR 跑上面三套（见 `.github/workflows/ci.yml`）。
 ## 文档更新
 
 - 面向用户的变化：更新 `CHANGELOG.md`（未发布小节）与相应 README（三份语言都改）。
-- 行为、范围或验证方式变化：更新 `VERIFICATION.md`。
-- 平台、构建方式变化：更新 `PLATFORMS.md`。
+- 行为、范围或验证方式变化：更新 `docs/VERIFICATION.md`。
+- 平台、构建方式变化：更新 `docs/PLATFORMS.md`。
 
 ## 分支与 PR
 
