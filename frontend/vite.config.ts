@@ -35,9 +35,12 @@ export default defineConfig({
     chunkSizeWarningLimit: 1200,
     rollupOptions: {
       output: {
-        manualChunks: {
-          'vendor-element': ['element-plus', '@element-plus/icons-vue'],
-          'vendor-vue': ['vue', 'pinia'],
+        // Vite 8's type checks reject the object form of manualChunks; the function form keeps the
+        // same split: the UI kit apart from the Vue runtime stack, everything else default.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return
+          if (id.includes('element-plus')) return 'vendor-element'
+          if (id.includes('/node_modules/vue/') || id.includes('/node_modules/@vue/') || id.includes('/node_modules/pinia/')) return 'vendor-vue'
         },
       },
     },
