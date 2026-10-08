@@ -99,6 +99,9 @@ def main():
          '--workpath', ROOT/'build'/'pyinstaller', desktop/'backend.spec'], ROOT, env)
     # Verify the actual frozen backend before producing the packages.
     run([node, '--test', 'tests/backend.integration.cjs'], desktop, {**os.environ, 'CAMPUS_TEST_PACKAGED': '1'})
+    # Electron 42+ no longer downloads its binary during npm install; electron-builder reads it from
+    # node_modules/electron/dist (electronDist in desktop/package.json), so prepare it explicitly.
+    run([npm, 'exec', '--', 'install-electron'], desktop)
     builder_env = {**os.environ}
     if target_os == 'mac':
         # Unsigned local/CI builds must not fail while looking for a signing identity.
