@@ -98,7 +98,7 @@ class KnowledgeIndex:
                     for meta, passage in zip(result["metadatas"][0], result["documents"][0]):
                         doc = by_id.get((meta or {}).get("document_id"))
                         # SQL is authoritative after a failed update or a disabled index.
-                        if doc is not None and meta.get("version") == self._version(doc) and passage:
+                        if doc is not None and (meta or {}).get("version") == self._version(doc) and passage:
                             vector_matches.append({"title": doc.title, "snippet": passage})
                             if len(vector_matches) == limit:
                                 self.last_error = False

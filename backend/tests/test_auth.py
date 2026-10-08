@@ -301,6 +301,20 @@ class UserAdminTest(unittest.TestCase):
         self.assertEqual(fresh.post("/api/auth/login",
                                     json={"username": "kid", "password": "brand-new-99"}).status_code, 200)
 
+    def test_self_service_password_change_revokes_other_sessions(self):
+        with SessionLocal() as db:
+            kid = db.query(User).filter_by(username="kid").one()
+            other_token = auth.start_session(db, kid)
+        response = self.student.post("/api/auth/password", json={"current": "kid-pass-1234", "password": "brand-new-99"})
+        self.assertEqual(response.status_code, 200, response.text)
+        # 当前会话保留，其它会话被吊销
+        self.assertEqual(self.student.get("/api/auth/me").status_code, 200)
+        with SessionLocal() as db:
+            self.assertIsNone(auth.resolve_session(db, other_token))
+        fresh = TestClient(main.app)
+        self.assertEqual(fresh.post("/api/auth/login",
+                                    json={"username": "kid", "password": "brand-new-99"}).status_code, 200)
+
 
 class BootstrapTest(unittest.TestCase):
     def test_bootstrap_creates_admin_only_when_enabled(self):

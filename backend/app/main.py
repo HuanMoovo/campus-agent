@@ -160,6 +160,7 @@ def auth_change_password(body: PasswordChange, request: Request, db: Session = D
         auth.change_own_password(db, user, body.current, body.password)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
+    auth.revoke_other_sessions(db, user.id, request.cookies.get(auth.COOKIE_NAME, ""))
     return {"ok": True}
 
 

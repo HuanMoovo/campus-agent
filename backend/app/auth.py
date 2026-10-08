@@ -148,8 +148,18 @@ def revoke_sessions(db: DbSession, user_id: str) -> int:
     return int(result.rowcount or 0)
 
 
+def revoke_other_sessions(db: DbSession, user_id: str, keep_token: str) -> int:
+    """保留 keep_token 对应的会话，吊销该用户的其余会话（自助改密后调用）。"""
+    statement = delete(Session).where(Session.user_id == user_id)
+    if keep_token:
+        statement = statement.where(Session.token_hash != _token_hash(keep_token))
+    result = db.execute(statement)
+    db.commit()
+    return int(result.rowcount or 0)
+
+
 def change_own_password(db: DbSession, user: User, current: str, new_password: str) -> None:
-    """自助改密：必须提供当前口令；改完踢掉其它会话，只保留当前这条。"""
+    """自助改密：必须提供当前口令；成功后由调用方吊销其它会话（见 revoke_other_sessions）。"""
     if not verify_password(current, user.password_hash):
         raise ValueError("当前口令不正确")
     validate(user.username, new_password)
@@ -262,7 +272,14 @@ def rate_limited(key: str) -> bool:
 
 
 def record_attempt(key: str) -> None:
-    _attempts.setdefault(key, []).append(_now())
+    now = _now()
+    history = [stamp for stamp in _attempts.get(key, []) if now - stamp < LOGIN_WINDOW]
+    history.append(now)
+    _attempts[key] = history
+    if len(_attempts) > 2048:  # 极端情况下防止键无限增长
+        for existing, stamps in list(_attempts.items()):
+            if not stamps or now - stamps[-1] >= LOGIN_WINDOW:
+                _attempts.pop(existing, None)
 
 
 def clear_attempts(key: str) -> None:
@@ -293,5 +310,5 @@ def ensure_bootstrap_admin(db: DbSession) -> None:
 
 __all__ = ["COOKIE_NAME", "hash_password", "verify_password", "validate", "public_user", "create_user",
            "count_users", "set_password", "authenticate", "start_session", "resolve_session",
-           "end_session", "end_all_sessions", "rate_limited", "record_attempt", "clear_attempts",
+           "end_session", "end_all_sessions", "revoke_other_sessions", "rate_limited", "record_attempt", "clear_attempts",
            "ensure_bootstrap_admin"]

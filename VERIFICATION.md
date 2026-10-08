@@ -2,6 +2,13 @@
 
 1.0.0 的构建与安装验证记录于 2026-09-30；1.1.0 于 2026-10-01 重新构建并完成安装验证；**1.2.0 于 2026-10-01 完成跨平台构建改造、联网搜索与可安装网页版，Windows 安装包通过完整验收**。校园统一登录仍未实现。
 
+## 深度代码审查批次：全模块复查与加固（2026-10-08）
+
+- **范围**：后端全模块（main / auth / mcp_client / mcp_registry / plugins / rag / db / models / model_runtime / web_search / schemas / desktop_runtime / config）、桌面三件套（main.cjs / preload.cjs / lib）、前端接口封装与 Markdown 渲染层逐文件复查。
+- **结论**：未发现安全漏洞级问题。路由鉴权 100% 覆盖（全部管理写端点 require_admin）；口令 PBKDF2-SHA256 24 万次迭代 + 定时均衡；会话令牌 256 位随机并以散列存储；桌面端来源校验、导航拦截、请求白名单、令牌限定注入与 CSP 注入齐全；备份导入有 zip-slip 防护与清单校验；插件清单与更新检查禁用内网地址与重定向；模型下载固定 TLS、断点续传按分段哈希、导入前全量 SHA-256 校验。
+- **修复 4 处**（详见 CHANGELOG 对应条目）：自助改密吊销其它会话（+1 测试）、限速表防膨胀、检索空值守卫、GitHub 引用名拒绝 `..`。
+- **测试**：后端 394 项（65 subtests）全部通过；前端与桌面端代码未改动。
+
 ## 质量检查批次：依赖审计与全新 PG 建库（2026-10-06）
 
 - **依赖审计**：前端 `npm audit`（--omit=dev）发现 1 项 high——`source-map-js` 事件循环 DoS（GHSA-68fv-2mgg-jv7q，经 jsdom / vite / vue 传递）；`npm audit fix` 升级锁文件后复核归零，前端 29 项测试与生产构建通过。后端 `pip-audit -r requirements.txt`：无已知漏洞。

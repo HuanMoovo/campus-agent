@@ -23,7 +23,7 @@ LEGACY_BAIKE_API_URL = "https://baike.baidu.com/api/openapi/BaikeLemmaCardApi?ap
 
 GITHUB_HOSTS = frozenset({"github.com", "www.github.com"})
 GITHUB_NAME_PATTERN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,98}[A-Za-z0-9])?$")
-GITHUB_REF_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
+GITHUB_REF_PATTERN = re.compile(r"^(?!.*\.\.)[A-Za-z0-9][A-Za-z0-9._/-]{0,199}$")
 MANIFEST_MAX_BYTES = 100_000
 
 
