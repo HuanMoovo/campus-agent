@@ -36,7 +36,7 @@ scripts\build-desktop.cmd
 
 脚本依次安装构建依赖、执行后端测试与前端单元测试、编译 Vue 前端、运行桌面逻辑/真实后端测试、用 PyInstaller 冻结后端、测试冻结后的实际可执行文件，最后生成 NSIS 安装包。任一步失败都会停止并显示错误。
 
-桌面构建复用 `npm ci` 安装的 Electron 运行环境，避免打包阶段重复下载；前端和桌面构建工具的依赖版本由各自的 `package-lock.json` 记录。
+桌面构建在打包前通过 `install-electron` 显式准备 Electron 二进制（42 起 npm 安装不再自动下载），electron-builder 直接复用，避免打包阶段重复下载；前端和桌面构建工具的依赖版本由各自的 `package-lock.json` 记录。
 
 成功后输出：
 
