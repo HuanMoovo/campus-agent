@@ -11,6 +11,7 @@ Electron 桌面外壳 + Vue 3 界面 + FastAPI 后端，可在单机上离线运
 <img src="https://img.shields.io/badge/%E7%89%88%E6%9C%AC-1.2.2-0e7c74" alt="版本 1.2.2" />
 <img src="https://img.shields.io/badge/%E8%AE%B8%E5%8F%AF%E8%AF%81-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/%E5%B9%B3%E5%8F%B0-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="平台" />
+<a href="https://star-history.com/#HuanMoovo/campus-agent&Date"><img src="https://img.shields.io/github/stars/HuanMoovo/campus-agent?label=%E2%98%85%20Stars&color=0e7c74" alt="Stars" /></a>
 
 **中文** · [English](README.en.md) · [日本語](README.ja.md)
 
@@ -60,6 +61,9 @@ Mens 把「校园政策与办事流程问答」「本地知识库检索」「校
 | 思考过程 | 深度档回答时，思考链实时流式展示、思考中自动展开、回答开始后自动收起；可随时手动开合，随对话保存，恢复历史后仍可查看 |
 | 富文本回答 | 回答按 Markdown 渲染：标题、列表、表格、代码块（语法高亮）、引用与链接；HTML 经净化，链接在桌面版走系统浏览器打开 |
 | 回答操作 | 每条回答下方提供操作条：复制原文、重新生成（替换该回答，不留重复问答）、用深度重答（不改档位的一次性深度回答）、有帮助 / 没帮助（反馈随对话保存，再次点击可取消） |
+| 附件提问 | 拖拽、粘贴或点选文件随问发送：文本类直接读取，PDF / Word 经解析接口处理（单文件 ≤ 5 MB）；最多 3 个附件，附件正文仅注入本次提问，历史保留原文与「[附件]」文件标注 |
+| 命令面板与斜杠指令 | `Ctrl + K` 打开命令面板：输入即过滤（新建对话、历史、导出、切换页面、深浅色等），↑ / ↓ 选择、回车执行；输入框内以 `/` 唤出斜杠指令（`/new`、`/history`、`/export`、`/theme`） |
+| 历史管理 | 历史对话全文检索（提问与回答，带命中摘要）、重命名、置顶与批量删除；触屏设备不依赖悬停同样可操作 |
 
 ### 知识库与检索
 
@@ -123,6 +127,9 @@ Mens 把「校园政策与办事流程问答」「本地知识库检索」「校
 | 外观 | 浅色 / 深色 / 跟随系统，自定义主题色；侧栏与移动端布局分别适配 |
 | 界面语言 | 中文 / English / 日本語，默认跟随系统，选择会记住（当前覆盖应用外壳、问答页与外观设置） |
 | 运行时校验 | 冻结后端以随机端口 + 一次性令牌启动，桌面外壳校验启动信封后才加载界面 |
+| 快速提问窗 | `Ctrl + Shift + K` 全局唤起居中浮层：输入回车即发送并自动跳转到对话页 |
+| 首次使用引导 | 首次启动显示 4 步引导（对话 / 模型与推理强度 / 历史与导出 / 快捷键与指令），可随时从命令面板重新打开 |
+| 完成通知 | 窗口不在前台时，回答完成后发送系统通知 |
 
 ### 插件与运维
 
@@ -183,6 +190,7 @@ python -m app.cli serve --port 8000                    # 只启动本地后端
   口令以 PBKDF2-HMAC-SHA256 散列存储，会话走 HttpOnly Cookie，服务端只存令牌散列。
 - 首次启动会按 `AUTH_ADMIN_USERNAME` / `AUTH_ADMIN_PASSWORD` 创建管理员
   （口令留空则生成随机口令并打印在服务端日志里，仅打印一次）。
+- 「账号」页提供完整用户管理（新建、改角色、禁用、删除、重置口令、强制下线），并支持自助注册与登录后自助改密（`ALLOW_REGISTRATION`、`REGISTER_CODE`）。
 - 桌面版不受影响：`AUTH_REQUIRED` 默认关闭，桌面包继续使用外壳注入的令牌。
 - 免费实例的限制（15 分钟休眠、SQLite 随实例重建重置）已写入 DEPLOY.md。
 
@@ -382,16 +390,16 @@ campus-agent/
 ## 测试与验证
 
 ```powershell
-# 后端（260 个用例，含 65 个子测试）
+# 后端（394 个用例，含 65 个子测试）
 cd backend
 .venv\Scripts\python -m pytest -q
 
-# 前端（13 个单元测试）与生产构建
+# 前端（29 个单元测试）与生产构建
 cd ..\frontend
 npm test
 npm run build
 
-# 桌面外壳（8 个测试）
+# 桌面外壳（9 个测试）
 cd ..\desktop
 npm test
 
@@ -429,6 +437,12 @@ python -m unittest discover -s tests -p test_agent_unit.py -v
 - **原生 Android / iOS 应用**：不在本项目范围，原因见 [PLATFORMS.md](PLATFORMS.md)（Python 后端无法随应用上架移动平台）。
 - **一键更新**：更新检查只提示版本差异并打开下载页，不做自动下载与静默安装。
 - **多人部署**：当前演示会话以随机会话 ID 作为访问凭据，仅适合本地开发；生产需要用户归属校验、操作审计、限流、HTTPS、数据库迁移与备份策略。
+
+## Star 趋势
+
+> 本项目 star 增长曲线由第三方服务 **star-history.com** 实时生成；点击图表可查看交互版（支持 PNG / CSV 导出）。
+
+[![Star History Chart](https://api.star-history.com/svg?repos=HuanMoovo/campus-agent&type=Date&theme=light)](https://star-history.com/#HuanMoovo/campus-agent&Date)
 
 ## 开源协议
 

@@ -11,6 +11,7 @@ Electron desktop shell + Vue 3 interface + FastAPI backend, able to run offline 
 <img src="https://img.shields.io/badge/version-1.2.2-0e7c74" alt="Version 1.2.2" />
 <img src="https://img.shields.io/badge/license-Apache--2.0-0e7c74" alt="Apache-2.0" />
 <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20PWA-0e7c74" alt="Platforms" />
+<a href="https://star-history.com/#HuanMoovo/campus-agent&Date"><img src="https://img.shields.io/github/stars/HuanMoovo/campus-agent?label=%E2%98%85%20Stars&color=0e7c74" alt="Stars" /></a>
 
 [中文](README.md) · **English** · [日本語](README.ja.md)
 
@@ -63,6 +64,9 @@ assistant is meant to be.
 | Thinking trace | In Deep mode the model's thinking streams live, auto-expands while thinking and folds once the answer starts; it can be re-opened anytime, is saved with the conversation and survives a reload |
 | Rich answers | Answers render as Markdown — headings, lists, tables, highlighted code blocks, quotes and links; HTML is sanitized and links open in the system browser on the desktop build |
 | Message actions | Every answer carries an action row: Copy the raw text, Regenerate (replaces that answer — no duplicate Q&A left in history), Retry in Deep (a one-off deep answer that does not change your saved effort), and Helpful / Not helpful (saved with the conversation; click again to undo) |
+| Attachments | Attach files by drag & drop, paste or the file picker: text files are read directly, PDF / Word go through the extraction endpoint (≤ 5 MB each); up to 3 attachments, injected into that request only — history keeps the question plus an "[attachments]" file note |
+| Command palette & slash commands | `Ctrl + K` opens it — type to filter (new chat, history, export, page switching, theme …), ↑ / ↓ then Enter; typing `/` in the composer opens slash commands (`/new`, `/history`, `/export`, `/theme`) |
+| History tools | Full-text search over questions and answers (with hit snippets), rename, pin and batch delete; everything works on touch devices without hover |
 
 ### Knowledge base and retrieval
 
@@ -126,6 +130,9 @@ assistant is meant to be.
 | Appearance | Light, dark or follow the system, plus a custom accent colour; the sidebar and mobile layouts are adapted separately |
 | Interface language | Chinese / English / Japanese, following the system by default and remembered (currently covers the app shell, the chat view and the appearance panel) |
 | Runtime handshake | The frozen backend starts on a random port with a one-time token, and the shell validates the startup envelope before loading the interface |
+| Quick ask | `Ctrl + Shift + K` summons a centred overlay from anywhere: type and press Enter to send, and it jumps to the chat view |
+| First-run guide | A 4-step guide on first launch (chat / model & reasoning effort / history & export / shortcuts & commands); reopen it anytime from the command palette |
+| Completion notice | A system notification fires when an answer finishes while the window is in the background |
 
 ### Plugins and operations
 
@@ -174,6 +181,7 @@ Next to the desktop build, Mens can run as a website with sign-in:
   tokens are hashed server-side.
 - The first start creates the admin from `AUTH_ADMIN_USERNAME` / `AUTH_ADMIN_PASSWORD`
   (leave the password empty to have one generated and logged once).
+- The Accounts page offers user management (create, role change, disable, delete, password reset, force sign-out) plus optional self-service registration and password change (`ALLOW_REGISTRATION`, `REGISTER_CODE`).
 - The desktop build is unaffected: `AUTH_REQUIRED` defaults to off and the shell keeps using
   its injected token.
 
@@ -381,16 +389,16 @@ campus-agent/
 ## Tests and verification
 
 ```powershell
-# Backend (260 cases, 65 subtests)
+# Backend (394 cases, 65 subtests)
 cd backend
 .venv\Scripts\python -m pytest -q
 
-# Frontend (13 unit tests) and production build
+# Frontend (29 unit tests) and production build
 cd ..\frontend
 npm test
 npm run build
 
-# Desktop shell (8 tests)
+# Desktop shell (9 tests)
 cd ..\desktop
 npm test
 
@@ -430,6 +438,12 @@ installers are on the [Releases](https://github.com/HuanMoovo/campus-agent/relea
 - **Native Android / iOS apps** — out of scope; see [PLATFORMS.md](PLATFORMS.md) for why (the Python backend cannot ship on mobile stores).
 - **One-click updates** — the update check only reports a version difference and opens the download page; it does not download or install silently.
 - **Multi-user deployments** — demo conversations currently use a random session ID as their access credential, which is fine for local development only; production needs user ownership checks, operation auditing, rate limiting, HTTPS, database migrations and a backup strategy.
+
+## Star history
+
+> The star growth curve is generated live by the third-party service **star-history.com**; click the chart for the interactive version (PNG / CSV export).
+
+[![Star History Chart](https://api.star-history.com/svg?repos=HuanMoovo/campus-agent&type=Date&theme=light)](https://star-history.com/#HuanMoovo/campus-agent&Date)
 
 ## Licence
 
