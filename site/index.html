@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="description" id="meta-description" content="Mens 校园助手：Windows/macOS/Linux 桌面应用与可安装网页版，提供校园政策问答、本地知识库、校园服务与可选的联网搜索。状态、限制与验证记录均如实列出。" />
+<meta name="theme-color" content="#0e7c74" />
+<link rel="icon" type="image/png" href="./img/icon-192.png" />
+<title id="page-title">Mens 校园助手 · 项目介绍</title>
+<style>
+  :root {
+    --accent: #0e7c74;
+    --accent-soft: #14a39a;
+    --ink: #10201f;
+    --muted: #5c6f6d;
+    --line: #d8e3e2;
+    --card: rgba(255, 255, 255, .72);
+    --page: #eef4f3;
+    --glow: rgba(20, 163, 154, .18);
+    --code: #0f1f1e;
+    --radius: 16px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #3ecfc4;
+      --accent-soft: #6ee7de;
+      --ink: #e8f4f2;
+      --muted: #9fb6b3;
+      --line: #23383a;
+      --card: rgba(20, 34, 35, .72);
+      --page: #0b1717;
+      --glow: rgba(62, 207, 196, .16);
+      --code: #071313;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", "PingFang SC", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1100px 520px at 12% -8%, var(--glow), transparent 60%),
+      radial-gradient(900px 480px at 92% 4%, var(--glow), transparent 62%),
+      var(--page);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px 72px; }
+
+  .lang { display: flex; justify-content: flex-end; gap: 4px; padding: 14px 0 0; }
+  .lang button {
+    font: inherit; font-size: 12.5px; line-height: 1; cursor: pointer;
+    padding: 7px 12px; border-radius: 999px; color: var(--muted);
+    border: 1px solid var(--line); background: var(--card);
+    backdrop-filter: blur(10px); transition: color .15s ease, border-color .15s ease;
+  }
+  .lang button:hover { color: var(--ink); }
+  .lang button[aria-pressed="true"] {
+    color: #f2fffe; border-color: transparent;
+    background: linear-gradient(140deg, var(--accent), var(--accent-soft));
+    box-shadow: 0 8px 20px var(--glow);
+  }
+  @media (prefers-color-scheme: dark) { .lang button[aria-pressed="true"] { color: #04211f; } }
+
+  header.hero { padding: 26px 0 34px; text-align: center; }
+  .brand { display: flex; align-items: center; justify-content: center; gap: 14px; text-align: left; }
+  .brand img { width: 54px; height: 54px; border-radius: 13px; box-shadow: 0 10px 30px var(--glow); }
+  .brand strong { font-size: 19px; letter-spacing: .3px; }
+  .brand small { display: block; color: var(--muted); font-weight: 500; font-size: 12px; letter-spacing: .12em; }
+  .name-note { color: var(--muted); font-size: 13px; margin: 14px auto 0; max-width: 62ch; }
+  .name-note i { color: var(--ink); font-style: italic; }
+  h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.25; margin: 26px auto 12px; letter-spacing: -.01em; }
+  h1 span { color: var(--accent); }
+  .lead { font-size: 17px; color: var(--muted); max-width: 66ch; margin: 0 auto 22px; }
+  .badges { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 24px; }
+  .badge {
+    font-size: 12px; padding: 5px 11px; border-radius: 999px;
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    backdrop-filter: blur(10px);
+  }
+  .badge.ok { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 42%, transparent); }
+  .actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; }
+  .button {
+    display: inline-block; padding: 11px 18px; border-radius: 11px; text-decoration: none;
+    border: 1px solid var(--line); background: var(--card); color: var(--ink); font-weight: 600; font-size: 14px;
+    backdrop-filter: blur(10px); transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .button:hover { transform: translateY(-1px); box-shadow: 0 12px 26px var(--glow); }
+  .button.primary { background: linear-gradient(140deg, var(--accent), var(--accent-soft)); color: #f2fffe; border-color: transparent; }
+  @media (prefers-color-scheme: dark) { .button.primary { color: #04211f; } }
+
+  section { margin: 46px 0 0; }
+  h2 { font-size: 22px; margin: 0 0 6px; letter-spacing: -.01em; }
+  h2 + p.sub { color: var(--muted); margin: 0 0 20px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr)); gap: 14px; }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 18px 18px 16px; backdrop-filter: blur(12px);
+  }
+  .card h3 { margin: 0 0 6px; font-size: 15px; }
+  .card p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .card .tag { display: inline-block; font-size: 11px; color: var(--accent); margin-bottom: 8px; letter-spacing: .08em; }
+
+  figure { margin: 0; }
+  .shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 16px; }
+  .shots img { width: 100%; border-radius: 12px; border: 1px solid var(--line); display: block; }
+  figcaption { color: var(--muted); font-size: 12.5px; margin-top: 8px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13.5px; background: var(--card); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: left; padding: 11px 13px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--muted); font-size: 12.5px; }
+  tr:last-child td { border-bottom: 0; }
+  .state { white-space: nowrap; font-weight: 600; }
+  .state.yes { color: var(--accent); }
+  .state.wip { color: #b7791f; }
+  .state.no { color: var(--muted); }
+  @media (prefers-color-scheme: dark) { .state.wip { color: #e3b341; } }
+
+  pre {
+    background: var(--code); color: #dff5f3; padding: 15px 16px; border-radius: 12px;
+    overflow-x: auto; font-size: 13px; line-height: 1.6; border: 1px solid var(--line);
+  }
+  code { font-family: "Cascadia Code", Consolas, "SFMono-Regular", monospace; }
+  ul.plain { padding-left: 20px; margin: 10px 0 0; }
+  ul.plain li { margin: 6px 0; color: var(--muted); }
+  ul.plain li b { color: var(--ink); font-weight: 600; }
+
+  footer { margin-top: 54px; padding-top: 22px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  footer a { color: var(--accent); }
+  .links { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 10px; }
+</style>
+<style>
+  /* ---------- layout scale, theme overrides, hero stage ---------- */
+  :root {
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 24px; --space-6: 32px; --space-7: 48px;
+    --radius-sm: 10px; --radius-md: 14px; --radius-lg: 20px;
+    --shadow-sm: 0 1px 2px rgba(16, 32, 31, .05);
+    --shadow-lg: 0 22px 60px var(--glow);
+  }
+  /* Explicit theme wins over the system preference: html[data-theme] is more specific than :root. */
+  html[data-theme="light"] {
+    --accent: #0e7c74; --accent-soft: #14a39a; --ink: #10201f; --muted: #5c6f6d; --line: #d8e3e2;
+    --card: rgba(255, 255, 255, .72); --page: #eef4f3; --glow: rgba(20, 163, 154, .18); --code: #0f1f1e;
+  }
+  html[data-theme="dark"] {
+    --accent: #3ecfc4; --accent-soft: #6ee7de; --ink: #e8f4f2; --muted: #9fb6b3; --line: #23383a;
+    --card: rgba(20, 34, 35, .72); --page: #0b1717; --glow: rgba(62, 207, 196, .16); --code: #071313;
+  }
+  html[data-theme="light"] .lang button[aria-pressed="true"] { color: #f2fffe; }
+  html[data-theme="light"] .button.primary { color: #f2fffe; }
+  html[data-theme="dark"] .lang button[aria-pressed="true"] { color: #04211f; }
+  html[data-theme="dark"] .button.primary { color: #04211f; }
+  html[data-theme="dark"] .state.wip { color: #e3b341; }
+  html { scroll-padding-top: 68px; }
+
+  .topbar {
+    position: sticky; top: 0; z-index: 30; display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-3); padding: 10px 0;
+    background: color-mix(in srgb, var(--page) 82%, transparent); backdrop-filter: blur(14px);
+  }
+  .topbar .lang { padding: 0; }
+  .theme { display: flex; gap: var(--space-1); }
+  .theme button {
+    font: inherit; font-size: 12.5px; line-height: 1; cursor: pointer; padding: 7px 11px; border-radius: 999px;
+    color: var(--muted); border: 1px solid var(--line); background: var(--card);
+    transition: color .15s ease, border-color .15s ease, background .15s ease;
+  }
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] {
+    color: var(--ink); border-color: color-mix(in srgb, var(--accent) 46%, transparent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
+  header.hero { padding: var(--space-6) 0 var(--space-7); text-align: left; }
+  .hero-inner { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, .95fr); gap: clamp(24px, 4vw, 56px); align-items: center; }
+  .hero-copy .brand { justify-content: flex-start; }
+  .hero-copy .name-note, .hero-copy .lead { margin-left: 0; margin-right: 0; }
+  .hero-copy h1 { max-width: 24ch; margin-left: 0; margin-right: 0; }
+  .hero-copy .lead { max-width: 58ch; }
+  .hero-copy .badges, .hero-copy .actions { justify-content: flex-start; }
+  .hero-stage {
+    position: relative; aspect-ratio: 1 / 1; min-height: 320px; overflow: hidden;
+    border-radius: var(--radius-lg); border: 1px solid var(--line);
+    background:
+      radial-gradient(120% 120% at 28% 16%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 62%),
+      var(--card);
+    backdrop-filter: blur(12px); box-shadow: var(--shadow-lg);
+  }
+  #hero-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  #hero-canvas.is-dragging { cursor: grabbing; }
+  .hero-stage-glow { position: absolute; inset: 14%; border-radius: 50%; background: radial-gradient(circle at 34% 30%, var(--glow), transparent 70%); filter: blur(16px); pointer-events: none; }
+  .hero-hint {
+    position: absolute; left: 50%; bottom: var(--space-3); transform: translateX(-50%);
+    margin: 0; width: max-content; max-width: calc(100% - 32px); padding: 5px 12px; border-radius: 999px;
+    font-size: 12px; color: var(--muted); letter-spacing: .04em; pointer-events: none;
+    background: color-mix(in srgb, var(--page) 72%, transparent); border: 1px solid var(--line);
+    backdrop-filter: blur(8px);
+  }
+
+  .grid { counter-reset: card; }
+  .grid > .card { position: relative; padding-top: 24px; transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease; }
+  .grid > .card::after {
+    counter-increment: card; content: counter(card, decimal-leading-zero);
+    position: absolute; top: 16px; right: 18px; font-size: 11px; letter-spacing: .1em;
+    color: color-mix(in srgb, var(--muted) 72%, transparent); font-variant-numeric: tabular-nums;
+  }
+  .grid > .card:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--accent) 40%, transparent); box-shadow: var(--shadow-lg); }
+  .card .tag { letter-spacing: .14em; text-transform: uppercase; }
+  section { margin-top: var(--space-7); }
+  h2 { font-size: clamp(20px, 2.6vw, 26px); }
+  table, pre { box-shadow: var(--shadow-sm); }
+  .table-wrap { overflow-x: auto; border-radius: 12px; -webkit-overflow-scrolling: touch; }
+  .table-wrap table { min-width: 520px; }
+  .table-wrap code { overflow-wrap: anywhere; }
+
+  @media (max-width: 1000px) {
+    .hero-inner { grid-template-columns: minmax(0, 1fr); }
+    .hero-copy h1 { max-width: none; }
+    .hero-stage { min-height: 280px; max-height: 420px; margin-bottom: var(--space-2); }
+  }
+  @media (max-width: 560px) {
+    .topbar { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+    .topbar .lang, .theme { justify-content: center; flex-wrap: wrap; }
+    .hero-stage { min-height: 240px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .grid > .card:hover { transform: none; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="lang" role="group" aria-label="Language / 语言 / 言語">
+      <button type="button" data-lang="zh" aria-pressed="true" lang="zh-CN">中文</button>
+      <button type="button" data-lang="en" aria-pressed="false" lang="en">English</button>
+      <button type="button" data-lang="ja" aria-pressed="false" lang="ja">日本語</button>
+    </div>
+    <div class="theme" role="group" aria-label="主题 / Theme / テーマ">
+      <button type="button" data-theme-choice="auto" aria-pressed="true" data-i18n="theme.auto">自动</button>
+      <button type="button" data-theme-choice="light" aria-pressed="false" data-i18n="theme.light">浅色</button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false" data-i18n="theme.dark">深色</button>
+    </div>
+  </div>
+
+  <header class="hero">
+   <div class="hero-inner">
+    <div class="hero-copy">
+    <div class="brand">
+      <img src="./img/logo.png" alt="Mens" />
+      <span><strong data-i18n="brand.name">Mens 校园助手</strong><small data-i18n="brand.tagline">MENS CAMPUS ASSISTANT</small></span>
+    </div>
+    <p class="name-note" data-i18n="hero.nameNote">名字取自拉丁语 <i>mēns</i>（属格 <i>mentis</i>），意为「心智、理性、思维」，与英文单词 men 无关。</p>
+    <h1 data-i18n="hero.title">把校园政策问答、<span>知识库与办事服务</span>放进一个本地优先的桌面应用</h1>
+    <p class="lead" data-i18n="hero.lead">
+      Mens 是一个面向院校场景的问答工作台：知识库文档（PDF / Markdown / TXT / Word）在本机检索，
+      校园服务（成绩、课表、学分、空教室、报修）通过可配置的 HTTPS 接口接入，
+      聊天支持流式回答、可停止生成、历史会话隔离，并可按需开启联网搜索引用网页来源；输入框右端可在「快速 / 深度」两档推理强度间切换；回答以 Markdown 排版，深度档的思考过程可展开查看。
+      文档、数据和密钥都留在本机，模型可接 Qwen3 / DeepSeek 云端 API，也可用 Ollama 跑本地模型。
+    </p>
+    <div class="badges">
+      <span class="badge" data-i18n="badge.version">版本 1.2.2</span>
+      <span class="badge ok" data-i18n="badge.win">Windows 已构建并验收</span>
+      <span class="badge" data-i18n="badge.maclinux">macOS / Linux：CI 构建，未真机验收</span>
+      <span class="badge" data-i18n="badge.mobile">Android / iOS：可安装网页版</span>
+      <span class="badge" data-i18n="badge.db">本地 SQLite · 无需外部数据库</span>
+      <span class="badge ok" data-i18n="badge.license">Apache-2.0 开源</span>
+    </div>
+    <div class="actions">
+      <a class="button primary" data-i18n="action.download" href="https://github.com/HuanMoovo/campus-agent/releases/latest">下载 Windows 安装包</a>
+      <a class="button" data-i18n="action.repo" href="https://github.com/HuanMoovo/campus-agent">查看仓库</a>
+      <a class="button" data-i18n="action.cli" href="#cli">命令行</a>
+      <a class="button" data-i18n="action.platforms" href="#platforms">平台支持</a>
+      <a class="button" data-i18n="action.license" href="#license">开源协议</a>
+      <a class="button" data-i18n="action.limits" href="#limits">已知限制</a>
+    </div>
+    </div>
+    <div class="hero-stage" data-scene="static">
+      <canvas id="hero-canvas" aria-hidden="true"></canvas>
+      <div class="hero-stage-glow" aria-hidden="true"></div>
+      <p id="hero-hint" class="hero-hint" hidden data-i18n="hero.stageHint">拖动旋转 · 滚轮缩放</p>
+    </div>
+   </div>
+  </header>
+
+  <section id="features">
+    <h2 data-i18n="features.title">功能一览</h2>
+    <p class="sub" data-i18n="features.sub">以下功能均已在开发副本中实现并有验证记录（含安装后的真机验收），具体证据见仓库中的 VERIFICATION.md。</p>
+    <div class="grid">
+      <div class="card">
+        <span class="tag" data-i18n="card1.tag">问答</span>
+        <h3 data-i18n="card1.title">流式回答 · 可停止生成</h3>
+        <p data-i18n="card1.body">逐字输出，随时可中断。中断时已生成的内容会连同“已停止”标记保存，历史记录不会伪造完整答案；回答可标注“演示数据”，不会假装已接入学校系统。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card2.tag">会话</span>
+        <h3 data-i18n="card2.title">按用户隔离的历史会话</h3>
+        <p data-i18n="card2.body">桌面版按本机配置、网页版按浏览器分别隔离；可恢复任意会话、单条删除或一键清空。历史面板显示每条会话的标题与时间。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card3.tag">知识库</span>
+        <h3 data-i18n="card3.title">多格式文档检索</h3>
+        <p data-i18n="card3.body">支持 PDF、Markdown、TXT 与 Word (.docx)（单个 ≤5 MB）。文档数据库是权威数据源，索引用版本哈希校验，删除或更新后不会返回过期分段。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card4.tag">检索</span>
+        <h3 data-i18n="card4.title">关键词与可选的向量检索</h3>
+        <p data-i18n="card4.body">默认使用本地关键词检索，无需额外依赖；启用 RAG 后使用 BGE-M3 + Chroma 做语义检索，向量不可用时自动降级并在界面上如实提示。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card5.tag">联网</span>
+        <h3 data-i18n="card5.title">可选的实时联网搜索</h3>
+        <p data-i18n="card5.body">按每条消息开启。默认免密钥的 Bing 网页搜索（中国大陆可直连），也可配置 Tavily 或博查；会抓取前 1–3 个网页正文，回答引用链接与检索时间。未启用时应用完全不发起检索。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card6.tag">服务</span>
+        <h3 data-i18n="card6.title">校园数据接口与报修</h3>
+        <p data-i18n="card6.body">九类校园 HTTPS JSON 接口可配置（成绩、课表、学分、空教室、报修等），支持结果路径与 Bearer 令牌；报修提交后本机保留记录便于核对。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card7.tag">模型</span>
+        <h3 data-i18n="card7.title">云端 API 或本地 Ollama</h3>
+        <p data-i18n="card7.body">Qwen3 / DeepSeek 走各自 API Key（地址必须 HTTPS）；本地模型由 Ollama 提供，内置模型目录支持断点续传、SHA-256 校验与导入重试。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card8.tag">数据</span>
+        <h3 data-i18n="card8.title">备份导出 / 导入</h3>
+        <p data-i18n="card8.body">一键导出包含知识库、会话、模型与校园接口配置的 zip（SQLite 用 VACUUM INTO 生成一致性快照，附各文件 SHA-256 清单），换机或重装后可完整恢复。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card9.tag">桌面</span>
+        <h3 data-i18n="card9.title">单机运行，开箱即用</h3>
+        <p data-i18n="card9.body">安装包内置 Python 运行时，无需另装 Python / Node / 数据库。窗口大小与位置会记住，设置页可查看后端日志与打开数据目录。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card10.tag">外观</span>
+        <h3 data-i18n="card10.title">可定制主题</h3>
+        <p data-i18n="card10.body">浅色 / 深色 / 跟随系统，自定义主题色，界面按对比度自动推导文字颜色；侧栏与移动端布局分别适配。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card11.tag">插件</span>
+        <h3 data-i18n="card11.title">GitHub 自定义插件</h3>
+        <p data-i18n="card11.body">插件改为 GitHub 自定义安装：粘贴仓库地址即读取仓库根目录 plugin.json（自动经 jsDelivr 与 raw 重试抓取）；插件必须使用公网 HTTPS 主机，且只能返回 JSON。</p>
+      </div>
+      <div class="card">
+        <span class="tag" data-i18n="card12.tag">运维</span>
+        <h3 data-i18n="card12.title">更新检查与版本一致性</h3>
+        <p data-i18n="card12.body">管理员配置 HTTPS 清单后可在设置页检查新版本并打开下载页；构建脚本会校验桌面、前端、后端三处版本号一致，且所有测试通过才产出安装包。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="screens">
+    <h2 data-i18n="screens.title">界面</h2>
+    <p class="sub" data-i18n="screens.sub">截图为真实运行界面（开发副本，浅色主题）。</p>
+    <div class="shots">
+      <figure>
+        <img src="./img/chat-web-search.png" alt="" data-i18n-attr="alt:shot1.alt" />
+        <figcaption data-i18n="shot1.caption">聊天页：开启联网搜索后，回答下方列出带链接的网页来源与检索时间。</figcaption>
+      </figure>
+      <figure>
+        <img src="./img/settings-web-search.png" alt="" data-i18n-attr="alt:shot2.alt" />
+        <figcaption data-i18n="shot2.caption">设置页：管理员可启用联网搜索、选择服务商（Bing 免密钥 / Tavily / 博查）并配置 Key。</figcaption>
+      </figure>
+      <figure>
+        <img src="./img/campus-services.png" alt="" data-i18n-attr="alt:shot3.alt" />
+        <figcaption data-i18n="shot3.caption">校园服务页：报修表单提交后，本机记录按时间倒序列出，便于确认提交结果。</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="platforms">
+    <h2 data-i18n="platforms.title">平台支持</h2>
+    <p class="sub" data-i18n="platforms.sub">“已验收”指在对应系统上真实安装、启动并完成界面检查；“CI 构建”指由 GitHub Actions 生成产物但尚未真机运行。</p>
+    <div class="table-wrap">
+<table>
+      <thead>
+        <tr>
+          <th data-i18n="platforms.th1">平台</th>
+          <th data-i18n="platforms.th2">状态</th>
+          <th data-i18n="platforms.th3">交付物与说明</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-i18n="platforms.r1.platform">Windows 10/11 x64</td>
+          <td class="state yes" data-i18n="platforms.r1.state">已构建并验收</td>
+          <td data-i18n="platforms.r1.detail">NSIS 安装包，用户级安装（<code>%LOCALAPPDATA%\Programs\Mens</code>），数据在 <code>%APPDATA%\CampusAgent</code></td>
+        </tr>
+        <tr>
+          <td data-i18n="platforms.r2.platform">macOS 12+（Intel / Apple silicon）</td>
+          <td class="state wip" data-i18n="platforms.r2.state">CI 构建，未真机验收</td>
+          <td data-i18n="platforms.r2.detail">dmg + zip；未签名、未公证，首次打开需右键“打开”或在系统设置中允许</td>
+        </tr>
+        <tr>
+          <td data-i18n="platforms.r3.platform">Linux x64</td>
+          <td class="state wip" data-i18n="platforms.r3.state">CI 构建，未真机验收</td>
+          <td data-i18n="platforms.r3.detail">AppImage（免安装）与 deb；数据在 <code>~/.config/CampusAgent</code></td>
+        </tr>
+        <tr>
+          <td data-i18n="platforms.r4.platform">Android / iOS</td>
+          <td class="state no" data-i18n="platforms.r4.state">不提供原生应用</td>
+          <td data-i18n="platforms.r4.detail">使用可安装网页版（PWA）：手机浏览器打开部署好的站点 → 添加到主屏幕；推理由服务端完成</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section id="start">
+    <h2 data-i18n="start.title">快速开始</h2>
+    <p class="sub" data-i18n="start.sub">Windows 安装包开箱即用；其他平台从源码构建，或使用网页版。</p>
+    <p data-i18n="start.windows"><b>Windows：</b>下载 Release 中的 <code>Mens-Setup-&lt;版本&gt;-x64.exe</code>，双击安装，从开始菜单或桌面启动。</p>
+    <p data-i18n="start.build">从源码构建（三个平台同一脚本）：</p>
+    <pre><code>python scripts/build_desktop.py
+python scripts/build_desktop.py --os mac --arch arm64
+python scripts/build_desktop.py --os linux --arch x64</code></pre>
+    <p data-i18n="start.dev">从源码开发运行：</p>
+    <pre><code>python scripts/install.py
+start-backend.cmd
+start-frontend.cmd</code></pre>
+    <p data-i18n="start.mobile"><b>手机 / 平板：</b>部署后端（见仓库 README 的服务器部署小节），手机浏览器打开站点后“添加到主屏幕”，即可获得全屏、独立图标的类应用体验。</p>
+  </section>
+
+  <section id="cli">
+    <h2 data-i18n="cli.title">命令行（CLI）</h2>
+    <p class="sub" data-i18n="cli.sub">命令行是独立工具，不打包进桌面程序：它与桌面端共用同一套后端代码，数据目录默认在安装目录下，也可用 CAMPUS_DATA_DIR 指向桌面端的数据目录。</p>
+    <p data-i18n="cli.install"><b>安装（Windows）：</b>在 PowerShell 中执行：</p>
+    <pre><code>irm https://raw.githubusercontent.com/HuanMoovo/campus-agent/main/scripts/install-cli.ps1 | iex</code></pre>
+    <p data-i18n="cli.unix"><b>安装（macOS / Linux）：</b></p>
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/HuanMoovo/campus-agent/main/scripts/install-cli.sh | bash</code></pre>
+    <p data-i18n="cli.detail">脚本会把源码下载到用户目录（Windows 为 <code>%LOCALAPPDATA%\Mens\cli</code>，macOS/Linux 为 <code>~/.local/share/mens</code>），创建独立虚拟环境、安装依赖并生成 <code>mens</code> 命令；不改动系统 Python，卸载只需删除该目录和命令。</p>
+    <p data-i18n="cli.usage">装好后可以直接使用：</p>
+    <pre><code>mens ask "图书馆开放时间"      # 提问一次（--json 便于脚本处理）
+mens chat                      # 交互式对话：/quit 退出、/new 新对话
+mens mcp list | test campus | tools --json
+mens serve --port 8000         # 只启动本地后端</code></pre>
+  </section>
+
+  <section id="architecture">
+    <h2 data-i18n="architecture.title">架构与安全边界</h2>
+    <div class="grid">
+      <div class="card">
+        <h3 data-i18n="arch1.title">技术栈</h3>
+        <p data-i18n="arch1.body">Vue 3 + TypeScript + Vite + Element Plus + Pinia 前端；FastAPI + SQLAlchemy + LangGraph 后端；Electron 外壳内置 PyInstaller 冻结的 CPython；SQLite 单文件数据库（可选 PostgreSQL）。</p>
+      </div>
+      <div class="card">
+        <h3 data-i18n="arch2.title">本机优先</h3>
+        <p data-i18n="arch2.body">后端只监听 127.0.0.1 的随机端口，使用一次性令牌；桌面外壳注入额外请求头，外部页面无法拿到这些接口。</p>
+      </div>
+      <div class="card">
+        <h3 data-i18n="arch3.title">出站请求约束</h3>
+        <p data-i18n="arch3.body">插件、联网搜索与更新检查只允许 HTTPS、固定到校验过的公网地址（保留 SNI，防 DNS 重绑定）、禁止跳转、有大小与超时上限；解析到内网地址直接拒绝。</p>
+      </div>
+      <div class="card">
+        <h3 data-i18n="arch4.title">密钥存储</h3>
+        <p data-i18n="arch4.body">Windows 用 DPAPI 加密保存 API Key；macOS / Linux 无等价系统接口，改为 <code>0600</code> 权限的明文文件（同一用户可读）。这一点在 PLATFORMS.md 中明确写出。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="license">
+    <h2 data-i18n="license.title">开源协议</h2>
+    <p class="sub" data-i18n="license.sub">Mens 校园助手以 <b>Apache License 2.0（Apache-2.0）</b>发布，完整文本见仓库根目录的 <a href='https://github.com/HuanMoovo/campus-agent/blob/main/LICENSE'>LICENSE</a>。</p>
+    <div class="grid">
+      <div class="card">
+        <h3 data-i18n="lic1.title">你可以</h3>
+        <p data-i18n="lic1.body">自由使用、修改、再分发本项目，包括商业使用、校内自行部署，以及闭源发布你的修改版；前提是保留版权、许可证与 NOTICE 声明，并在修改过的文件中注明改动。</p>
+      </div>
+      <div class="card">
+        <h3 data-i18n="lic2.title">你需要</h3>
+        <p data-i18n="lic2.body">分发时必须随附 LICENSE 与 NOTICE 文件、保留全部版权与许可声明、并标注你修改过的文件；本许可证不授予项目名称或商标的使用权。</p>
+      </div>
+      <div class="card">
+        <h3 data-i18n="lic3.title">无担保</h3>
+        <p data-i18n="lic3.body">软件按“现状”提供，不附带任何明示或默示担保。校园生产部署（接口对接、数据合规、账号与权限）需由使用方自行验收并承担责任。</p>
+      </div>
+      <div class="card">
+        <h3 data-i18n="lic4.title">第三方组件</h3>
+        <p data-i18n="lic4.body">安装包内含 Electron、Chromium、CPython、FastAPI、Vue、Element Plus 等组件，各自按原许可证分发；完整清单见仓库中的 THIRD-PARTY-NOTICES.md。</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="limits">
+    <h2 data-i18n="limits.title">已知限制</h2>
+    <p class="sub" data-i18n="limits.sub">以下内容尚未验证或尚未实现，如实列出。</p>
+    <ul class="plain">
+      <li data-i18n="limit1"><b>macOS / Linux 产物未真机验收</b>：由 CI 构建，尚未在真机上安装运行过。</li>
+      <li data-i18n="limit2"><b>未签名、未公证</b>：没有发行者证书，Windows/macOS 首次打开可能出现系统提示；正式分发前应配置签名。</li>
+      <li data-i18n="limit3"><b>校园接口与统一登录</b>：项目不附带任何真实学校接口、统一身份认证或模型密钥；生产部署需学校提供已授权接口并验收。</li>
+      <li data-i18n="limit4"><b>云端模型与联网搜索</b>：需要各自的 API Key（联网搜索的 Bing 通道免密钥）；搜索结果的服务端可用性受网络环境限制。</li>
+      <li data-i18n="limit5"><b>原生 Android / iOS 应用</b>：不在本项目范围，原因见 PLATFORMS.md（Python 后端无法随应用上架移动平台）。</li>
+      <li data-i18n="limit6"><b>一键更新</b>：更新检查只提示版本差异并打开下载页，不做自动下载与静默安装。</li>
+    </ul>
+  </section>
+
+  <footer>
+    <div class="links">
+      <a href="https://github.com/HuanMoovo/campus-agent" data-i18n="footer.repo">GitHub 仓库</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/releases/latest" data-i18n="footer.download">下载 Windows 安装包</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/README.md" data-i18n="footer.readme">README</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/PLATFORMS.md" data-i18n="footer.platforms">平台支持与构建</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/VERIFICATION.md" data-i18n="footer.verification">验证记录</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/LICENSE" data-i18n="footer.license">LICENSE (Apache-2.0)</a>
+      <a href="https://github.com/HuanMoovo/campus-agent/blob/main/THIRD-PARTY-NOTICES.md" data-i18n="footer.thirdparty">第三方组件</a>
+    </div>
+    <p data-i18n="footer.note">Mens 校园助手 · 版权所有 © 2026 HuanMoovo，以 Apache License 2.0 许可发布。页面内容与仓库状态同步维护，功能描述以仓库中的验证记录为准。本页面不收集任何数据。</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // The Chinese copy ships inline in the markup: the page still works without JavaScript and
+  // that is what crawlers index. These dictionaries only carry the other two languages, so the
+  // original markup is captured first and restored when switching back to Chinese.
+  var DICT = {
+    en: {
+      'page.title': 'Mens Campus Assistant · Project overview',
+      'page.description': 'Mens Campus Assistant: a Windows/macOS/Linux desktop app and installable web app for campus policy Q&A, a local knowledge base, campus services and optional web search. Status, limitations and verification records are stated as they are.',
+      'brand.name': 'Mens Campus Assistant',
+      'brand.tagline': 'MENS CAMPUS ASSISTANT',
+      'hero.nameNote': 'The name is Latin <i>mēns</i> (genitive <i>mentis</i>): mind, intellect, reason — not the English word <i>men</i>.',
+      'hero.stageHint': 'Drag to rotate · scroll to zoom',
+      'theme.auto': 'Auto',
+      'theme.light': 'Light',
+      'theme.dark': 'Dark',
+      'hero.title': 'Campus policy answers, <span>a local knowledge base and student services</span> in one local-first desktop app',
+      'hero.lead': 'Mens is a question-answering workbench for schools: knowledge-base documents (PDF / Markdown / TXT / Word) are searched on your own machine, campus services (grades, timetable, credits, free classrooms, repair requests) connect through configurable HTTPS endpoints, and chat supports streaming answers, stopping generation, per-user conversation isolation and optional web search that cites the pages it used. Documents, data and keys stay local, and models run either through the Qwen3 / DeepSeek APIs or locally with Ollama. A Fast / Deep reasoning-effort switch sits at the right of the input bar. Answers render as Markdown, and Deep-mode thinking can be expanded.',
+      'badge.version': 'Version 1.2.2',
+      'badge.win': 'Windows built and verified on a real machine',
+      'badge.maclinux': 'macOS / Linux: built by CI, not verified on hardware',
+      'badge.mobile': 'Android / iOS: installable web app',
+      'badge.db': 'Local SQLite · no external database',
+      'badge.license': 'Open source under Apache-2.0',
+      'action.download': 'Download for Windows',
+      'action.repo': 'View repository',
+      'action.platforms': 'Platform support',
+      'action.license': 'Licence',
+      'action.limits': 'Known limitations',
+      'features.title': 'What it does',
+      'features.sub': 'Every item below is implemented in the development copy and backed by a verification record (including checks on an installed build); the evidence is in VERIFICATION.md in the repository.',
+      'card1.tag': 'CHAT', 'card1.title': 'Streaming answers you can stop', 'card1.body': 'Text arrives character by character and generation can be interrupted at any time. What was produced is saved together with a stopped marker, so history never pretends an answer was finished; replies can be flagged as demo data instead of pretending a school system is connected.',
+      'card2.tag': 'SESSIONS', 'card2.title': 'Conversation history isolated per user', 'card2.body': 'The desktop app keeps each machine separate and the web app keeps each browser separate; any conversation can be restored, deleted individually or cleared in one go. The history panel shows each conversation title and time.',
+      'card3.tag': 'KNOWLEDGE', 'card3.title': 'Search across several document formats', 'card3.body': 'PDF, Markdown, TXT and Word (.docx), up to 5 MB each. The document database is the source of truth and the index is validated by version hash, so deleted or updated documents never come back as stale passages.',
+      'card4.tag': 'RETRIEVAL', 'card4.title': 'Keyword search, optional vector retrieval', 'card4.body': 'Local keyword search is the default and needs no extra dependencies; enabling RAG switches to semantic retrieval with BGE-M3 + Chroma, and when vectors are unavailable the app degrades gracefully and says so in the interface.',
+      'card5.tag': 'WEB', 'card5.title': 'Optional live web search', 'card5.body': 'Enabled per message. The default is keyless Bing web search (reachable directly from mainland China); Tavily and Bocha can be configured instead. The first one to three pages are fetched, and answers cite links plus the search time. With the switch off the app performs no web retrieval at all.',
+      'card6.tag': 'SERVICES', 'card6.title': 'Campus data endpoints and repair requests', 'card6.body': 'Nine kinds of campus HTTPS JSON endpoints are configurable (grades, timetable, credits, free classrooms, repairs and more), with result paths and Bearer tokens; submitted repair requests are also recorded locally so you can check what was sent.',
+      'card7.tag': 'MODELS', 'card7.title': 'Cloud APIs or local Ollama', 'card7.body': 'Qwen3 / DeepSeek use their own API keys (HTTPS endpoints only); local models come from Ollama, and the built-in model catalogue supports resumable downloads, SHA-256 verification and import retries.',
+      'card8.tag': 'DATA', 'card8.title': 'Backup export and import', 'card8.body': 'One click exports a zip with the knowledge base, conversations, model and campus-endpoint settings (SQLite is snapshotted consistently with VACUUM INTO and a SHA-256 manifest of every file is attached), so a new machine or a reinstall can be restored completely.',
+      'card9.tag': 'DESKTOP', 'card9.title': 'Runs standalone, works out of the box', 'card9.body': 'The installer bundles the Python runtime, so no separate Python, Node or database install is needed. Window size and position are remembered, and the settings page can show backend logs or open the data folder.',
+      'card10.tag': 'LOOK', 'card10.title': 'Customisable theme', 'card10.body': 'Light, dark or follow the system, with a custom accent colour; text colours are derived from contrast automatically, and the sidebar and mobile layouts are adapted separately.',
+      'card11.tag': 'PLUGINS', 'card11.title': 'Custom plugins from GitHub', 'card11.body': 'Plugins install from GitHub: paste a repository URL and its root plugin.json is read (jsDelivr mirrors first, then raw). Plugins must use public HTTPS hosts and may only return JSON.',
+      'card12.tag': 'OPS', 'card12.title': 'Update checks and version consistency', 'card12.body': 'Once an administrator sets the HTTPS manifest, the settings page can check for a newer version and open the download page; the build script verifies that the desktop, frontend and backend versions agree and only produces an installer when every test passes.',
+      'screens.title': 'Interface',
+      'screens.sub': 'Screenshots of the running app (development copy, light theme).',
+      'shot1.alt': 'Chat screen with web search results and source links',
+      'shot1.caption': 'Chat: with web search on, the answer lists linked web sources and the search time underneath.',
+      'shot2.alt': 'Settings screen for web search',
+      'shot2.caption': 'Settings: an administrator can enable web search, pick a provider (keyless Bing / Tavily / Bocha) and set the key.',
+      'shot3.alt': 'Campus services screen with repair requests',
+      'shot3.caption': 'Campus services: after a repair request is submitted, local records are listed newest first so the result can be confirmed.',
+      'platforms.title': 'Platform support',
+      'platforms.sub': 'Verified means the build was installed, launched and checked on that system; built by CI means GitHub Actions produces the artefact but it has not been run on real hardware yet.',
+      'platforms.th1': 'Platform',
+      'platforms.th2': 'Status',
+      'platforms.th3': 'Artefacts and notes',
+      'platforms.r1.platform': 'Windows 10/11 x64',
+      'platforms.r1.state': 'Built and verified',
+      'platforms.r1.detail': 'NSIS installer, per-user install (<code>%LOCALAPPDATA%\\Programs\\Mens</code>), data in <code>%APPDATA%\\CampusAgent</code>',
+      'platforms.r2.platform': 'macOS 12+ (Intel / Apple silicon)',
+      'platforms.r2.state': 'Built by CI, not verified',
+      'platforms.r2.detail': 'dmg + zip; unsigned and not notarised, so the first launch needs a right-click Open or an allow in System Settings',
+      'platforms.r3.platform': 'Linux x64',
+      'platforms.r3.state': 'Built by CI, not verified',
+      'platforms.r3.detail': 'AppImage (no install needed) and deb; data in <code>~/.config/CampusAgent</code>',
+      'platforms.r4.platform': 'Android / iOS',
+      'platforms.r4.state': 'No native app',
+      'platforms.r4.detail': 'Use the installable web app (PWA): open the deployed site in a phone browser and add it to the home screen; inference happens on the server',
+      'start.title': 'Quick start',
+      'start.sub': 'The Windows installer works out of the box; other platforms build from source, or use the web app.',
+      'start.windows': '<b>Windows:</b> download <code>Mens-Setup-&lt;version&gt;-x64.exe</code> from Releases, run it, then launch Mens from the Start menu or the desktop.',
+      'start.build': 'Build from source (the same script on all three platforms):',
+      'start.dev': 'Run from source for development:',
+      'start.mobile': '<b>Phone / tablet:</b> deploy the backend (see the server deployment section in the repository README), open the site in a phone browser and add it to the home screen for a full-screen, own-icon app-like experience.',
+      'architecture.title': 'Architecture and security boundaries',
+      'arch1.title': 'Stack',
+      'arch1.body': 'Vue 3 + TypeScript + Vite + Element Plus + Pinia on the front end; FastAPI + SQLAlchemy + LangGraph on the back end; an Electron shell around a PyInstaller-frozen CPython; a single-file SQLite database (PostgreSQL optional).',
+      'arch2.title': 'Local first',
+      'arch2.body': 'The backend listens only on a random port on 127.0.0.1 and uses a one-time token; the desktop shell injects an extra request header, so outside pages cannot reach those endpoints.',
+      'arch3.title': 'Outbound request limits',
+      'arch3.body': 'Plugins, web search and update checks are HTTPS-only, pinned to a validated public address (SNI preserved against DNS rebinding), refuse redirects and have size and timeout caps; anything resolving to a private address is rejected outright.',
+      'arch4.title': 'Key storage',
+      'arch4.body': 'Windows encrypts API keys with DPAPI; macOS and Linux have no equivalent system facility, so keys are stored in a plain file with <code>0600</code> permissions readable by the same user only. PLATFORMS.md states this explicitly.',
+      'license.title': 'Licence',
+      'license.sub': 'Mens Campus Assistant is released under the <b>Apache License 2.0 (Apache-2.0)</b>; the full text is in <a href=\'https://github.com/HuanMoovo/campus-agent/blob/main/LICENSE\'>LICENSE</a> at the repository root.',
+      'lic1.title': 'You may',
+      'lic1.body': 'Use, modify and redistribute this project freely, including commercially, for in-house campus deployment and in closed-source modified versions; copyright, licence and NOTICE notices must stay in place and modified files must be marked as changed.',
+      'lic2.title': 'You must',
+      'lic2.body': 'When you redistribute, ship the LICENSE and NOTICE files, keep every copyright and licence notice and mark the files you changed; the licence grants no right to use the project name or trademarks.',
+      'lic3.title': 'No warranty',
+      'lic3.body': 'The software is provided as is, without any express or implied warranty. Production deployment on a campus (endpoint integration, data compliance, accounts and permissions) must be validated and owned by the deploying party.',
+      'lic4.title': 'Third-party components',
+      'lic4.body': 'The installer bundles Electron, Chromium, CPython, FastAPI, Vue, Element Plus and others, each distributed under its own licence; the full list is in THIRD-PARTY-NOTICES.md in the repository.',
+      'limits.title': 'Known limitations',
+      'limits.sub': 'The following is not verified or not implemented yet, and is listed as it is.',
+      'limit1': '<b>macOS / Linux artefacts are not verified on hardware</b>: they are produced by CI and have not been installed and run on a real machine.',
+      'limit2': '<b>Unsigned and not notarised</b>: there is no publisher certificate, so the first launch on Windows or macOS may show a system prompt; signing should be set up before any wider distribution.',
+      'limit3': '<b>Campus endpoints and single sign-on</b>: no real school endpoint, identity provider or model key ships with the project; a production deployment needs interfaces the school has authorised, plus its own acceptance testing.',
+      'limit4': '<b>Cloud models and web search</b>: each needs its own API key (the Bing channel of web search is keyless); the availability of the search backend depends on your network environment.',
+      'limit5': '<b>Native Android / iOS apps</b>: out of scope, for the reason given in PLATFORMS.md (the Python backend cannot ship on mobile stores).',
+      'limit6': '<b>One-click updates</b>: the update check only reports a version difference and opens the download page; it does not download or install silently.',
+      'footer.repo': 'GitHub repository',
+      'footer.download': 'Download for Windows',
+      'footer.readme': 'README',
+      'footer.platforms': 'Platform support and builds',
+      'footer.verification': 'Verification record',
+      'footer.license': 'LICENSE (Apache-2.0)',
+      'footer.thirdparty': 'Third-party components',
+      'footer.note': 'Mens Campus Assistant · Copyright © 2026 HuanMoovo, released under Apache-2.0. This page is kept in step with the repository, and the feature descriptions defer to the verification record there. The page collects no data.',
+      'action.cli': 'CLI',
+      'cli.title': 'Command line (CLI)',
+      'cli.sub': 'The CLI is a separate tool and is not bundled into the desktop app: it shares the same backend code, keeps its data inside the install directory and honours CAMPUS_DATA_DIR when you want it to reuse the desktop data.',
+      'cli.install': '<b>Install (Windows):</b> run this in PowerShell:',
+      'cli.unix': '<b>Install (macOS / Linux):</b>',
+      'cli.detail': 'The script downloads the source into your user folder (%LOCALAPPDATA%\\\\Mens\\\\cli on Windows, ~/.local/share/mens on macOS/Linux), creates its own virtual environment, installs the dependencies and adds a mens command. Your system Python is untouched; uninstalling means deleting that folder and the command.',
+      'cli.usage': 'Then use it directly:',
+    },
+    ja: {
+      'page.title': 'Mens キャンパスアシスタント · プロジェクト紹介',
+      'page.description': 'Mens キャンパスアシスタント：Windows/macOS/Linux のデスクトップアプリとインストール可能なウェブ版。学内規定の質問応答、ローカルのナレッジベース、学内サービス、任意のウェブ検索を提供します。状態・制限・検証記録は事実のまま記載しています。',
+      'brand.name': 'Mens キャンパスアシスタント',
+      'brand.tagline': 'MENS CAMPUS ASSISTANT',
+      'hero.nameNote': '名前はラテン語の <i>mēns</i>（属格 <i>mentis</i>）で、心・理性・思考を意味します。英語の <i>men</i> とは関係ありません。',
+      'hero.stageHint': 'ドラッグで回転・スクロールでズーム',
+      'theme.auto': '自動',
+      'theme.light': 'ライト',
+      'theme.dark': 'ダーク',
+      'hero.title': '学内規定の質問応答も、<span>ナレッジベースも事務手続きも</span>、ローカル優先のデスクトップアプリに',
+      'hero.lead': 'Mens は学校現場向けの質問応答ワークベンチです。ナレッジベースの文書（PDF / Markdown / TXT / Word）は端末内で検索し、学内サービス（成績・時間割・単位数・空き教室・修理申請）は設定可能な HTTPS エンドポイント経由で接続します。チャットはストリーミング回答、生成の停止、履歴の分離に対応し、必要に応じてウェブ検索を有効にして参照元を引用できます。文書・データ・鍵はすべて端末内に留まり、モデルは Qwen3 / DeepSeek の API でも、Ollama によるローカル実行でも構いません。入力バーの右端では「高速 / じっくり」の推論強度を切り替えられます。回答は Markdown で描画され、じっくり（深度）の思考プロセスは展開して確認できます。',
+      'badge.version': 'バージョン 1.2.2',
+      'badge.win': 'Windows はビルド済み・実機検証済み',
+      'badge.maclinux': 'macOS / Linux：CI ビルド、実機未検証',
+      'badge.mobile': 'Android / iOS：インストール可能なウェブ版',
+      'badge.db': 'ローカル SQLite・外部データベース不要',
+      'badge.license': 'Apache-2.0 で公開',
+      'action.download': 'Windows 版をダウンロード',
+      'action.repo': 'リポジトリを見る',
+      'action.platforms': '対応プラットフォーム',
+      'action.license': 'ライセンス',
+      'action.limits': '既知の制限',
+      'features.title': '機能一覧',
+      'features.sub': '以下はすべて開発版に実装済みで、検証記録（インストール後の実機確認を含む）があります。根拠はリポジトリの VERIFICATION.md にあります。',
+      'card1.tag': '回答', 'card1.title': 'ストリーミング回答・生成の停止', 'card1.body': '文字単位で出力し、いつでも中断できます。中断時は生成済みの内容と「停止」の印を保存し、履歴が完全な回答を装うことはありません。回答には「デモデータ」と表示でき、学校システムに接続済みであるかのように見せることもありません。',
+      'card2.tag': '会話', 'card2.title': 'ユーザーごとに分離された履歴', 'card2.body': 'デスクトップ版は端末ごと、ウェブ版はブラウザごとに分離します。任意の会話の復元、1件ずつの削除、一括削除が可能で、履歴パネルには各会話のタイトルと時刻が表示されます。',
+      'card3.tag': 'ナレッジ', 'card3.title': '複数形式のドキュメント検索', 'card3.body': 'PDF・Markdown・TXT・Word（.docx、1件 5MB まで）に対応。文書データベースが正であり、索引はバージョンハッシュで検証するため、削除・更新した文書が古い断片として返ることはありません。',
+      'card4.tag': '検索', 'card4.title': 'キーワード検索と任意のベクトル検索', 'card4.body': '既定はローカルのキーワード検索で、追加の依存は不要です。RAG を有効にすると BGE-M3 + Chroma による意味検索に切り替わり、ベクトルが使えない場合は自動的に降格し、その旨を画面に明示します。',
+      'card5.tag': 'ウェブ', 'card5.title': '任意のリアルタイムウェブ検索', 'card5.body': 'メッセージごとに有効化します。既定はキー不要の Bing ウェブ検索（中国大陸から直接接続可）で、Tavily や博查（Bocha）も設定できます。上位1〜3ページの本文を取得し、回答にはリンクと検索時刻を引用します。無効時は一切検索を行いません。',
+      'card6.tag': 'サービス', 'card6.title': '学内データ連携と修理申請', 'card6.body': '9種類の学内 HTTPS JSON エンドポイント（成績・時間割・単位数・空き教室・修理申請など）を設定できます。結果パスと Bearer トークンに対応し、修理申請は送信後に端末側にも記録が残るため、送信内容を確認できます。',
+      'card7.tag': 'モデル', 'card7.title': 'クラウド API またはローカル Ollama', 'card7.body': 'Qwen3 / DeepSeek は各社の API キーを利用（URL は HTTPS 必須）。ローカルモデルは Ollama が担当し、内蔵のモデルカタログはレジューム、SHA-256 検証、インポート再試行に対応します。',
+      'card8.tag': 'データ', 'card8.title': 'バックアップの書き出し・読み込み', 'card8.body': 'ナレッジベース・会話・モデル・学内連携の設定を含む zip をワンクリックで書き出します（SQLite は VACUUM INTO で一貫性のあるスナップショットを作成し、各ファイルの SHA-256 一覧を同梱）。機種変更や再インストール後も完全に復元できます。',
+      'card9.tag': 'デスクトップ', 'card9.title': '単体で動作、すぐ使える', 'card9.body': 'インストーラーに Python ランタイムを内蔵しているため、Python / Node / データベースを別途インストールする必要はありません。ウィンドウのサイズと位置を記憶し、設定画面からバックエンドのログ閲覧とデータフォルダの表示ができます。',
+      'card10.tag': '外観', 'card10.title': 'カスタマイズ可能なテーマ', 'card10.body': 'ライト / ダーク / システム連動に加えてテーマカラーを変更でき、文字色はコントラストから自動導出します。サイドバーとモバイル向けレイアウトはそれぞれ調整しています。',
+      'card11.tag': 'プラグイン', 'card11.title': 'GitHub からのカスタムプラグイン', 'card11.body': 'プラグインは GitHub からカスタム導入：リポジトリ URL を貼るとルートの plugin.json を読み込みます（jsDelivr → raw の順で試行）。公開 HTTPS ホストのみ利用でき、返せるのは JSON だけです。',
+      'card12.tag': '運用', 'card12.title': '更新確認とバージョンの整合性', 'card12.body': '管理者が HTTPS マニフェストを設定すると、設定画面で新しいバージョンを確認しダウンロードページを開けます。ビルドスクリプトはデスクトップ・フロントエンド・バックエンドのバージョン一致を検証し、すべてのテストに合格したときだけインストーラーを生成します。',
+      'screens.title': '画面',
+      'screens.sub': '実際に動作している画面のスクリーンショットです（開発版・ライトテーマ）。',
+      'shot1.alt': 'チャット画面：ウェブ検索結果と参照リンク',
+      'shot1.caption': 'チャット画面：ウェブ検索を有効にすると、回答の下にリンク付きの参照元と検索時刻が並びます。',
+      'shot2.alt': '設定画面：ウェブ検索の構成',
+      'shot2.caption': '設定画面：管理者はウェブ検索の有効化、プロバイダの選択（キー不要の Bing / Tavily / 博查）、キーの設定ができます。',
+      'shot3.alt': '学内サービス画面：修理申請と端末側の記録',
+      'shot3.caption': '学内サービス画面：修理申請を送信すると、端末側の記録が新しい順に並び、送信結果を確認できます。',
+      'platforms.title': '対応プラットフォーム',
+      'platforms.sub': '「実機検証済み」はその OS で実際にインストール・起動し画面確認まで行ったことを指し、「CI ビルド」は GitHub Actions が成果物を生成したが実機では未実行であることを指します。',
+      'platforms.th1': 'プラットフォーム',
+      'platforms.th2': '状態',
+      'platforms.th3': '成果物と補足',
+      'platforms.r1.platform': 'Windows 10/11 x64',
+      'platforms.r1.state': 'ビルド済み・実機検証済み',
+      'platforms.r1.detail': 'NSIS インストーラー、ユーザー単位インストール（<code>%LOCALAPPDATA%\\Programs\\Mens</code>）、データは <code>%APPDATA%\\CampusAgent</code>',
+      'platforms.r2.platform': 'macOS 12+（Intel / Apple silicon）',
+      'platforms.r2.state': 'CI ビルド・実機未検証',
+      'platforms.r2.detail': 'dmg + zip。署名・公証は未対応のため、初回起動時は右クリックから「開く」を選ぶか、システム設定で許可してください',
+      'platforms.r3.platform': 'Linux x64',
+      'platforms.r3.state': 'CI ビルド・実機未検証',
+      'platforms.r3.detail': 'AppImage（インストール不要）と deb。データは <code>~/.config/CampusAgent</code>',
+      'platforms.r4.platform': 'Android / iOS',
+      'platforms.r4.state': 'ネイティブアプリなし',
+      'platforms.r4.detail': 'インストール可能なウェブ版（PWA）を利用します。スマホのブラウザで配備済みのサイトを開き、ホーム画面に追加してください。推論はサーバー側で実行します',
+      'start.title': 'クイックスタート',
+      'start.sub': 'Windows はインストーラーですぐ使えます。他のプラットフォームはソースからビルドするか、ウェブ版を利用してください。',
+      'start.windows': '<b>Windows：</b>Releases から <code>Mens-Setup-&lt;バージョン&gt;-x64.exe</code> をダウンロードして実行し、スタートメニューまたはデスクトップから起動します。',
+      'start.build': 'ソースからのビルド（3プラットフォーム共通のスクリプト）：',
+      'start.dev': 'ソースからの開発実行：',
+      'start.mobile': '<b>スマホ・タブレット：</b>バックエンドを配備し（リポジトリ README のサーバー配備の節を参照）、スマホのブラウザでサイトを開いてホーム画面に追加すると、全画面・専用アイコンのアプリ風に使えます。',
+      'architecture.title': 'アーキテクチャとセキュリティ境界',
+      'arch1.title': '技術スタック',
+      'arch1.body': 'フロントエンドは Vue 3 + TypeScript + Vite + Element Plus + Pinia、バックエンドは FastAPI + SQLAlchemy + LangGraph、Electron シェルには PyInstaller で凍結した CPython を内蔵、データベースは単一ファイルの SQLite（PostgreSQL も選択可）。',
+      'arch2.title': 'ローカル優先',
+      'arch2.body': 'バックエンドは 127.0.0.1 のランダムポートのみを待ち受け、ワンタイムトークンを使います。デスクトップシェルが追加のリクエストヘッダーを注入するため、外部ページからこれらの API には到達できません。',
+      'arch3.title': '送信リクエストの制約',
+      'arch3.body': 'プラグイン、ウェブ検索、更新確認は HTTPS のみ、検証済みのグローバルアドレスに固定（DNS リバインディング対策として SNI を保持）、リダイレクト禁止、サイズとタイムアウトの上限あり。プライベートアドレスに解決した場合は即座に拒否します。',
+      'arch4.title': 'キーの保存',
+      'arch4.body': 'Windows は DPAPI で API キーを暗号化して保存します。macOS / Linux には同等の仕組みがないため、<code>0600</code> 権限の平文ファイル（同一ユーザーのみ読取可）に保存します。この点は PLATFORMS.md に明記しています。',
+      'license.title': 'ライセンス',
+      'license.sub': 'Mens キャンパスアシスタントは <b>Apache License 2.0（Apache-2.0）</b>で公開しています。全文はリポジトリ直下の <a href=\'https://github.com/HuanMoovo/campus-agent/blob/main/LICENSE\'>LICENSE</a> にあります。',
+      'lic1.title': 'できること',
+      'lic1.body': '本プロジェクトの使用・改変・再配布は自由です（商用利用、学内配備、改変版のクローズドソース配布も含みます）。ただし著作権表示・ライセンス表示・NOTICE を保持し、改変したファイルには変更した旨を明記する必要があります。',
+      'lic2.title': '求められること',
+      'lic2.body': '配布する際は LICENSE と NOTICE を同梱し、著作権表示とライセンス表示をすべて保持し、改変したファイルを明示する必要があります。本ライセンスはプロジェクト名や商標の使用権を許諾しません。',
+      'lic3.title': '無保証',
+      'lic3.body': '本ソフトウェアは現状のまま提供され、明示・黙示を問わずいかなる保証も伴いません。学内での本番配備（連携、データのコンプライアンス、アカウントと権限）は、利用する側が自ら検証し責任を負う必要があります。',
+      'lic4.title': 'サードパーティ',
+      'lic4.body': 'インストーラーには Electron、Chromium、CPython、FastAPI、Vue、Element Plus などが含まれ、それぞれ元のライセンスで配布されます。完全な一覧はリポジトリの THIRD-PARTY-NOTICES.md にあります。',
+      'limits.title': '既知の制限',
+      'limits.sub': '以下は未検証または未実装の項目で、事実のまま記載しています。',
+      'limit1': '<b>macOS / Linux の成果物は実機未検証</b>：CI が生成したもので、実機へのインストールと実行は未実施です。',
+      'limit2': '<b>署名・公証なし</b>：発行者の証明書がないため、Windows/macOS の初回起動でシステムの警告が出ることがあります。本格配布の前に署名を設定すべきです。',
+      'limit3': '<b>学内連携とシングルサインオン</b>：実際の学校エンドポイント、統合認証、モデルのキーは同梱していません。本番配備には学校が認可したインターフェースと、その受け入れ検証が必要です。',
+      'limit4': '<b>クラウドモデルとウェブ検索</b>：それぞれ API キーが必要です（ウェブ検索の Bing 経路はキー不要）。検索バックエンドの可用性はネットワーク環境に左右されます。',
+      'limit5': '<b>Android / iOS のネイティブアプリ</b>：本プロジェクトの対象外です。理由は PLATFORMS.md に記載しています（Python バックエンドはモバイルストアに同梱できません）。',
+      'limit6': '<b>ワンクリック更新</b>：更新確認はバージョン差の通知とダウンロードページの表示のみで、自動ダウンロードやサイレントインストールは行いません。',
+      'footer.repo': 'GitHub リポジトリ',
+      'footer.download': 'Windows 版をダウンロード',
+      'footer.readme': 'README',
+      'footer.platforms': '対応状況とビルド',
+      'footer.verification': '検証記録',
+      'footer.license': 'LICENSE (Apache-2.0)',
+      'footer.thirdparty': 'サードパーティ',
+      'footer.note': 'Mens キャンパスアシスタント · Copyright © 2026 HuanMoovo、Apache-2.0 で公開。本ページはリポジトリの状態に合わせて更新しており、機能の説明はリポジトリの検証記録に従います。本ページはデータを収集しません。',
+      'action.cli': 'CLI',
+      'cli.title': 'コマンドライン（CLI）',
+      'cli.sub': 'CLI は独立したツールで、デスクトップアプリには同梱しません。同じバックエンドコードを使い、データは既定でインストール先に保存され、CAMPUS_DATA_DIR でデスクトップ版のデータを指すこともできます。',
+      'cli.install': '<b>インストール（Windows）：</b>PowerShell で実行：',
+      'cli.unix': '<b>インストール（macOS / Linux）：</b>',
+      'cli.detail': 'スクリプトはユーザーフォルダ（Windows は %LOCALAPPDATA%\\\\Mens\\\\cli、macOS/Linux は ~/.local/share/mens）へソースを取得し、専用の仮想環境を作って依存関係を導入し、mens コマンドを生成します。システムの Python は変更しません。アンインストールはフォルダとコマンドを削除するだけです。',
+      'cli.usage': 'インストール後はそのまま使えます：'
+    }
+  };
+
+  var LANG_TAG = { zh: 'zh-CN', en: 'en', ja: 'ja' };
+  var ORIGINAL = new Map();
+  var nodes = document.querySelectorAll('[data-i18n]');
+
+  nodes.forEach(function (node) {
+    ORIGINAL.set(node.getAttribute('data-i18n'), node.innerHTML);
+  });
+
+  function text(key, lang) {
+    var table = DICT[lang];
+    return table && Object.prototype.hasOwnProperty.call(table, key) ? table[key] : null;
+  }
+
+  function apply(lang) {
+    nodes.forEach(function (node) {
+      var key = node.getAttribute('data-i18n');
+      var value = text(key, lang);
+      if (value === null) {
+        var original = ORIGINAL.get(key);
+        if (original !== undefined) node.innerHTML = original;
+        return;
+      }
+      node.innerHTML = value;
+    });
+    document.querySelectorAll('[data-i18n-attr]').forEach(function (node) {
+      node.getAttribute('data-i18n-attr').split(',').forEach(function (pair) {
+        var parts = pair.split(':');
+        var attribute = parts[0].trim();
+        var key = parts[1].trim();
+        var fallback = node.getAttribute(attribute) || '';
+        node.setAttribute(attribute, text(key, lang) || fallback);
+      });
+    });
+    var title = text('page.title', lang);
+    var description = text('page.description', lang);
+    document.documentElement.lang = LANG_TAG[lang] || 'zh-CN';
+    if (title) document.title = title;
+    if (description) document.getElementById('meta-description').setAttribute('content', description);
+    document.querySelectorAll('.lang button').forEach(function (button) {
+      button.setAttribute('aria-pressed', button.dataset.lang === lang ? 'true' : 'false');
+    });
+  }
+
+  function choose() {
+    var saved = null;
+    try { saved = window.localStorage.getItem('campus-agent-lang'); } catch (error) { saved = null; }
+    if (saved && DICT[saved]) return saved;
+    var languages = navigator.languages || [navigator.language || 'zh'];
+    for (var index = 0; index < languages.length; index += 1) {
+      var tag = String(languages[index]).toLowerCase();
+      if (tag.indexOf('ja') === 0) return 'ja';
+      if (tag.indexOf('en') === 0) return 'en';
+      if (tag.indexOf('zh') === 0) return 'zh';
+    }
+    return 'zh';
+  }
+
+  function switchTo(lang) {
+    apply(lang);
+    try { window.localStorage.setItem('campus-agent-lang', lang); } catch (error) { /* private mode */ }
+  }
+
+  document.querySelectorAll('.lang button').forEach(function (button) {
+    button.addEventListener('click', function () { switchTo(button.dataset.lang); });
+  });
+
+  var initial = choose();
+  if (initial !== 'zh') switchTo(initial);
+})();
+</script>
+<script type="module" src="./scene.js"></script>
+</body>
+</html>
