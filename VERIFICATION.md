@@ -10,6 +10,7 @@
 - **静默升级安装**：从已安装的 1.2.1 覆盖升级到 1.2.2（安装目录 `%LOCALAPPDATA%\Programs\Mens`，`Mens.exe` 文件版本 1.2.2），升级后 `LICENSE`、`NOTICE`、`THIRD-PARTY-NOTICES.md` 均在。
 - **安装版界面验收（CDP，真机）**：侧栏显示「后端已连接 v1.2.2」；本机历史对话保留；首次使用引导正常展示。
 - **产物冒烟**：`scripts/smoke_package.py` 对已安装的 1.2.2 执行——内部地址取到、界面入口 401（桌面鉴权生效）→ 通过（exit 0）。
+- **四平台 CI 构建（build-desktop.yml，run 37715352573）**：Windows x64、macOS x64、macOS arm64、Linux x64 四目标全部 success——各目标先跑全套测试与产物冒烟再打包，追加产物步骤全部 success；macOS / Linux 六件产物由 CI 附加到 Release，与同名不覆盖的本机验证 Windows 安装包（+ blockmap）合计 **8 资产**（约 1.09 GB）；main 分支 CI（run 37715416595）与 CodeQL（run 37715416491）同样 success。
 
 ## 深度代码审查批次：全模块复查与加固（2026-10-08）
 
