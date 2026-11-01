@@ -238,12 +238,28 @@ def child_log_path(location, state, out):
     return (state if location == 'state' else out) / 'app-output.log'
 
 
-def validate_mac_launch_mode(mode, diagnostic_only, child_log_location, platform, arguments):
+def validate_mac_launch_mode(mode, diagnostic_only, child_log_location, platform, arguments, acceptance_run=False):
     if mode not in {'strict', 'standard-vm'}:
         raise ValueError('Unknown macOS launch mode')
-    if mode == 'standard-vm' and (not diagnostic_only or child_log_location != 'state'
+    if mode == 'standard-vm' and (not (diagnostic_only or acceptance_run) or child_log_location != 'state'
                                   or platform != 'darwin' or arguments):
-        raise ValueError('standard-vm requires macOS, --diagnostic-only, --child-log-location state, and no application arguments')
+        raise ValueError('standard-vm requires macOS, explicit diagnostic-only or acceptance-run, private-state output, and no application arguments')
+
+
+def validate_acceptance_run(acceptance_run, diagnostic_only, mac_mode, child_log_location, platform, arguments, package_kind):
+    if not acceptance_run:
+        return
+    if diagnostic_only or child_log_location != 'state':
+        raise ValueError('acceptance-run excludes diagnostic-only and requires private-state child output')
+    if platform == 'darwin':
+        if mac_mode != 'standard-vm' or package_kind != 'mac-dmg' or arguments:
+            raise ValueError('Mac acceptance-run requires standard-vm DMG and no application arguments')
+    elif platform == 'linux':
+        expected = {'appimage': ['--appimage-extract-and-run', '--no-sandbox'], 'deb': ['--no-sandbox']}
+        if mac_mode != 'strict' or arguments != expected.get(package_kind):
+            raise ValueError('Linux acceptance-run requires the exact existing disposable-runner package arguments')
+    else:
+        raise ValueError('acceptance-run requires actual macOS or Linux')
 
 
 MAC_APP_HOME_RELATIVES = (
@@ -396,12 +412,17 @@ def main():
     parser.add_argument('--timeout', type=int, default=90)
     parser.add_argument('--child-log-location', choices=['workspace', 'state'], default='workspace')
     parser.add_argument('--mac-launch-mode', choices=['strict', 'standard-vm'], default='strict')
-    parser.add_argument('--diagnostic-only', action='store_true')
+    run_mode = parser.add_mutually_exclusive_group()
+    run_mode.add_argument('--diagnostic-only', action='store_true')
+    run_mode.add_argument('--acceptance-run', action='store_true')
     args = parser.parse_args()
-    if args.child_log_location != 'workspace' and not args.diagnostic_only:
-        parser.error('--child-log-location state requires --diagnostic-only')
+    if args.child_log_location != 'workspace' and not (args.diagnostic_only or args.acceptance_run):
+        parser.error('--child-log-location state requires explicit diagnostic-only or acceptance-run')
     try:
-        validate_mac_launch_mode(args.mac_launch_mode, args.diagnostic_only, args.child_log_location, sys.platform, args.argument)
+        validate_acceptance_run(args.acceptance_run, args.diagnostic_only, args.mac_launch_mode,
+                                args.child_log_location, sys.platform, args.argument, args.package_kind)
+        validate_mac_launch_mode(args.mac_launch_mode, args.diagnostic_only, args.child_log_location,
+                                 sys.platform, args.argument, acceptance_run=args.acceptance_run)
     except ValueError as error:
         parser.error(str(error))
     if sys.platform not in {'darwin', 'linux'}:
@@ -413,7 +434,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     out = args.out.resolve()
     report = {'started_utc': datetime.now(timezone.utc).isoformat(), 'status': 'failed',
-              'diagnostic_only': args.diagnostic_only, 'accepted': False,
+              'diagnostic_only': args.diagnostic_only, 'acceptance_run': args.acceptance_run, 'accepted': False,
               'diagnostic_probe_requirements_met': False,
               'mac_launch_mode': args.mac_launch_mode if sys.platform == 'darwin' else None,
               'mac_outer_sandbox': ('deny-home' if args.mac_launch_mode == 'strict' else 'none-standard-vm-diagnostic') if sys.platform == 'darwin' else None,
@@ -498,6 +519,9 @@ def main():
                 app_data = config / 'CampusAgent'
             report['isolated_state_root'] = str(state)
             report['expected_app_data'] = str(app_data)
+            if os.path.lexists(app_data):
+                raise RuntimeError('Expected isolated application data must be absent before launch')
+            report['fresh_isolated_state_verified'] = True
             report['launch_environment_keys'] = sorted(env)
             report['launch_home'] = env['HOME']
             report['launch_cffixed_user_home'] = env['CFFIXED_USER_HOME']
@@ -615,8 +639,18 @@ def main():
     except Exception as error:
         report['status'] = 'failed'
         report['error'] = type(error).__name__ + ': ' + str(error)
+    if args.acceptance_run and report.get('application_running_before_cleanup') is not True:
+        report['status'] = 'failed'
+        report.setdefault('error', 'Packaged application was not running immediately before acceptance cleanup')
     report['finished_utc'] = datetime.now(timezone.utc).isoformat()
     report['exit_code'] = 0 if report['status'].startswith('passed-') else 1
+    report['native_evidence_requirements_met'] = (report['exit_code'] == 0
+        and all(report[key] for key in ('native_window_verified', 'isolated_database_verified',
+                                       'owned_backend_auth_verified', 'screenshot_captured'))
+        and report.get('remaining_own_processes') == []
+        and (sys.platform != 'darwin' or args.mac_launch_mode != 'standard-vm'
+             or report.get('standard_vm_actual_home_audit', {}).get('passed') is True))
+    report['native_evidence_status'] = 'passed-manual-ui-review-pending' if report['native_evidence_requirements_met'] else 'failed'
     if args.diagnostic_only and report['exit_code'] == 0:
         report['status'] = 'diagnostic-launch-evidence-collected-manual-review-required'
     (out / 'native-result.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
