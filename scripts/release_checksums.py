@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 from pathlib import Path
+import sys
 
 SUFFIXES = (".exe", ".dmg", ".zip", ".appimage", ".deb")
 
@@ -27,6 +28,9 @@ def sha256(path: Path, chunk: int = 1024 * 1024) -> str:
 
 
 def main() -> int:
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dir", default="release", help="产物目录（默认 release）")
     parser.add_argument("--out", default="release/SHA256SUMS.txt", help="清单输出路径")
