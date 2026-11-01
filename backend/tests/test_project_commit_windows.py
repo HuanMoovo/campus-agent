@@ -31,6 +31,57 @@ def commit(project, replacement=b"\xef\xbb\xbf  proposed\r\n", checkpoint=lambda
     return registry.commit_file(project_id, "src/note.txt", snapshot.identity, snapshot.sha256, replacement, checkpoint)
 
 
+@pytest.fixture
+def native_security_pair(tmp_path):
+    from app import project_commit_windows as native
+    original_path = tmp_path / "original-owned-security.txt"
+    staging_path = tmp_path / "staging-owned-security.txt"
+    original_path.write_bytes(b"owned security regression\r\n")
+    assert native.supported(original_path)
+    original = staging = None
+    try:
+        original = native._open(original_path)
+        staging = native._open(staging_path, create=True)
+        yield native, original, staging
+    finally:
+        for handle in (staging, original):
+            if handle is not None:
+                native.K.CloseHandle(handle)
+
+
+def test_identical_native_security_is_preserved_without_reapplying_acl(native_security_pair, monkeypatch):
+    native, original, staging = native_security_pair
+    expected = native._security(original)
+    assert native._security(staging) == expected
+    def must_not_reapply(*args):
+        pytest.fail("Already identical native security must not be reapplied")
+    monkeypatch.setattr(native.A, "SetSecurityInfo", must_not_reapply)
+    native._copy_security(original, staging)
+    assert native._security(original) == expected
+    assert native._security(staging) == expected
+
+
+def test_differing_native_acl_requires_exact_post_copy_security(native_security_pair, monkeypatch):
+    native, original, staging = native_security_pair
+    expected = native._security(original)
+    acl = bytearray(expected["dacl"])
+    assert int.from_bytes(acl[4:6], "little") > 0 and acl[8] == 0
+    mask = int.from_bytes(acl[12:16], "little")
+    acl[12:16] = (mask ^ 1).to_bytes(4, "little")
+    buffer = ctypes.create_string_buffer(bytes(acl))
+    assert native.A.SetSecurityInfo(staging, 1, 4 | 0x80000000, None, None, buffer, None) == 0
+    different = native._security(staging)
+    assert different["dacl"] != expected["dacl"]
+    assert all(different[key] == expected[key] for key in ("owner", "group", "label"))
+    # A successful API return without the required security effect must fail closed.
+    monkeypatch.setattr(native.A, "SetSecurityInfo", lambda *args: 0)
+    with pytest.raises(ProjectFileError) as caught:
+        native._copy_security(original, staging)
+    assert caught.value.error_code == "project_change_unsupported"
+    assert native._security(original) == expected
+    assert native._security(staging) == different
+
+
 def test_cow_changes_inode_and_preserves_original_alias_bytes(project, tmp_path):
     registry, root, project_id, target = project
     original = target.read_bytes()

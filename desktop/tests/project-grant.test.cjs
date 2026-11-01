@@ -14,6 +14,7 @@ const { request } = require('../lib/backend.cjs')
 async function fixture(t, handler) {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'campus-project-grant-'))
   const children = []
+  const logStreams = new Map()
   const server = http.createServer((req, res) => {
     if (req.url === '/api/health') { res.end('{"status":"ok"}'); return }
     handler(req, res)
@@ -35,6 +36,11 @@ async function fixture(t, handler) {
   const directory = path.resolve(__dirname, '..', 'lib')
   vm.runInNewContext(fs.readFileSync(path.join(directory, 'backend.cjs'), 'utf8'), {
     require(name) {
+      if (name === 'node:fs') return { ...fs, createWriteStream(...args) {
+        const stream = fs.createWriteStream(...args)
+        logStreams.set(args[0], stream)
+        return stream
+      } }
       if (name === 'node:child_process') return { spawn(_command, _args, options) {
         const child = new EventEmitter()
         child.stdin = new PassThrough()
@@ -59,7 +65,7 @@ async function fixture(t, handler) {
       backendExecutable: executable, frontendDirectory: temporary, timeout: 1000,
     })
   }
-  return { start, children, origin, temporary }
+  return { start, children, origin, temporary, logStreams }
 }
 
 test('native project open privately sends an independent random grant and JSON body', async t => {
@@ -135,8 +141,10 @@ test('project writes use a separate private token and fixed narrow routes', asyn
   assert.equal(fs.readFileSync(backend.logPath, 'utf8').includes(secret), false)
   f.children[0].child.stderr.write(secret.slice(0, 31))
   f.children[0].child.stderr.write(secret.slice(31) + '\n' + 'safe log fixture'.repeat(12))
-  await new Promise(resolve => setImmediate(resolve))
-  await new Promise(resolve => setImmediate(resolve))
+  // Wait for preceding sanitized writes to reach the real file before reading it.
+  await new Promise((resolve, reject) => {
+    f.logStreams.get(backend.logPath).write('', error => error ? reject(error) : resolve())
+  })
   const logged = fs.readFileSync(backend.logPath, 'utf8')
   assert.equal(logged.includes(secret), false)
   assert.equal(logged.includes('[redacted]'), true)

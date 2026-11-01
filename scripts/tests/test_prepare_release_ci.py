@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import stat
@@ -17,6 +18,32 @@ preparation = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preparation)
 
 class ReleasePreparationTests(unittest.TestCase):
+    def test_checksums_cli_uses_utf8_with_legacy_captured_windows_pipes(self):
+        payload = b'PUBLIC OWNED CHECKSUM FIXTURE\x00\xff'
+        env = dict(os.environ, PYTHONIOENCODING='cp1252', PYTHONUTF8='0')
+        for name in ('Mens-Setup-fixture.exe', 'Mens-\u5b89\u88c5\u5305.exe'):
+            with self.subTest(name=name), tempfile.TemporaryDirectory(prefix='mens-checksum-encoding-') as temporary:
+                directory = Path(temporary)
+                package = directory / name
+                package.write_bytes(payload)
+                manifest = directory / 'SHA256SUMS.txt'
+                result = subprocess.run([sys.executable, str(ROOT / 'scripts/release_checksums.py'),
+                                         '--dir', str(directory), '--out', str(manifest)],
+                                        env=env, capture_output=True, timeout=20)
+                self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+                self.assertEqual(result.stderr, b'')
+                output = result.stdout.decode('utf-8')
+                self.assertIn(name, output)
+                self.assertIn('\u6e05\u5355\u5df2\u5199\u5165', output)
+                expected = hashlib.sha256(payload).hexdigest() + '  ' + name + os.linesep
+                self.assertEqual(manifest.read_bytes(), expected.encode('utf-8'))
+                self.assertEqual(package.read_bytes(), payload)
+                missing = directory / '\u4e0d\u5b58\u5728\u7684\u4ea7\u7269'
+                rejected = subprocess.run([sys.executable, str(ROOT / 'scripts/release_checksums.py'),
+                                           '--dir', str(missing)], env=env, capture_output=True, timeout=20)
+                self.assertEqual(rejected.returncode, 1)
+                self.assertIn('\u76ee\u5f55\u4e0d\u5b58\u5728\uff1a' + str(missing), rejected.stderr.decode('utf-8'))
+
     def signing_env(self):
         return {'WINDOWS_SIGNING_PFX_BASE64': base64.b64encode(b'PUBLIC_NOT_A_PFX').decode(),
                 'WINDOWS_SIGNING_PASSWORD': 'PUBLIC_FIXTURE_PASSWORD'}
