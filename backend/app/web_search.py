@@ -7,6 +7,8 @@ address with SNI/hostname checks retained, no redirects, and size/time caps.
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import html as html_module
 import ipaddress
 import json
@@ -18,7 +20,7 @@ import threading
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
-from urllib.parse import urlencode, urlparse, urlunparse
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 import httpx
 
@@ -194,14 +196,16 @@ def validate_external_url(url: str) -> tuple[str, str]:
         raise WebSearchError("网页地址格式无效", 400)
     try:
         parsed = urlparse(url)
-        host = (parsed.hostname or "").lower()
+        host = (parsed.hostname or "").encode("idna").decode("ascii").lower()
         port = parsed.port
-    except ValueError as exc:
+    except (ValueError, UnicodeError) as exc:
         raise WebSearchError("网页地址格式无效", 400) from exc
     if parsed.scheme != "https" or port not in (None, 443) or parsed.username is not None or parsed.password is not None:
         raise WebSearchError("只能读取公开的 HTTPS 网页", 400)
     try:
         addresses = socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+    except UnicodeError as exc:
+        raise WebSearchError("网页地址格式无效", 400) from exc
     except socket.gaierror as exc:
         raise WebSearchError("无法解析网页地址", 502) from exc
     if not addresses or any(not ipaddress.ip_address(item[4][0]).is_global for item in addresses):
@@ -236,16 +240,65 @@ def fetch_bytes(url: str, *, max_bytes: int = MAX_PAGE_BYTES,
 
 
 def _decode(data: bytes, content_type: str) -> str:
-    match = re.search(r"charset=([\w-]+)", content_type or "", re.I)
+    match = re.search(r"charset\s*=\s*[\"']?([\w-]+)", content_type or "", re.I)
     for encoding in ([match.group(1)] if match else []) + ["utf-8", "gb18030"]:
         try:
-            return data.decode(encoding, errors="replace")
+            return data.decode(encoding)
         except (LookupError, UnicodeDecodeError):
             continue
     return data.decode("utf-8", errors="replace")
 
 
 # --------------------------------------------------------------------------- parsing
+
+
+def _result_url(value: object, *, unwrap_bing: bool = True) -> str | None:
+    """Discard unusable candidates without DNS lookups; fetching still checks DNS.
+
+    Bing's known tracking format carries the destination in the URL itself. Decode
+    that format locally so deduplication and citations use the destination, while
+    keeping the fetcher's ban on HTTP redirects.
+    """
+    if (not isinstance(value, str) or not value or len(value) > MAX_URL
+            or re.search(r"[\s\x00-\x1f\x7f\\]", value)):
+        return None
+    try:
+        parsed = urlparse(value)
+        # Validate the original labels before removing the single legal trailing dot.
+        ascii_host = (parsed.hostname or "").encode("idna").decode("ascii").lower()
+        if (parsed.scheme != "https" or not ascii_host or parsed.port not in (None, 443)
+                or parsed.username is not None or parsed.password is not None):
+            return None
+        value.encode("utf-8")
+    except (ValueError, UnicodeError):
+        return None
+    host = ascii_host.removesuffix(".")
+    if host == "localhost" or host.endswith(".localhost"):
+        return None
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        if not address.is_global:
+            return None
+    if host in {"bing.com", "www.bing.com", "cn.bing.com"} and parsed.path in {"/ck/a", "/ck/a/"}:
+        if not unwrap_bing:
+            return None
+        targets = parse_qs(parsed.query).get("u", [])
+        if len(targets) != 1 or not targets[0].startswith("a1"):
+            return None
+        encoded = targets[0][2:]
+        try:
+            target = base64.b64decode(encoded + "=" * (-len(encoded) % 4),
+                                      altchars=b"-_", validate=True).decode("utf-8")
+        except (ValueError, binascii.Error, UnicodeError):
+            return None
+        return _result_url(target, unwrap_bing=False)
+    authority = f"[{ascii_host}]" if ":" in ascii_host else ascii_host
+    if parsed.port is not None:
+        authority += f":{parsed.port}"
+    return urlunparse(parsed._replace(netloc=authority))
 
 
 class _TextExtractor(HTMLParser):
@@ -325,29 +378,92 @@ def _plain(fragment: str) -> str:
     return html_module.unescape(re.sub(r"<[^>]+>", " ", fragment)).strip()
 
 
+class _BingResultsParser(HTMLParser):
+    """Extract result list items without relying on attribute order or quoting."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.results = []
+        self.row = None
+        self.list_depth = 0
+        self.result_list_depth = 0
+        self.in_heading = False
+        self.in_title = False
+        self.in_paragraph = False
+        self.paragraph = []
+        self.preferred_paragraph = False
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        classes = set((attrs.get("class") or "").lower().split())
+        if tag in ("ol", "ul"):
+            self.list_depth += 1
+        # HTML permits omission of </li> before a sibling <li>.
+        if tag == "li" and self.row is not None and self.list_depth == self.result_list_depth:
+            self._finish_row()
+        if self.row is None:
+            if tag != "li" or "b_algo" not in classes:
+                return
+            self.row = {"url": "", "title": [], "snippet": "", "preferred": False,
+                        "ad": "b_ad" in classes}
+            self.result_list_depth = self.list_depth
+        if "b_ad" in classes or "b_adlabel" in classes:
+            self.row["ad"] = True
+        if tag == "h2":
+            self.in_heading = True
+        elif tag == "a" and self.in_heading and not self.row["url"]:
+            self.row["url"] = attrs.get("href") or ""
+            self.in_title = True
+        elif tag == "p" and not self.in_paragraph:
+            self.in_paragraph = True
+            self.paragraph = []
+            self.preferred_paragraph = any(c.startswith("b_lineclamp") for c in classes)
+
+    def handle_data(self, data):
+        if self.row is None:
+            return
+        if self.in_title:
+            self.row["title"].append(data)
+        if self.in_paragraph:
+            self.paragraph.append(data)
+
+    def handle_endtag(self, tag):
+        if tag in ("ol", "ul"):
+            if self.row is not None and self.list_depth == self.result_list_depth:
+                self._finish_row()
+            self.list_depth = max(0, self.list_depth - 1)
+            return
+        if self.row is None:
+            return
+        if tag == "a" and self.in_title:
+            self.in_title = False
+        elif tag == "h2":
+            self.in_heading = False
+        elif tag == "p" and self.in_paragraph:
+            snippet = " ".join(self.paragraph).strip()
+            if not self.row["snippet"] or (self.preferred_paragraph and not self.row["preferred"]):
+                self.row["snippet"] = snippet
+                self.row["preferred"] = self.preferred_paragraph
+            self.in_paragraph = False
+        elif tag == "li" and self.list_depth == self.result_list_depth:
+            self._finish_row()
+
+    def _finish_row(self):
+        row = self.row
+        url = _result_url(row["url"])
+        if not row["ad"] and url:
+            self.results.append({"title": " ".join(row["title"]).strip()[:200],
+                                 "url": url,
+                                 "snippet": row["snippet"][:MAX_SNIPPET]})
+        self.row = None
+        self.in_heading = self.in_title = self.in_paragraph = False
+
+
 def parse_bing_results(markup: str, limit: int) -> list[dict]:
-    results = []
-    blocks = re.findall(r'<li class="b_algo".*?(?=<li class="b_algo"|</ol>)', markup, re.S)
-    for block in blocks:
-        # 广告位（b_ad 类名或“广告”标签）不进入候选，从源头去掉
-        if re.search(r'b_adlabel|class="b_algo[^"]*\bb_ad\b', block):
-            continue
-        title_match = re.search(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', block, re.S)
-        if not title_match:
-            continue
-        url = html_module.unescape(title_match.group(1))
-        if not url.startswith("https://"):
-            continue
-        snippet_match = (re.search(r'<p[^>]*class="[^"]*b_lineclamp[^"]*"[^>]*>(.*?)</p>', block, re.S)
-                         or re.search(r"<p[^>]*>(.*?)</p>", block, re.S))
-        results.append({
-            "title": _plain(title_match.group(2))[:200],
-            "url": url[:MAX_URL],
-            "snippet": _plain(snippet_match.group(1))[:MAX_SNIPPET] if snippet_match else "",
-        })
-        if len(results) == limit:
-            break
-    return results
+    parser = _BingResultsParser()
+    parser.feed(markup)
+    parser.close()
+    return parser.results[:max(0, limit)]
 
 
 def filter_results(query: str, results: list[dict]) -> list[dict]:
@@ -356,23 +472,34 @@ def filter_results(query: str, results: list[dict]) -> list[dict]:
     相关性用与知识库检索相同的分词判断（中文二元组 + 英文单词）：标题里
     至少命中 2 个提问关键词才保留（单关键词提问命中该词即可）。只算标题
     是因为摘要经常夹带泛词，会把无关结果放进来。同一站点只保留排名最前
-    的一条；分词为空（如单字提问）时不过滤。
+    的一条；单个汉字按标题包含该字匹配，无法分词的提问不返回结果。
     """
     query_terms = text_terms(query or "")
-    if not query_terms:
-        return list(results)
+    # The shared tokenizer emits CJK bigrams only. A single Han character is
+    # still a useful search term, but punctuation alone cannot establish relevance.
+    single_cjk = re.findall(r"[\u4e00-\u9fff]", query or "") if not query_terms else []
+    if not query_terms and len(single_cjk) != 1:
+        return []
     minimum = min(2, len(query_terms))
     kept: list[dict] = []
     seen_hosts: set[str] = set()
     for row in results:
-        host = (urlparse(str(row.get("url", ""))).hostname or "").lower()
-        if host and host in seen_hosts:
+        if not isinstance(row, dict):
             continue
-        title_terms = text_terms(str(row.get("title", "")))
-        if len(query_terms & title_terms) < minimum:
+        url = _result_url(row.get("url"))
+        if not url:
+            continue
+        host = (urlparse(url).hostname or "").lower().rstrip(".")
+        if host in seen_hosts:
+            continue
+        title = str(row.get("title", ""))
+        if single_cjk:
+            if single_cjk[0] not in title:
+                continue
+        elif len(query_terms & text_terms(title)) < minimum:
             continue
         seen_hosts.add(host)
-        kept.append(row)
+        kept.append({**row, "url": url})
     return kept
 
 
@@ -413,9 +540,10 @@ def _tavily_search(query: str, limit: int, config: dict) -> list[dict]:
                       config["api_key"])
     results = []
     for row in data.get("results", []) if isinstance(data.get("results"), list) else []:
-        if not isinstance(row, dict) or not str(row.get("url", "")).startswith("https://"):
+        url = _result_url(row.get("url")) if isinstance(row, dict) else None
+        if not url:
             continue
-        results.append({"title": str(row.get("title") or row["url"])[:200], "url": str(row["url"])[:MAX_URL],
+        results.append({"title": str(row.get("title") or url)[:200], "url": url,
                         "snippet": _plain(str(row.get("content") or ""))[:MAX_SNIPPET]})
         if len(results) == limit:
             break
@@ -428,9 +556,10 @@ def _bocha_search(query: str, limit: int, config: dict) -> list[dict]:
     rows = ((pages.get("webPages") or {}).get("value") if isinstance(pages.get("webPages"), dict) else None) or []
     results = []
     for row in rows if isinstance(rows, list) else []:
-        if not isinstance(row, dict) or not str(row.get("url", "")).startswith("https://"):
+        url = _result_url(row.get("url")) if isinstance(row, dict) else None
+        if not url:
             continue
-        results.append({"title": str(row.get("name") or row["url"])[:200], "url": str(row["url"])[:MAX_URL],
+        results.append({"title": str(row.get("name") or url)[:200], "url": url,
                         "snippet": _plain(str(row.get("snippet") or row.get("summary") or ""))[:MAX_SNIPPET]})
         if len(results) == limit:
             break

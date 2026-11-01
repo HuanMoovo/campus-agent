@@ -2,7 +2,7 @@
 import { ChatLineRound, Clock, Search, Setting } from '@element-plus/icons-vue'
 
 import { t } from '../i18n'
-import mensLogo from '../assets/mens.png'
+import mensLogo from '../assets/mens-mark.svg'
 
 defineProps<{ open: boolean }>()
 const emit = defineEmits<{ (event: 'update:open', value: boolean): void; (event: 'done'): void }>()
@@ -33,7 +33,7 @@ const steps = [
 </template>
 
 <style scoped>
-.onboarding { position: fixed; inset: 0; z-index: 70; background: rgba(18, 31, 34, .45); display: flex; justify-content: center; align-items: center; padding: 24px 16px; }
+.onboarding { position: fixed; inset: 0; z-index: 70; background: var(--overlay); display: flex; justify-content: center; align-items: center; padding: 24px 16px; }
 .onb-panel { width: min(520px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 18px 50px #00000033; padding: 26px 26px 22px; text-align: left; }
 .onb-logo { width: 44px; height: 44px; object-fit: contain; border-radius: 20%; }
 .onb-panel h2 { margin: 12px 0 6px; font-size: 19px; color: var(--text); }

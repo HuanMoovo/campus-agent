@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { Lock, User } from '@element-plus/icons-vue'
-import mensLogo from '../assets/mens.png'
+import mensLogo from '../assets/mens-mark.svg'
 import { authLogin, authRegister, healthInfo, type AuthUser } from '../api'
 import { t } from '../i18n'
 
@@ -123,7 +123,7 @@ async function submit() {
 
 <style scoped>
 .login-shell { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
-  background: var(--el-bg-color-page, #f5f7fa); z-index: 3000; padding: 24px; overflow: auto; }
+  background: var(--el-bg-color-page, #ffffff); z-index: 3000; padding: 24px; overflow: auto; }
 .login-card { width: min(400px, 100%); display: flex; flex-direction: column; gap: 14px;
   padding: 28px; border-radius: 16px; border: 1px solid var(--el-border-color-light);
   background: var(--el-bg-color); box-shadow: 0 18px 48px rgba(0, 0, 0, 0.12); }

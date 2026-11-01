@@ -1,6 +1,0 @@
-.venv
-.env
-data
-__pycache__
-tests
-*.log

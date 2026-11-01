@@ -47,7 +47,7 @@ function onKeydown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
-.quick-ask { position: fixed; inset: 0; z-index: 65; background: rgba(18, 31, 34, .38); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
+.quick-ask { position: fixed; inset: 0; z-index: 65; background: var(--overlay); display: flex; justify-content: center; align-items: flex-start; padding: 12vh 16px 16px; }
 .quick-panel { width: min(560px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 18px 50px #00000033; padding: 14px 16px 12px; }
 .quick-title { margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--text); }
 .quick-panel textarea { resize: none; border: 0; outline: 0; width: 100%; min-height: 52px; background: transparent; color: var(--text); font-size: 13px; line-height: 1.6; font-family: inherit; }

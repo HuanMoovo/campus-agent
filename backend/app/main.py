@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager, closing
+from contextlib import aclosing, asynccontextmanager, closing, nullcontext
+import asyncio
 import hashlib
 import json
 import os
@@ -7,6 +8,8 @@ import re
 import secrets
 import sqlite3
 import logging
+import tempfile
+import threading
 from datetime import datetime, timezone
 from io import BytesIO
 from urllib.parse import urlsplit
@@ -14,26 +17,37 @@ from uuid import uuid4
 from zipfile import BadZipFile, ZIP_DEFLATED, ZipFile
 
 import httpx
+import anyio
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from starlette.concurrency import run_in_threadpool
 
-from .agent import prepare_stream_state, run_agent, stream_model
+from .agent import ModelStreamError, prepare_stream_state, run_agent, stream_model, uses_read_task, validate_reasoning_request
+from .agent_tasks import ReadTaskControl
+from .model_reasoning import ReasoningConfigurationError
+from .agent_trace import RunTrace
 from . import auth, campus_data, mcp_registry, web_search
 from .config import get_settings
 from .desktop_runtime import desktop_enabled, install_desktop_routes
 from .db import Base, SessionLocal, engine, ensure_conversation_columns, get_db
 from .models import Conversation, Document, Message, Plugin, User
+from .history_queries import list_conversation_page
+from .token_usage import UsageIdentity, capture_usage, usage_summary
 from .model_runtime import configuration as model_configuration, update_provider, test_provider, local_models, start_download, get_download, cancel_download, resolve_local_model, LocalModelError
 from .plugins import GITHUB_HOSTS, fetch_github_manifest, fetch_manifest_json, invoke_plugin, validate_plugin_url
 from .rag import knowledge_index
 from .schemas import AuthLogin, AuthRegister, ChatRequest, ChatResponse, ConversationBatchDelete, ConversationUpdate, DocumentCreate, DocumentUpdate, FeedbackRequest, ImportUrlRequest, McpServerCreate, McpServerUpdate, PasswordChange, PasswordReset, PluginCreate, PluginUpdate, RepairCreate, SettingsUpdate, ModelProviderUpdate, LocalModelPull, Source, UserCreate, UserUpdate, WebSearchConfigUpdate
+from .schemas import ModelProbeRequest
+from .provider_catalog import CLOUD_PROVIDER_IDS
+from .project_api import project_question_label, resolve_project_sources, router as project_router
 from .seed import seed_demo_documents
 from . import services
+from .backup_archive import stage_database, validate_zip
+from .project_recovery_backup import MAX_BUNDLE_BYTES, ProjectRecoveryArchive, canonical, export_materials, validate_bundle
 
 logger = logging.getLogger(__name__)
 
@@ -263,19 +277,21 @@ THINKING_LIMIT = 12000
 
 
 def persist_stream_exchange(conversation_id: str, question: str, text: str, final: dict | None, error: str,
-                            streamed_from_model: bool = False, thinking: str = "") -> None:
+                            streamed_from_model: bool = False, thinking: str = "", metadata: dict | None = None) -> None:
     """Best-effort persistence for streamed answers; stopped or failed streams must not crash cleanup."""
     try:
         with SessionLocal() as db:
             rows = [Message(conversation_id=conversation_id, role="user", content=question)]
             if text.strip():
-                data = {"sources": (final or {}).get("sources", []), "tool_calls": (final or {}).get("tool_calls", [])}
-                data["mode"] = final.get("mode", "demo") if final is not None else ("llm" if streamed_from_model else "demo")
+                known = final or metadata or {}
+                data = {"sources": known.get("sources", []), "tool_calls": known.get("tool_calls", [])}
+                for key in ("run", "context", "web"):
+                    if known.get(key):
+                        data[key] = known[key]
+                data["mode"] = known.get("mode", "llm" if streamed_from_model else "demo")
                 if thinking.strip():
                     data["thinking"] = thinking[:THINKING_LIMIT]
-                if final and final.get("web"):
-                    data["web"] = final["web"]
-                if final is None or error:
+                if final is None or error or (known.get("run") or {}).get("status") in {"partial", "failed"}:
                     data["partial"] = True
                 rows.append(Message(conversation_id=conversation_id, role="assistant", content=text, result_data=data))
             db.add_all(rows)
@@ -304,7 +320,7 @@ def attachments_augmented(question: str, attachments) -> str:
 
 def public_sources(rows) -> list[dict]:
     """Normalize agent source rows for responses and storage (drops fetched page text)."""
-    return [Source(**row).model_dump() for row in (rows or [])]
+    return [Source(**row).model_dump(exclude_none=True) for row in (rows or [])]
 
 
 @app.get("/api/health")
@@ -319,50 +335,126 @@ def health():
             "demo_services": not any(campus_data.configured(kind) for kind in campus_data.KINDS)}
 
 
-@app.post("/api/chat", response_model=ChatResponse)
-def chat(body: ChatRequest, db: Session = Depends(get_db)):
-    if body.model not in (None, "auto", "qwen", "deepseek", "ollama"):
+def conversation_scope(request: Request, client_id: str):
+    """Authenticated users own their conversations; anonymous profiles use their client ID."""
+    if auth.setting("auth_required", False) and not desktop_enabled():
+        user = getattr(request.state, "user", None)
+        if user is None:
+            raise HTTPException(401, "请先登录")
+        return Conversation.owner_user_id == user.id
+    return (Conversation.owner_user_id.is_(None)) & (Conversation.client_id == client_id)
+
+
+def owned_conversation(db: Session, request: Request, conversation_id: str, client_id: str,
+                       claim_legacy: bool = False) -> Conversation:
+    row = db.scalar(select(Conversation).where(Conversation.id == conversation_id,
+                                               conversation_scope(request, client_id)))
+    if row is None and claim_legacy and client_id and not (auth.setting("auth_required", False) and not desktop_enabled()):
+        # Preserve the historical opt-in claim for unscoped conversations only.
+        claimed = db.execute(update(Conversation).where(Conversation.id == conversation_id,
+                             Conversation.owner_user_id.is_(None), Conversation.client_id == "")
+                             .values(client_id=client_id))
+        if claimed.rowcount == 1:
+            row = db.get(Conversation, conversation_id)
+    if row is None:
+        raise HTTPException(404, "对话不存在")
+    return row
+
+
+def conversation_owner(request: Request) -> str | None:
+    if auth.setting("auth_required", False) and not desktop_enabled():
+        user = getattr(request.state, "user", None)
+        if user is None:
+            raise HTTPException(401, "请先登录")
+        return user.id
+    return None
+
+
+def usage_identity(request: Request, client_id: str = "") -> UsageIdentity:
+    # Desktop is one local user, including draft requests that do not have a
+    # conversation/client ID. Website identities follow conversation ownership.
+    return UsageIdentity(conversation_owner(request), client_id, desktop=desktop_enabled())
+
+
+def history_for_agent(db: Session, conversation_id: str) -> list[dict]:
+    """Load a bounded candidate window; the prompt builder selects complete turns."""
+    past = db.scalars(select(Message).where(Message.conversation_id == conversation_id)
+                      .order_by(Message.id.desc()).limit(40)).all()
+    return [{"role": item.role, "content": item.content,
+             **({"partial": True} if (item.result_data or {}).get("partial") else {})} for item in reversed(past)]
+
+
+@app.post("/api/chat", response_model=ChatResponse, response_model_exclude_none=True)
+def chat(body: ChatRequest, request: Request, db: Session = Depends(get_db)):
+    with capture_usage(usage_identity(request, body.client_id or ""), "chat", session_factory=SessionLocal):
+        try:
+            return _chat(body, request, db)
+        finally:
+            # The history transaction must settle before the independent usage
+            # ledger writes, including errors, so SQLite never waits on itself.
+            if db.in_transaction():
+                db.rollback()
+
+
+def _chat(body: ChatRequest, request: Request, db: Session):
+    if body.model not in (None, "auto", "ollama", *CLOUD_PROVIDER_IDS):
         raise HTTPException(422, "不支持的模型")
     model = body.model or _selected_model
     try:
         local_model = resolve_local_model(body.local_model) if model == "ollama" else None
     except LocalModelError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
+    try:
+        validate_reasoning_request(model, body.message.strip(), local_model, body.reasoning)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    project_sources = resolve_project_sources(request, body.project)
+    stored_question = project_question_label(body.message.strip(), body.project)
     client_id = (body.client_id or "").strip()
     if body.conversation_id:
-        conversation = db.get(Conversation, body.conversation_id)
-        if conversation is None:
-            raise HTTPException(404, "对话不存在")
-        if client_id and not conversation.client_id:
-            conversation.client_id = client_id
+        conversation = owned_conversation(db, request, body.conversation_id, client_id, claim_legacy=True)
     else:
-        conversation = Conversation(id=str(uuid4()), client_id=client_id)
+        conversation = Conversation(id=str(uuid4()), client_id=client_id, owner_user_id=conversation_owner(request))
         db.add(conversation)
         db.flush()
     if body.regenerate and body.conversation_id:
-        replace_trailing_exchange(db, conversation.id, body.message.strip())
-    past = db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id.desc()).limit(8)).all()
-    history = [{"role": item.role, "content": item.content} for item in reversed(past)]
+        replace_trailing_exchange(db, conversation.id, stored_question)
+    history = history_for_agent(db, conversation.id)
     try:
-        result = run_agent(db, attachments_augmented(body.message.strip(), body.attachments), history, model, local_model=local_model, use_web=body.web, reasoning=body.reasoning)
+        project_args = {"project_sources": project_sources} if body.project else {}
+        result = run_agent(db, body.message.strip(), history, model, local_model=local_model, use_web=body.web,
+                           reasoning=body.reasoning, attachments=[item.model_dump() for item in body.attachments or []], **project_args)
+    except ReasoningConfigurationError as exc:
+        db.rollback()
+        raise HTTPException(400, str(exc)) from exc
     except LocalModelError as exc:
         db.rollback()
         raise HTTPException(exc.status_code, str(exc)) from exc
     response_data = {"sources": public_sources(result.get("sources", [])), "tool_calls": result.get("tool_calls", []),
-                     "mode": result.get("mode", "demo"), "web": result.get("web", {})}
-    db.add_all([Message(conversation_id=conversation.id, role="user", content=body.message.strip()), Message(conversation_id=conversation.id, role="assistant", content=result["answer"], result_data=response_data)])
+                     "mode": result.get("mode", "demo"), "web": result.get("web", {}),
+                     "context": result.get("context", {}), "run": result.get("run", {})}
+    if (result.get("run") or {}).get("status") in {"partial", "failed"}:
+        response_data["partial"] = True
+    db.add_all([Message(conversation_id=conversation.id, role="user", content=stored_question), Message(conversation_id=conversation.id, role="assistant", content=result["answer"], result_data=response_data)])
     db.commit()
-    return ChatResponse(conversation_id=conversation.id, answer=result["answer"], sources=response_data["sources"], tool_calls=result.get("tool_calls", []), mode=result.get("mode", "demo"), web=result.get("web", {}))
+    return ChatResponse(conversation_id=conversation.id, answer=result["answer"], **response_data)
+
+
+def _prepare_read_stream_worker(question, history, model, local_model, use_web, reasoning, attachments, trace, project_sources, control):
+    # The worker owns the session until its current synchronous read has settled.
+    with SessionLocal() as db:
+        return prepare_stream_state(db, question, history, model, local_model, use_web, reasoning,
+                                    attachments, trace, project_sources=project_sources, control=control)
 
 
 @app.post("/api/chat/stream")
-async def chat_stream(body: ChatRequest):
-    """Server-sent events: `meta`, repeated `delta`, then `done` (or `error`).
+async def chat_stream(body: ChatRequest, request: Request):
+    """Server-sent events: `meta`, optional `status`, `delta`, then `done`/`error`.
 
     Stopping the client disconnects the request; whatever was generated is still
     persisted so history stays honest about what happened.
     """
-    if body.model not in (None, "auto", "qwen", "deepseek", "ollama"):
+    if body.model not in (None, "auto", "ollama", *CLOUD_PROVIDER_IDS):
         raise HTTPException(422, "不支持的模型")
     model = body.model or _selected_model
     try:
@@ -370,22 +462,23 @@ async def chat_stream(body: ChatRequest):
     except LocalModelError as exc:
         raise HTTPException(exc.status_code, str(exc)) from exc
     question = body.message.strip()
+    try:
+        validate_reasoning_request(model, question, local_model, body.reasoning)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    project_sources = await run_in_threadpool(resolve_project_sources, request, body.project)
+    stored_question = project_question_label(question, body.project)
     client_id = (body.client_id or "").strip()
     with SessionLocal() as db:
         if body.conversation_id:
-            conversation = db.get(Conversation, body.conversation_id)
-            if conversation is None:
-                raise HTTPException(404, "对话不存在")
-            if client_id and not conversation.client_id:
-                conversation.client_id = client_id
+            conversation = owned_conversation(db, request, body.conversation_id, client_id, claim_legacy=True)
             conversation_id = conversation.id
         else:
             conversation_id = str(uuid4())
-            db.add(Conversation(id=conversation_id, client_id=client_id))
+            db.add(Conversation(id=conversation_id, client_id=client_id, owner_user_id=conversation_owner(request)))
         if body.regenerate and body.conversation_id:
-            replace_trailing_exchange(db, conversation_id, question)
-        past = db.scalars(select(Message).where(Message.conversation_id == conversation_id).order_by(Message.id.desc()).limit(8)).all()
-        history = [{"role": item.role, "content": item.content} for item in reversed(past)]
+            replace_trailing_exchange(db, conversation_id, stored_question)
+        history = history_for_agent(db, conversation_id)
         db.commit()
 
     async def event_stream():
@@ -394,76 +487,121 @@ async def chat_stream(body: ChatRequest):
         final: dict | None = None
         error = ""
         streamed_from_model = False
+        trace = RunTrace()
+        metadata: dict = {}
+        control = ReadTaskControl() if uses_read_task(question, project_sources) else None
+        preparation_task = None
         yield sse_event("meta", {"conversation_id": conversation_id})
+        yield sse_event("status", {"phase": "preparing"})
         try:
-            with SessionLocal() as db:
-                prepared = await run_in_threadpool(prepare_stream_state, db, attachments_augmented(question, body.attachments), history, model, local_model, body.web, body.reasoning)
-                if "direct" in prepared:
-                    final = dict(prepared["direct"])
-                    parts.append(final["answer"])
-                    yield sse_event("delta", {"text": final["answer"]})
-                else:
-                    streamed_from_model = True
+            if control is not None:
+                yield sse_event("status", {"phase": "querying"})
+                preparation_task = asyncio.create_task(asyncio.to_thread(
+                    _prepare_read_stream_worker, question, history, model, local_model, body.web, body.reasoning,
+                    [item.model_dump() for item in body.attachments or []], trace, project_sources, control))
+                prepared = await asyncio.shield(preparation_task)
+                # Observe a disconnect queued after the final read but before publication.
+                await asyncio.sleep(0)
+            else:
+                with SessionLocal() as db:
+                    project_args = {"project_sources": project_sources} if body.project else {}
+                    prepared = await run_in_threadpool(prepare_stream_state, db, question, history, model, local_model,
+                                                       body.web, body.reasoning,
+                                                       [item.model_dump() for item in body.attachments or []], trace, **project_args)
+            if "direct" in prepared:
+                final = dict(prepared["direct"])
+                parts.append(final["answer"])
+                yield sse_event("delta", {"text": final["answer"]})
+            else:
+                streamed_from_model = True
+                metadata = {"sources": public_sources(prepared["sources"]), "tool_calls": [],
+                            "context": prepared.get("context", {}), "web": prepared.get("web", {})}
+                yield sse_event("status", {**metadata, "phase": "answering", "run": trace.snapshot("running")})
+                with trace.phase("answer") as step:
                     try:
-                        async for kind, chunk in stream_model(prepared["messages"], prepared["requested_model"], prepared.get("local_model"), prepared.get("reasoning")):
-                            if kind == "thinking":
-                                thinking_parts.append(chunk)
-                                yield sse_event("thinking", {"text": chunk})
-                            else:
-                                parts.append(chunk)
-                                yield sse_event("delta", {"text": chunk})
-                    except LocalModelError as exc:
+                        async with aclosing(stream_model(prepared["messages"], prepared["requested_model"], prepared.get("local_model"), prepared.get("reasoning"))) as chunks:
+                            async for kind, chunk in chunks:
+                                if kind == "thinking":
+                                    thinking_parts.append(chunk)
+                                    yield sse_event("thinking", {"text": chunk})
+                                else:
+                                    parts.append(chunk)
+                                    yield sse_event("delta", {"text": chunk})
+                    except (LocalModelError, ModelStreamError, ReasoningConfigurationError) as exc:
+                        step["status"] = "failed"
                         error = str(exc)
-                    if not error:
-                        text = "".join(parts)
-                        if text.strip():
-                            final = {"answer": text, "sources": public_sources(prepared["sources"]), "tool_calls": [],
-                                     "mode": "llm", "web": prepared.get("web", {})}
-                        else:
-                            fallback = prepared["fallback"]
-                            final = {**fallback, "sources": public_sources(prepared["sources"]), "tool_calls": [],
-                                     "web": prepared.get("web", {})}
-                            parts.append(fallback["answer"])
-                            yield sse_event("delta", {"text": fallback["answer"]})
+                if not error:
+                    text = "".join(parts)
+                    if text.strip():
+                        final = {**metadata, "answer": text, "mode": "llm"}
+                    else:
+                        fallback = prepared["fallback"]
+                        final = {**fallback, **metadata}
+                        parts.append(fallback["answer"])
+                        yield sse_event("delta", {"text": fallback["answer"]})
+        except asyncio.CancelledError:
+            if control is not None:
+                control.cancel()
+                if preparation_task is not None:
+                    # Cancellation stops subsequent reads, while cleanup waits for
+                    # the current read and its worker-owned session to close safely.
+                    with anyio.CancelScope(shield=True):
+                        prepared = await asyncio.shield(preparation_task)
+                    direct = prepared.get("direct", {})
+                    if trace.task is not None:
+                        trace.task = {**trace.task, "stop_reason": "cancelled"}
+                    metadata = {key: direct[key] for key in ("sources", "tool_calls", "context", "web", "mode") if key in direct}
+                    if not parts and direct.get("answer"):
+                        parts.append(direct["answer"])
+                    final = None
+            raise
+        except ReasoningConfigurationError as exc:
+            error = str(exc)
         except Exception:
             logger.exception("Streamed chat failed for conversation %s", conversation_id)
             error = error or "生成回答时发生错误，请稍后重试。"
         finally:
-            persist_stream_exchange(conversation_id, question, "".join(parts), final, error, streamed_from_model, "".join(thinking_parts))
+            run = trace.snapshot("completed" if final is not None and not error else ("partial" if parts or thinking_parts else "failed"))
+            metadata["run"] = run
+            if final is not None:
+                final["run"] = run
+            persist_stream_exchange(conversation_id, stored_question, "".join(parts), final, error, streamed_from_model,
+                                    "".join(thinking_parts), metadata)
         if error:
-            yield sse_event("error", {"message": error, "partial": "".join(parts), "conversation_id": conversation_id})
+            yield sse_event("error", {**metadata, "message": error, "partial": "".join(parts), "conversation_id": conversation_id})
         else:
             yield sse_event("done", {**(final or {"answer": "", "sources": [], "tool_calls": [], "mode": "demo"}),
                                      "conversation_id": conversation_id})
 
-    return StreamingResponse(event_stream(), media_type="text/event-stream",
+    async def tracked_event_stream():
+        with capture_usage(usage_identity(request, client_id), "chat", session_factory=SessionLocal):
+            # Explicitly close the inner generator before flushing on a stop or
+            # disconnect. Its finally first settles the history transaction.
+            async with aclosing(event_stream()) as events:
+                async for event in events:
+                    yield event
+
+    return StreamingResponse(tracked_event_stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@app.get("/api/usage")
+def token_usage(request: Request, db: Session = Depends(get_db),
+                client_id: str = Query(default="", max_length=64, pattern=r"^[A-Za-z0-9_-]*$"),
+                days: int = Query(default=7)):
+    if days not in (7, 30):
+        raise HTTPException(422, "统计范围须为 7 或 30 天")
+    return usage_summary(db, usage_identity(request, client_id), days)
+
+
 @app.get("/api/conversations")
-def list_conversations(db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64),
+def list_conversations(request: Request, db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64),
                        limit: int = Query(default=50, ge=1, le=200)):
-    conversations = db.scalars(select(Conversation).where(Conversation.client_id == client_id)).all()
-    items = []
-    for conversation in conversations:
-        rows = db.scalars(select(Message).where(Message.conversation_id == conversation.id).order_by(Message.id)).all()
-        if not rows:
-            continue
-        first_user = next((row for row in rows if row.role == "user" and row.content.strip()), None)
-        items.append({
-            "id": conversation.id,
-            "title": conversation.title or (first_user.content.strip().splitlines()[0][:40] if first_user else "新对话"),
-            "message_count": len(rows),
-            "updated_at": iso_utc(rows[-1].created_at or conversation.created_at),
-            "pinned": bool(conversation.pinned),
-        })
-    items.sort(key=lambda item: item["updated_at"], reverse=True)
-    items.sort(key=lambda item: item["pinned"], reverse=True)
-    return items[:limit]
+    return list_conversation_page(db, conversation_scope(request, client_id), limit)
 
 
 @app.get("/api/conversations/search")
-def search_conversations(db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64),
+def search_conversations(request: Request, db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64),
                          q: str = Query(min_length=1, max_length=100), limit: int = Query(default=20, ge=1, le=50)):
     """全文检索历史对话（提问与回答都参与匹配）；中文短词可用、% 与 _ 按字面义转义。"""
     query = q.strip()
@@ -471,7 +609,7 @@ def search_conversations(db: Session = Depends(get_db), client_id: str = Query(d
         return []
     escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     pattern = f"%{escaped}%"
-    owned = select(Conversation.id).where(Conversation.client_id == client_id)
+    owned = select(Conversation.id).where(conversation_scope(request, client_id))
     rows = db.scalars(select(Message).where(Message.conversation_id.in_(owned), Message.content.like(pattern, escape="\\"))
                       .order_by(Message.id.desc()).limit(500)).all()
     results: list[dict] = []
@@ -499,11 +637,9 @@ def search_conversations(db: Session = Depends(get_db), client_id: str = Query(d
 
 
 @app.patch("/api/conversations/{conversation_id}")
-def update_conversation(conversation_id: str, body: ConversationUpdate, db: Session = Depends(get_db),
+def update_conversation(conversation_id: str, body: ConversationUpdate, request: Request, db: Session = Depends(get_db),
                         client_id: str = Query(default="", max_length=64)):
-    conversation = db.get(Conversation, conversation_id)
-    if conversation is None or conversation.client_id != client_id:
-        raise HTTPException(404, "对话不存在")
+    conversation = owned_conversation(db, request, conversation_id, client_id)
     if body.title is not None:
         title = body.title.strip()
         conversation.title = title[:120] if title else None
@@ -514,9 +650,9 @@ def update_conversation(conversation_id: str, body: ConversationUpdate, db: Sess
 
 
 @app.post("/api/conversations/batch-delete")
-def batch_delete_conversations(body: ConversationBatchDelete, db: Session = Depends(get_db)):
+def batch_delete_conversations(body: ConversationBatchDelete, request: Request, db: Session = Depends(get_db)):
     ids = list(dict.fromkeys(body.ids))
-    owned = list(db.scalars(select(Conversation.id).where(Conversation.id.in_(ids), Conversation.client_id == body.client_id)).all())
+    owned = list(db.scalars(select(Conversation.id).where(Conversation.id.in_(ids), conversation_scope(request, body.client_id))).all())
     if owned:
         db.execute(delete(Message).where(Message.conversation_id.in_(owned)))
         db.execute(delete(Conversation).where(Conversation.id.in_(owned)))
@@ -525,10 +661,8 @@ def batch_delete_conversations(body: ConversationBatchDelete, db: Session = Depe
 
 
 @app.delete("/api/conversations/{conversation_id}")
-def delete_conversation(conversation_id: str, db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
-    conversation = db.get(Conversation, conversation_id)
-    if conversation is None or conversation.client_id != client_id:
-        raise HTTPException(404, "对话不存在")
+def delete_conversation(conversation_id: str, request: Request, db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
+    conversation = owned_conversation(db, request, conversation_id, client_id)
     db.execute(delete(Message).where(Message.conversation_id == conversation_id))
     db.delete(conversation)
     db.commit()
@@ -536,8 +670,8 @@ def delete_conversation(conversation_id: str, db: Session = Depends(get_db), cli
 
 
 @app.delete("/api/conversations")
-def clear_conversations(db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
-    ids = list(db.scalars(select(Conversation.id).where(Conversation.client_id == client_id)).all())
+def clear_conversations(request: Request, db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
+    ids = list(db.scalars(select(Conversation.id).where(conversation_scope(request, client_id))).all())
     if ids:
         db.execute(delete(Message).where(Message.conversation_id.in_(ids)))
         db.execute(delete(Conversation).where(Conversation.id.in_(ids)))
@@ -546,16 +680,16 @@ def clear_conversations(db: Session = Depends(get_db), client_id: str = Query(de
 
 
 @app.get("/api/conversations/{conversation_id}")
-def conversation_history(conversation_id: str, db: Session = Depends(get_db)):
-    if db.get(Conversation, conversation_id) is None:
-        raise HTTPException(404, "对话不存在")
+def conversation_history(conversation_id: str, request: Request, db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
+    owned_conversation(db, request, conversation_id, client_id)
     rows = db.scalars(select(Message).where(Message.conversation_id == conversation_id).order_by(Message.id)).all()
     return {"id": conversation_id, "messages": [{"role": row.role, "content": row.content, "created_at": row.created_at, **(row.result_data or {}), "id": row.id} for row in rows]}
 
 
 @app.post("/api/conversations/{conversation_id}/messages/{message_id}/feedback")
-def message_feedback(conversation_id: str, message_id: int, body: FeedbackRequest, db: Session = Depends(get_db)):
+def message_feedback(conversation_id: str, message_id: int, body: FeedbackRequest, request: Request, db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
     """用户对某条助手回答的「有帮助 / 没帮助」反馈；value 为 null 时清除。"""
+    owned_conversation(db, request, conversation_id, client_id)
     row = db.get(Message, message_id)
     if row is None or row.conversation_id != conversation_id or row.role != "assistant":
         raise HTTPException(404, "消息不存在")
@@ -621,11 +755,10 @@ def conversation_markdown(title: str, conversation_id: str, exported_at: str, ro
 
 
 @app.get("/api/conversations/{conversation_id}/export")
-def export_conversation(conversation_id: str, format: str = Query(default="md", pattern="^(md|json)$"),
-                        db: Session = Depends(get_db)):
+def export_conversation(conversation_id: str, request: Request, format: str = Query(default="md", pattern="^(md|json)$"),
+                        db: Session = Depends(get_db), client_id: str = Query(default="", max_length=64)):
     """Export one conversation as Markdown (for reading) or JSON (for tooling)."""
-    if db.get(Conversation, conversation_id) is None:
-        raise HTTPException(404, "对话不存在")
+    owned_conversation(db, request, conversation_id, client_id)
     rows = conversation_rows(db, conversation_id)
     if not rows:
         raise HTTPException(404, "对话不存在")
@@ -1000,10 +1133,10 @@ def put_model_config(provider: str, body: ModelProviderUpdate):
 
 
 @app.post("/api/models/test/{provider}", dependencies=[Depends(require_admin)])
-def test_model_config(provider: str):
-    if provider not in ("qwen", "deepseek", "ollama"):
+def test_model_config(provider: str, body: ModelProbeRequest | None = None):
+    if provider not in (*CLOUD_PROVIDER_IDS, "ollama"):
         raise HTTPException(404, "未知模型提供商")
-    return test_provider(provider)
+    return test_provider(provider, body.capability if body else "chat")
 
 
 @app.get("/api/models/local")
@@ -1083,37 +1216,56 @@ def sqlite_database_path() -> Path | None:
     return Path(url.removeprefix("sqlite:///"))
 
 
+# Publication is serialized within this backend process. Every request still uses
+# unique temporary paths; no crashed or overlapping request owns another's files.
+BACKUP_LOCK = threading.RLock()
+
+
 @app.get("/api/backup/export", dependencies=[Depends(require_admin)])
-def export_backup():
-    """Zip of knowledge base, conversations and configuration; SQLite is snapshotted through VACUUM INTO."""
+def export_backup(include_project_recoveries: bool = False):
+    """Snapshot app data and optional copy-only originals; never read a project."""
     data_dir = Path(get_settings().data_dir)
     data_dir.mkdir(parents=True, exist_ok=True)
-    files: dict[str, dict] = {}
-    database = "server-managed"
-    buffer = BytesIO()
-    with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+    with BACKUP_LOCK, tempfile.TemporaryDirectory(prefix=".mens-backup-", dir=data_dir) as temporary:
+        payloads = {}
+        database = "server-managed"
         database_path = sqlite_database_path()
         if database_path is not None and database_path.is_file():
             database = "sqlite"
-            snapshot = data_dir / ".mens-backup-snapshot.db"
-            snapshot.unlink(missing_ok=True)
-            try:
-                with engine.connect() as connection:
-                    connection.exec_driver_sql("VACUUM INTO ?", (str(snapshot),))
-                payload = snapshot.read_bytes()
-            finally:
-                snapshot.unlink(missing_ok=True)
-            archive.writestr("campus.db", payload)
-            files["campus.db"] = {"size": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+            snapshot = Path(temporary) / "snapshot.db"
+            with closing(sqlite3.connect(database_path.resolve().as_uri() + "?mode=ro", uri=True)) as source:
+                source.execute("PRAGMA query_only=ON")
+                source.execute("BEGIN")
+                with closing(sqlite3.connect(snapshot)) as target:
+                    source.backup(target)
+            if snapshot.stat().st_size > BACKUP_MAX_BYTES:
+                raise HTTPException(413, "备份内容超过 200 MB")
+            payloads["campus.db"] = snapshot.read_bytes()
         for name in BACKUP_CONFIG_FILES:
             path = data_dir / name
             if path.is_file():
-                payload = path.read_bytes()
+                with path.open("rb") as stream:
+                    payloads[name] = stream.read(BACKUP_MAX_BYTES + 1)
+        if include_project_recoveries:
+            try:
+                rows = export_materials(data_dir)
+                if rows:
+                    payloads["project-recovery.json"] = canonical({"materials": rows}).encode("utf-8")
+                    if len(payloads["project-recovery.json"]) > MAX_BUNDLE_BYTES:
+                        raise ValueError("serialized materials exceed 25 MiB")
+            except (ValueError, sqlite3.Error, OSError, TypeError) as exc:
+                raise HTTPException(400, "无法导出备份原文：内容无效或已超过保存上限。") from exc
+        if sum(map(len, payloads.values())) > BACKUP_MAX_BYTES:
+            raise HTTPException(413, "备份内容超过 200 MB")
+        files = {name: {"size": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
+                 for name, payload in payloads.items()}
+        manifest = {"app": "Mens", "format": 2 if include_project_recoveries else BACKUP_FORMAT,
+                    "created_at": iso_utc(datetime.now(timezone.utc)), "database": database, "files": files}
+        buffer = BytesIO()
+        with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+            for name, payload in payloads.items():
                 archive.writestr(name, payload)
-                files[name] = {"size": len(payload), "sha256": hashlib.sha256(payload).hexdigest()}
-        manifest = {"app": "Mens", "format": BACKUP_FORMAT, "created_at": iso_utc(datetime.now(timezone.utc)),
-                    "database": database, "files": files}
-        archive.writestr("mens-backup.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+            archive.writestr("mens-backup.json", json.dumps(manifest, ensure_ascii=False, indent=2))
     buffer.seek(0)
     filename = f"mens-backup-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
     return StreamingResponse(buffer, media_type="application/zip",
@@ -1121,70 +1273,82 @@ def export_backup():
                                       "Cache-Control": "no-store"})
 
 
+def _restore_backup(raw):
+    with BACKUP_LOCK:
+        try:
+            _, payloads = validate_zip(raw, BACKUP_CONFIG_FILES, BACKUP_MAX_BYTES)
+            materials = validate_bundle(payloads["project-recovery.json"]) if "project-recovery.json" in payloads else None
+        except (ValueError, TypeError, OverflowError) as exc:
+            raise HTTPException(400, "备份内容、清单或原文无效。") from exc
+        data_dir = Path(get_settings().data_dir)
+        data_dir.mkdir(parents=True, exist_ok=True)
+        restored, failed = [], []
+        counts = None
+        with tempfile.TemporaryDirectory(prefix=".mens-restore-", dir=data_dir) as temporary:
+            staging = Path(temporary)
+            if "campus.db" in payloads:
+                database_path = sqlite_database_path()
+                if database_path is None:
+                    raise HTTPException(400, "该部署使用服务器数据库，不能导入 SQLite 备份")
+                uploaded, clean = staging / "uploaded.db", staging / "clean.db"
+                uploaded.write_bytes(payloads["campus.db"])
+                try:
+                    stage_database(uploaded, clean, Base.metadata)
+                except (sqlite3.Error, ValueError, TypeError, OverflowError) as exc:
+                    raise HTTPException(400, "备份中的数据库结构或内容无效。") from exc
+            # Configuration staging also completes before any application mutation.
+            staged_configs = []
+            for name in BACKUP_CONFIG_FILES:
+                if name in payloads:
+                    try:
+                        (staging / name).write_bytes(payloads[name])
+                        staged_configs.append(name)
+                    except OSError:
+                        failed.append(name)
+                        logger.warning("Could not stage backup file %s", name)
+            publication = ProjectRecoveryArchive(data_dir).publication(materials) if materials is not None else nullcontext(None)
+            try:
+                with publication as counts:
+                    if "campus.db" in payloads:
+                        try:
+                            with closing(sqlite3.connect(clean)) as source, closing(sqlite3.connect(database_path)) as target:
+                                source.backup(target)
+                            restored.append("campus.db")
+                        except (sqlite3.Error, OSError):
+                            failed.append("campus.db")
+                            logger.warning("Could not restore backup database")
+                    for name in staged_configs:
+                        try:
+                            os.replace(staging / name, data_dir / name)
+                            restored.append(name)
+                        except OSError:
+                            failed.append(name)
+                            logger.warning("Could not restore backup file %s", name)
+            except ValueError as exc:
+                # Archive validation/quota happens before the publication body.
+                raise HTTPException(400, "备份原文超过保存上限，未导入。") from exc
+            except (sqlite3.Error, OSError):
+                failed.append("project-recovery.json")
+                counts = None
+                logger.warning("Could not restore backup originals")
+        result = {"restored": restored, "failed": failed,
+                  "restart_required": any(name in restored for name in (".env", "workspace.json"))}
+        if counts is not None:
+            result["project_recoveries"] = counts
+        logger.info("Backup imported: %s", ", ".join(restored) or "nothing")
+        return result
+
+
 @app.post("/api/backup/import", dependencies=[Depends(require_admin)])
 async def import_backup(file: UploadFile = File(...)):
-    """Restore a Mens backup; the live SQLite database is replaced through the backup API, never by file swap."""
+    """Validate the complete input before publishing app data or copy-only originals."""
     raw = await file.read(BACKUP_MAX_BYTES + 1)
     if len(raw) > BACKUP_MAX_BYTES:
         raise HTTPException(413, "备份文件超过 200 MB")
-    try:
-        archive = ZipFile(BytesIO(raw))
-    except BadZipFile as exc:
-        raise HTTPException(400, "不是有效的备份文件（zip）") from exc
-    with archive:
-        names = archive.namelist()
-        if "mens-backup.json" not in names:
-            raise HTTPException(400, "缺少备份清单 mens-backup.json")
-        allowed = {"mens-backup.json", "campus.db", *BACKUP_CONFIG_FILES}
-        if any(name not in allowed or "/" in name or "\\" in name for name in names):
-            raise HTTPException(400, "备份文件包含不允许的路径")
-        try:
-            manifest = json.loads(archive.read("mens-backup.json"))
-            payloads = {name: archive.read(name) for name in names if name != "mens-backup.json"}
-        except (ValueError, KeyError, OSError) as exc:
-            raise HTTPException(400, "备份内容无法读取") from exc
-    if not isinstance(manifest, dict) or manifest.get("app") != "Mens" or manifest.get("format") != BACKUP_FORMAT:
-        raise HTTPException(400, "备份格式不受支持")
-    data_dir = Path(get_settings().data_dir)
-    data_dir.mkdir(parents=True, exist_ok=True)
-    restored: list[str] = []
-    failed: list[str] = []
-    if "campus.db" in payloads:
-        database_path = sqlite_database_path()
-        if database_path is None:
-            raise HTTPException(400, "该部署使用服务器数据库，不能导入 SQLite 备份")
-        staging = data_dir / ".mens-restore-staging.db"
-        staging.write_bytes(payloads["campus.db"])
-        try:
-            # Validate the uploaded database before the live file is touched at all.
-            with closing(sqlite3.connect(staging)) as source:
-                tables = {row[0] for row in source.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-                if not {"conversations", "messages", "documents"} <= tables:
-                    raise HTTPException(400, "备份中的数据库不是 Mens 数据")
-                with closing(sqlite3.connect(database_path)) as target:
-                    source.backup(target)
-        except sqlite3.DatabaseError as exc:
-            raise HTTPException(400, "备份中的数据库无法读取") from exc
-        finally:
-            staging.unlink(missing_ok=True)
-        ensure_conversation_columns()
-        restored.append("campus.db")
-    for name in BACKUP_CONFIG_FILES:
-        if name in payloads:
-            temporary = data_dir / f".{name.lstrip('.')}.import"
-            try:
-                temporary.write_bytes(payloads[name])
-                os.replace(temporary, data_dir / name)
-                restored.append(name)
-            except OSError:
-                failed.append(name)
-                temporary.unlink(missing_ok=True)
-                logger.warning("Could not restore backup file %s", name)
-    logger.info("Backup imported: %s", ", ".join(restored) or "nothing")
-    return {"restored": restored, "failed": failed,
-            "restart_required": any(name in payloads for name in (".env", "workspace.json"))}
+    return await run_in_threadpool(_restore_backup, raw)
 
 
+app.include_router(project_router)
 install_desktop_routes(app)
 
 # 网站部署：把前端构建产物交给后端托管（桌面版走外壳自己的静态目录）。

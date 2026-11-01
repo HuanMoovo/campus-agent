@@ -1,9 +1,11 @@
 /* Offline shell for the installable web client (Android/iOS/desktop browsers).
  *
+ * Pages use the network first so rebuilding the same version refreshes its asset URLs.
  * Only same-origin GET requests are cached; API traffic always goes to the network so the
  * question-answering flow can never be served from a stale cache. The desktop app never
  * registers this worker (main.ts skips it when the Electron bridge is present). */
-const CACHE = 'mens-shell-__MENS_VERSION__'
+const CACHE_PREFIX = 'mens-shell-'
+const CACHE = `${CACHE_PREFIX}__MENS_VERSION__`
 const SHELL = ['./', './index.html', './favicon.png', './icon-192.png', './icon-512.png', './manifest.webmanifest']
 
 self.addEventListener('install', event => {
@@ -13,7 +15,7 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
+      .then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE).map(key => caches.delete(key))))
       .then(() => self.clients.claim()),
   )
 })
@@ -25,18 +27,28 @@ self.addEventListener('fetch', event => {
   if (url.origin !== self.location.origin || url.pathname.startsWith('/api')) return
   event.respondWith((async () => {
     const cache = await caches.open(CACHE)
-    const cached = await cache.match(request)
-    if (cached) return cached
-    try {
-      const response = await fetch(request)
-      if (response.ok && response.type === 'basic') cache.put(request, response.clone())
-      return response
-    } catch (error) {
-      if (request.mode === 'navigate') {
+    if (request.mode === 'navigate' || url.pathname.endsWith('.html')) {
+      let response
+      try {
+        response = await fetch(request)
+      } catch (error) {
         const shell = await cache.match('./index.html')
         if (shell) return shell
+        throw error
       }
-      throw error
+      if (response.ok) {
+        // Every successful page refreshes the shared fallback for offline routes.
+        // Cache storage is optional: a write failure must not hide a usable response.
+        if (response.type === 'basic') await cache.put('./index.html', response.clone()).catch(() => {})
+        return response
+      }
+      // A server error must never replace the last working offline shell.
+      return (await cache.match('./index.html')) || response
     }
+    const cached = await cache.match(request)
+    if (cached) return cached
+    const response = await fetch(request)
+    if (response.ok && response.type === 'basic') await cache.put(request, response.clone()).catch(() => {})
+    return response
   })())
 })

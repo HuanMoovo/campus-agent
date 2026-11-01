@@ -70,7 +70,7 @@ def test_streamed_chat_emits_sse_events_and_persists_history():
         assert done["answer"] and done["sources"] and done["mode"] == "demo"
         streamed = "".join(data["text"] for name, data in events if name == "delta")
         assert done["answer"] == streamed
-        history = client.get(f"/api/conversations/{conversation_id}").json()
+        history = client.get(f"/api/conversations/{conversation_id}", params={"client_id": client_id}).json()
         assert [row["role"] for row in history["messages"]] == ["user", "assistant"]
         assert history["messages"][-1]["content"] == done["answer"]
 
@@ -78,7 +78,8 @@ def test_streamed_chat_emits_sse_events_and_persists_history():
 def test_streamed_service_answers_get_one_delta_and_tool_record():
     with TestClient(app) as client:
         events = stream_chat(client, {"message": "查询我的课表"})
-        assert [name for name, _ in events] == ["meta", "delta", "done"]
+        assert [name for name, _ in events] == ["meta", "status", "delta", "done"]
+        assert events[1][1] == {"phase": "preparing"}
         done = events[-1][1]
         assert done["tool_calls"][0]["name"] == "schedule"
         assert done["mode"] == "demo"
@@ -115,7 +116,7 @@ def test_conversation_listing_and_deletion_are_client_scoped():
         cleared = client.delete("/api/conversations", params={"client_id": first_client}).json()
         assert cleared["deleted"] == 1
         assert client.get("/api/conversations", params={"client_id": first_client}).json() == []
-        assert client.get(f"/api/conversations/{other['conversation_id']}").status_code == 200
+        assert client.get(f"/api/conversations/{other['conversation_id']}", params={"client_id": second_client}).status_code == 200
 
 
 def test_legacy_conversations_are_claimed_by_their_next_message():
@@ -127,6 +128,75 @@ def test_legacy_conversations_are_claimed_by_their_next_message():
         assert reply.status_code == 200
         listed = [row["id"] for row in client.get("/api/conversations", params={"client_id": client_id}).json()]
         assert listed == [legacy["conversation_id"]]
+
+
+@pytest.mark.parametrize("path", ["/api/chat", "/api/chat/stream"])
+@pytest.mark.parametrize("regenerate", [False, True])
+def test_chat_rejects_other_clients_existing_conversations(path, regenerate):
+    with TestClient(app) as client:
+        owner, other = str(uuid4()), str(uuid4())
+        created = client.post("/api/chat", json={"message": "查询我的课表", "client_id": owner}).json()
+        response = client.post(path, json={"message": "查询我的课表", "conversation_id": created["conversation_id"],
+                                           "client_id": other, "regenerate": regenerate})
+        assert response.status_code == 404
+
+
+def test_conversation_history_export_and_feedback_require_client_scope():
+    with TestClient(app) as client:
+        owner, other = str(uuid4()), str(uuid4())
+        cid = client.post("/api/chat", json={"message": "查询我的课表", "client_id": owner}).json()["conversation_id"]
+        history = client.get(f"/api/conversations/{cid}", params={"client_id": owner}).json()
+        msgid = history["messages"][-1]["id"]
+        for suffix in ("", "/export"):
+            assert client.get(f"/api/conversations/{cid}{suffix}", params={"client_id": other}).status_code == 404
+            assert client.get(f"/api/conversations/{cid}{suffix}", params={"client_id": owner}).status_code == 200
+        assert client.post(f"/api/conversations/{cid}/messages/{msgid}/feedback", params={"client_id": other}, json={"value": "up"}).status_code == 404
+        assert client.post(f"/api/conversations/{cid}/messages/{msgid}/feedback", params={"client_id": owner}, json={"value": "up"}).status_code == 200
+
+
+def test_logged_in_user_owns_conversations_independently_of_client_id(monkeypatch):
+    from types import SimpleNamespace
+    from app import auth
+    from app import main as main_module
+    original_setting = auth.setting
+    monkeypatch.setattr(auth, "setting", lambda name, default: True if name == "auth_required" else original_setting(name, default))
+    monkeypatch.setattr(auth, "resolve_session", lambda db, token: SimpleNamespace(id=token) if token in ("alice", "bob") else None)
+    monkeypatch.setattr(main_module, "desktop_enabled", lambda: False)
+    with TestClient(app) as client:
+        client.cookies.set(auth.COOKIE_NAME, "alice")
+        cid = client.post("/api/chat", json={"message": "查询我的课表", "client_id": "browser-a"}).json()["conversation_id"]
+        mid = client.get(f"/api/conversations/{cid}", params={"client_id": "browser-b"}).json()["messages"][-1]["id"]
+        assert any(row["id"] == cid for row in client.get("/api/conversations", params={"client_id": "browser-b"}).json())
+        client.cookies.set(auth.COOKIE_NAME, "bob")
+        assert not any(row["id"] == cid for row in client.get("/api/conversations", params={"client_id": "browser-a"}).json())
+        for endpoint in (f"/api/conversations/{cid}", f"/api/conversations/{cid}/export"):
+            assert client.get(endpoint, params={"client_id": "browser-a"}).status_code == 404
+        assert client.post(f"/api/conversations/{cid}/messages/{mid}/feedback", params={"client_id": "browser-a"}, json={"value": "up"}).status_code == 404
+        assert client.patch(f"/api/conversations/{cid}", params={"client_id": "browser-a"}, json={"title": "wrong"}).status_code == 404
+        assert not any(row["id"] == cid for row in client.get("/api/conversations/search", params={"client_id": "browser-a", "q": "课表"}).json())
+        for path in ("/api/chat", "/api/chat/stream"):
+            assert client.post(path, json={"message": "查询我的课表", "conversation_id": cid, "client_id": "browser-a", "regenerate": True}).status_code == 404
+        assert client.delete(f"/api/conversations/{cid}", params={"client_id": "browser-a"}).status_code == 404
+        assert client.post("/api/conversations/batch-delete", json={"ids": [cid], "client_id": "browser-a"}).json()["deleted"] == 0
+        assert client.delete("/api/conversations", params={"client_id": "browser-a"}).json()["deleted"] == 0
+        monkeypatch.setattr(auth, "setting", lambda name, default: False if name == "auth_required" else original_setting(name, default))
+        assert client.get(f"/api/conversations/{cid}", params={"client_id": "browser-a"}).status_code == 404
+
+
+def test_unowned_legacy_conversation_not_claimed_in_login_mode(monkeypatch):
+    from types import SimpleNamespace
+    from app import auth
+    from app import main as main_module
+    original_setting = auth.setting
+    monkeypatch.setattr(main_module, "desktop_enabled", lambda: False)
+    with TestClient(app) as client:
+        cid = client.post("/api/chat", json={"message": "查询我的课表"}).json()["conversation_id"]
+        monkeypatch.setattr(auth, "setting", lambda name, default: True if name == "auth_required" else original_setting(name, default))
+        monkeypatch.setattr(auth, "resolve_session", lambda db, token: SimpleNamespace(id="alice") if token == "alice" else None)
+        client.cookies.set(auth.COOKIE_NAME, "alice")
+        assert client.get(f"/api/conversations/{cid}").status_code == 404
+        assert client.post("/api/chat", json={"message": "查询我的课表", "conversation_id": cid, "client_id": "browser-a"}).status_code == 404
+        assert client.post("/api/chat/stream", json={"message": "查询我的课表", "conversation_id": cid, "client_id": "browser-a"}).status_code == 404
 
 
 @pytest.mark.parametrize("client_id", ["../config", "a" * 65, "bad id", "换行\n"])
@@ -147,8 +217,10 @@ def test_client_id_column_is_added_to_pre_existing_databases(monkeypatch, tmp_pa
     db_module.ensure_conversation_columns()
     db_module.ensure_conversation_columns()
     assert "client_id" in {column["name"] for column in inspect(legacy).get_columns("conversations")}
+    assert "owner_user_id" in {column["name"] for column in inspect(legacy).get_columns("conversations")}
     with legacy.begin() as connection:
         assert connection.exec_driver_sql("SELECT client_id FROM conversations").scalar() == ""
+        assert connection.exec_driver_sql("SELECT owner_user_id FROM conversations").scalar() is None
 
 
 async def _collect(generator):

@@ -1,0 +1,31 @@
+/* Match the public Codex 26.1027 desktop UI's system and code font stacks.
+   Keep CJK fallbacks local; no proprietary font files or network font requests. */
+:root {
+  --font-ui: -apple-system-body, ui-sans-serif, -apple-system, system-ui,
+    "Segoe UI", "Helvetica", "Apple Color Emoji", "Arial", "PingFang SC",
+    "Microsoft YaHei", "Noto Sans CJK SC", sans-serif, "Segoe UI Emoji",
+    "Segoe UI Symbol";
+  --font-code: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", "PingFang SC", "Microsoft YaHei", monospace;
+  --el-font-family: var(--font-ui);
+  font-family: var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body, #app {
+  font-family: var(--font-ui);
+}
+
+button, input, textarea, select, optgroup, option {
+  font-family: inherit;
+}
+
+code, kbd, samp, pre,
+.markdown-body code,
+.log-view,
+.install-manifest pre,
+.data-path,
+.slash-item strong {
+  font-family: var(--font-code);
+}

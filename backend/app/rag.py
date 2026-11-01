@@ -1,4 +1,3 @@
-import re
 import hashlib
 import logging
 from threading import RLock
@@ -7,17 +6,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .compiled_documents import CompiledDocumentCache, chunks
 from .models import Document
 from .text_terms import terms
 
 logger = logging.getLogger(__name__)
-
-
-def chunks(text: str, size: int = 650, overlap: int = 90) -> list[str]:
-    if size <= 0 or overlap < 0 or overlap >= size:
-        raise ValueError("Chunk size must be positive and overlap must be smaller than size")
-    text = re.sub(r"\s+", " ", text).strip()
-    return [text[i:i + size] for i in range(0, len(text), size - overlap)] if text else []
 
 
 class KnowledgeIndex:
@@ -25,11 +18,20 @@ class KnowledgeIndex:
         self._collection = None
         self._embedder = None
         self._lock = RLock()
+        self._compiled = CompiledDocumentCache()
         self.last_error = False
 
     @staticmethod
     def _version(document: Document) -> str:
-        return hashlib.sha256((document.title + "\0" + document.content).encode("utf-8")).hexdigest()
+        # Length-prefix the title: titles/content may themselves contain NUL.
+        # The domain also invalidates legacy ambiguous vector versions; current
+        # keyword retrieval remains available until those documents are reindexed.
+        title = document.title.encode("utf-8")
+        digest = hashlib.sha256(b"campus-document-v2\0")
+        digest.update(len(title).to_bytes(8, "big"))
+        digest.update(title)
+        digest.update(document.content.encode("utf-8"))
+        return digest.hexdigest()
 
     def _vector(self):
         if not get_settings().enable_rag:
@@ -88,6 +90,16 @@ class KnowledgeIndex:
             return []
         docs = db.scalars(select(Document)).all()
         by_id = {doc.id: doc for doc in docs}
+        # Hash current SQL contents at most once per inspected document. Successful
+        # vector retrieval need not hash unrelated bodies in a large corpus.
+        versions: dict[str, str] = {}
+
+        def version(doc: Document) -> str:
+            if doc.id not in versions:
+                versions[doc.id] = self._version(doc)
+            return versions[doc.id]
+
+        self._compiled.prune(set(by_id))
         vector_matches = []
         try:
             with self._lock:
@@ -98,7 +110,7 @@ class KnowledgeIndex:
                     for meta, passage in zip(result["metadatas"][0], result["documents"][0]):
                         doc = by_id.get((meta or {}).get("document_id"))
                         # SQL is authoritative after a failed update or a disabled index.
-                        if doc is not None and (meta or {}).get("version") == self._version(doc) and passage:
+                        if doc is not None and (meta or {}).get("version") == version(doc) and passage:
                             vector_matches.append({"title": doc.title, "snippet": passage})
                             if len(vector_matches) == limit:
                                 self.last_error = False
@@ -110,10 +122,11 @@ class KnowledgeIndex:
         query_terms = terms(question)
         matches = []
         for doc in docs:
-            for part in chunks(doc.content):
-                score = len(query_terms & terms(doc.title + " " + part))
+            compiled = self._compiled.get(doc.id, version(doc), doc.title, doc.content)
+            for part, part_terms in compiled.passages:
+                score = len(query_terms & part_terms)
                 if score:
-                    matches.append((score, {"title": doc.title, "snippet": part}))
+                    matches.append((score, {"title": compiled.title, "snippet": part}))
         matches.sort(key=lambda row: row[0], reverse=True)
         seen = {(item["title"], item["snippet"]) for item in vector_matches}
         for _, item in matches:

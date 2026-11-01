@@ -183,12 +183,12 @@ class McpStdioClient:
         tools = result.get("tools")
         rows = []
         for tool in tools if isinstance(tools, list) else []:
-            if not isinstance(tool, dict) or not tool.get("name"):
+            if not isinstance(tool, dict) or not tool.get("name") or not isinstance(tool.get("inputSchema"), dict):
                 continue
             rows.append({
                 "name": str(tool["name"]),
                 "description": str(tool.get("description") or ""),
-                "inputSchema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {"type": "object", "properties": {}},
+                "inputSchema": tool["inputSchema"],
             })
         return sorted(rows, key=lambda row: row["name"])
 

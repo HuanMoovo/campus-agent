@@ -69,7 +69,7 @@ function onKeydown(event: KeyboardEvent) {
 </template>
 
 <style scoped>
-.command-palette { position: fixed; inset: 0; z-index: 60; background: rgba(18, 31, 34, .38); display: flex; justify-content: center; align-items: flex-start; padding: 14vh 16px 16px; }
+.command-palette { position: fixed; inset: 0; z-index: 60; background: var(--overlay); display: flex; justify-content: center; align-items: flex-start; padding: 14vh 16px 16px; }
 .palette-panel { width: min(560px, 100%); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 18px 50px #00000033; overflow: hidden; }
 .palette-input { width: 100%; border: 0; outline: 0; padding: 14px 16px; font-size: 14px; background: transparent; color: var(--text); border-bottom: 1px solid var(--border-subtle); font-family: inherit; }
 .palette-list { max-height: 320px; overflow-y: auto; padding: 6px; }

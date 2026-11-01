@@ -8,7 +8,8 @@ const path = require('node:path')
 const os = require('node:os')
 const vm = require('node:vm')
 
-test('desktop main process confines requests and IPC and waits for backend shutdown', async t => {
+for (const initialWorkspace of ['new', 'corrupt', 'unreadable']) {
+test(`desktop main process preserves ${initialWorkspace} workspace, confines IPC and waits for shutdown`, async t => {
   const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'campus-main-test-'))
   t.after(() => {
     assert.ok(path.resolve(temporary).startsWith(path.resolve(os.tmpdir()) + path.sep))
@@ -27,6 +28,10 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   let openPathError = ''
   let openPathRejected = false
   let menu
+  let projectDialogResult = { canceled: false, filePaths: [path.join(temporary, 'native-project')] }
+  let projectDialogHook = () => {}
+  let projectDialogCount = 0
+  const projectOpens = []
   let userData = temporary
   const app = new EventEmitter()
   Object.assign(app, {
@@ -83,19 +88,42 @@ test('desktop main process confines requests and IPC and waits for backend shutd
       async showSaveDialog(_window, options) {
         return { canceled: false, filePath: path.join(temporary, path.basename(options.defaultPath)) }
       },
-      async showOpenDialog() { return { canceled: false, filePaths: [path.join(temporary, 'picked-backup.zip')] } },
+      async showOpenDialog(_window, options) {
+        if (options.properties[0] === 'openDirectory') {
+          projectDialogCount++
+          assert.deepEqual(Array.from(options.properties), ['openDirectory'])
+          await projectDialogHook()
+          return projectDialogResult
+        }
+        return { canceled: false, filePaths: [path.join(temporary, 'picked-backup.zip')] }
+      },
     },
   }
   const directory = path.resolve(__dirname, '..')
   fs.mkdirSync(path.join(temporary, 'CampusAgent'), { recursive: true })
+  const workspaceFile = path.join(temporary, 'CampusAgent', 'workspace.json')
+  const oldClientId = 'b066f8b1-d2a5-4c34-bde7-9028c4262b34'
+  const oldWorkspace = JSON.stringify({ model: 'qwen3', conversationId: 'kept-conversation', clientId: oldClientId })
+  const originalBytes = initialWorkspace === 'corrupt' ? oldWorkspace.slice(0, -1) : oldWorkspace
+  if (initialWorkspace !== 'new') fs.writeFileSync(workspaceFile, originalBytes)
+  let readBlocked = initialWorkspace === 'unreadable'
   fs.writeFileSync(path.join(temporary, 'CampusAgent', 'window.json'),
     JSON.stringify({ width: 1111, height: 777, x: 900000, y: 900000, maximized: true }))
   vm.runInNewContext(fs.readFileSync(path.join(directory, 'main.cjs'), 'utf8'), {
     require(name) {
       if (name === 'electron') return mockElectron
+      if (name === 'node:fs') return { ...fs, readFileSync(file, ...args) {
+        if (file === workspaceFile && readBlocked) throw Object.assign(new Error('workspace temporarily unavailable'), { code: 'EACCES' })
+        return fs.readFileSync(file, ...args)
+      } }
       if (name === './lib/backend.cjs') return { startBackend() { return {
         ready: Promise.resolve({ origin: 'http://127.0.0.1:53321', token: 'test-token' }),
         async stop() { await Promise.resolve(); backendStopped = true },
+        async openProject(selected) {
+          projectOpens.push(selected)
+          return { available: true, project: { id: 'opaque-project', name: 'native-project' },
+            limits: { max_files: 4, max_context_chars: 16000 } }
+        },
       } } }
       return name.startsWith('.') ? require(path.join(directory, name)) : require(name)
     },
@@ -105,6 +133,19 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   await startup
   const web = activeWindow.webContents
   const valid = { sender: web, senderFrame: web.mainFrame }
+  if (initialWorkspace !== 'new') {
+    assert.equal(fs.readFileSync(workspaceFile, 'utf8'), originalBytes)
+    assert.throws(() => handlers.get('campus:load-workspace')(valid))
+    assert.throws(() => handlers.get('campus:save-workspace')(valid, { model: 'auto', conversationId: '', clientId: 'replacement' }))
+    assert.equal(fs.readFileSync(workspaceFile, 'utf8'), originalBytes)
+    readBlocked = false
+    if (initialWorkspace === 'corrupt') fs.writeFileSync(workspaceFile, oldWorkspace)
+    const recovered = handlers.get('campus:load-workspace')(valid)
+    assert.equal(recovered.clientId, oldClientId)
+    assert.equal(recovered.conversationId, 'kept-conversation')
+    assert.equal(recovered.model, 'qwen3')
+    assert.equal(fs.readFileSync(workspaceFile, 'utf8'), oldWorkspace)
+  }
   assert.equal(activeWindow.options.width, 1111)
   assert.equal(activeWindow.options.height, 777)
   assert.equal(activeWindow.options.x, undefined)
@@ -130,13 +171,66 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   assert.equal(info.dataPath, path.join(temporary, 'CampusAgent'))
   assert.equal('token' in info, false)
   assert.throws(() => handlers.get('campus:info')({ sender: web, senderFrame: { url: 'http://127.0.0.1:53321' } }))
+  assert.equal('projectGrantToken' in info, false)
+  assert.equal('CAMPUS_PROJECT_GRANT_TOKEN' in info, false)
+  assert.equal(headers['X-Campus-Project-Grant'], undefined)
+  const pickProject = handlers.get('campus:pick-project')
+  assert.equal(typeof pickProject, 'function')
+  for (const invalid of [
+    { sender: {}, senderFrame: web.mainFrame },
+    { sender: web, senderFrame: { url: 'http://127.0.0.1:53321' } },
+  ]) await assert.rejects(pickProject(invalid))
+  web.mainFrame.url = 'https://evil.example'
+  await assert.rejects(pickProject(valid))
+  web.mainFrame.url = 'http://127.0.0.1:53321'
+  assert.equal(projectDialogCount, 0)
+  const selectedProject = await pickProject(valid, 'C:\\renderer-controlled', { path: '/renderer-path' })
+  assert.deepEqual(JSON.parse(JSON.stringify(selectedProject)), {
+    picked: true, available: true, project: { id: 'opaque-project', name: 'native-project' },
+    limits: { max_files: 4, max_context_chars: 16000 },
+  })
+  assert.deepEqual(projectOpens, [path.join(temporary, 'native-project')])
+  for (const result of [{ canceled: true, filePaths: [path.join(temporary, 'ignored')] },
+    { canceled: false, filePaths: [] }, { canceled: false }]) {
+    projectDialogResult = result
+    assert.equal((await pickProject(valid)).picked, false)
+  }
+  assert.equal(projectOpens.length, 1)
+  projectDialogResult = { canceled: false, filePaths: [path.join(temporary, 'another-project')] }
+  projectDialogHook = () => { web.mainFrame.url = 'https://evil.example' }
+  await assert.rejects(pickProject(valid))
+  web.mainFrame.url = 'http://127.0.0.1:53321'
+  assert.equal(projectOpens.length, 1)
+  const priorFrame = web.mainFrame
+  projectDialogHook = () => { web.mainFrame = { url: 'http://127.0.0.1:53321' } }
+  await assert.rejects(pickProject(valid))
+  web.mainFrame = priorFrame
+  projectDialogHook = () => {}
   handlers.get('campus:save-workspace')(valid, { model: 'deepseek', conversationId: 'c-123' })
   assert.equal(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8')).conversationId, 'c-123')
   assert.match(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8')).clientId, /^[0-9a-f-]{36}$/)
+  handlers.get('campus:save-workspace')(valid, { onboardingDone: true })
+  assert.equal(JSON.parse(fs.readFileSync(workspaceFile, 'utf8')).onboardingDone, true)
+  assert.equal(handlers.get('campus:load-workspace')(valid).onboardingDone, true)
+  const completedWorkspace = fs.readFileSync(workspaceFile, 'utf8')
+  for (const onboardingDone of ['true', 1, null, undefined]) {
+    assert.throws(() => handlers.get('campus:save-workspace')(valid, { onboardingDone }))
+    assert.equal(fs.readFileSync(workspaceFile, 'utf8'), completedWorkspace)
+  }
+  assert.throws(() => handlers.get('campus:save-workspace')({ sender: web, senderFrame: { url: 'http://127.0.0.1:53322' } }, { onboardingDone: true }))
+  assert.equal(fs.readFileSync(workspaceFile, 'utf8'), completedWorkspace)
   assert.throws(() => handlers.get('campus:save-workspace')(valid, { clientId: '../escape' }))
-  assert.throws(() => handlers.get('campus:save-workspace')(valid, { reasoning: 'ultra' }))
-  handlers.get('campus:save-workspace')(valid, { reasoning: 'deep' })
-  assert.equal(JSON.parse(fs.readFileSync(path.join(info.dataPath, 'workspace.json'), 'utf8')).reasoning, 'deep')
+  for (const reasoning of ['auto', 'low', 'medium', 'high', 'xhigh', 'max', 'fast', 'deep']) {
+    handlers.get('campus:save-workspace')(valid, { reasoning })
+    assert.equal(JSON.parse(fs.readFileSync(workspaceFile, 'utf8')).reasoning, reasoning)
+    assert.equal(handlers.get('campus:load-workspace')(valid).reasoning, reasoning)
+  }
+  const savedReasoningWorkspace = fs.readFileSync(workspaceFile, 'utf8')
+  for (const reasoning of ['ultra', '', null, undefined, true, 1, [], {}]) {
+    assert.throws(() => handlers.get('campus:save-workspace')(valid, { reasoning }))
+    assert.equal(fs.readFileSync(workspaceFile, 'utf8'), savedReasoningWorkspace)
+    assert.equal(handlers.get('campus:load-workspace')(valid).reasoning, 'deep')
+  }
   const backupBytes = new Uint8Array([7, 8, 9, 10])
   const savedBackup = await handlers.get('campus:save-backup')(valid, { name: 'mens-backup-2026-10-01.zip', bytes: backupBytes })
   assert.equal(savedBackup.saved, true)
@@ -225,6 +319,7 @@ test('desktop main process confines requests and IPC and waits for backend shutd
   assert.equal(backendStopped, true)
   assert.equal(processQuit, true)
 })
+}
 
 test('preload exposes a frozen narrow surface with a single validated HTTPS opener', async () => {
   let exposed
@@ -240,12 +335,19 @@ test('preload exposes a frozen narrow surface with a single validated HTTPS open
   })
   assert.equal(Object.isFrozen(exposed), true)
   assert.deepEqual(Object.keys(exposed).sort(), [
-    'getInfo', 'isDesktop', 'loadWorkspace', 'openBaike', 'openDataFolder', 'openExternal',
-    'openOllamaDownload', 'pickBackup', 'readLog', 'restart', 'saveBackup', 'saveExport', 'saveWorkspace',
+    'changeProjectFile', 'getInfo', 'isDesktop', 'loadWorkspace', 'openBaike', 'openDataFolder', 'openExternal',
+    'openOllamaDownload', 'pickBackup', 'pickProject', 'projectChangeStatus', 'projectChanges', 'projectRecoveryOriginal', 'readLog', 'restart', 'saveBackup', 'saveExport', 'saveWorkspace', 'setProjectPermission',
   ])
+  await exposed.pickProject('C:\\renderer-controlled')
   await exposed.openBaike('大学')
   await exposed.openOllamaDownload('https://evil.example')
   await exposed.openExternal('https://example.edu/notice/1')
-  assert.deepEqual(calls, [['campus:open-baike', '大学'], ['campus:open-ollama-download'],
-                           ['campus:open-external-https', 'https://example.edu/notice/1']])
+  await exposed.changeProjectFile('root', 'proposal', 'apply', { path: 'renderer-path' })
+  await exposed.projectChangeStatus('root', 'operation')
+  await exposed.projectChanges('root', 'https://evil.example')
+  await exposed.projectRecoveryOriginal('root', 'recovery')
+  await exposed.setProjectPermission('read_only', { path: 'ignored' })
+  assert.deepEqual(calls, [['campus:pick-project'], ['campus:open-baike', '大学'], ['campus:open-ollama-download'],
+                           ['campus:open-external-https', 'https://example.edu/notice/1'], ['campus:change-project-file', 'root', 'proposal', 'apply'],
+                           ['campus:project-change-status', 'root', 'operation'], ['campus:project-changes', 'root'], ['campus:project-recovery-original', 'root', 'recovery'], ['campus:set-project-permission', 'read_only']])
 })

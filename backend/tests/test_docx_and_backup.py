@@ -116,7 +116,7 @@ def test_backup_round_trip_restores_deleted_conversations(monkeypatch, tmp_path)
         assert restored.status_code == 200
         body = restored.json()
         assert "campus.db" in body["restored"] and body["failed"] == []
-        history = client.get(f"/api/conversations/{created['conversation_id']}")
+        history = client.get(f"/api/conversations/{created['conversation_id']}", params={"client_id": client_id})
         assert history.status_code == 200
         assert [row["role"] for row in history.json()["messages"]] == ["user", "assistant"]
 
@@ -157,6 +157,6 @@ def test_backup_import_rejects_foreign_or_unsafe_archives(monkeypatch, tmp_path)
         assert client.post("/api/backup/import", headers=HEADERS, files={
             "file": ("x.zip", zip_bytes([("mens-backup.json", manifest), ("campus.db", b"not a database")]), "application/zip")}).status_code == 400
         # A rejected import must leave the live database untouched.
-        assert client.get(f"/api/conversations/{survivor['conversation_id']}").status_code == 200
+        assert client.get(f"/api/conversations/{survivor['conversation_id']}", params={"client_id": "import-guard"}).status_code == 200
         listed = client.get("/api/conversations", params={"client_id": "import-guard"}).json()
         assert [row["id"] for row in listed] == [survivor["conversation_id"]]

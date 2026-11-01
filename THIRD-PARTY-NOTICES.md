@@ -24,6 +24,8 @@ Mens 校园助手本体以 **Apache License 2.0**（见 [LICENSE](LICENSE)，版
 | Pydantic / pydantic-settings | MIT |
 | SQLAlchemy | MIT |
 | LangGraph / LangChain Core / langgraph-sdk | MIT |
+| jsonschema / jsonschema-specifications / referencing | MIT |
+| attrs / rpds-py（JSON Schema 校验依赖） | MIT |
 | httpx / httpcore | BSD-3-Clause |
 | pypdf | BSD-3-Clause |
 | python-multipart | Apache-2.0 |
@@ -53,5 +55,5 @@ Bing / Tavily / 博查 搜索服务）。这些服务由其提供方按其自身
 
 ## 品牌资源
 
-仓库中的 `assets/branding/mens-source.png` 及由其生成的全部图标（`.ico` / `.icns` / PNG）
+仓库中的原始品牌资源、`frontend/src/assets/mens-mark.svg` 及由其生成的图标（`.ico` / `.icns` / PNG）
 为本项目自有资源，随项目一并按 Apache License 2.0 提供。

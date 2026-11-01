@@ -60,13 +60,25 @@ assistant is meant to be.
 | Conversation isolation | Desktop builds are isolated per machine, web builds per browser; individual conversations can be deleted or all cleared |
 | Honest labelling | Demo data, degraded retrieval and web sources are all labelled in the interface |
 | Conversation export | Any conversation can be exported as Markdown (for reading) or JSON (for tooling), including source links, tool calls and demo-data labels; the desktop app uses a save dialog and the web app downloads directly |
-| Reasoning effort | A two-level switch at the right of the input bar: Fast answers directly; Deep enables the model's thinking chain (Ollama think, Qwen enable_thinking, DeepSeek switches to its reasoning model) for more thorough but slower answers; the choice applies per request and is remembered on this machine |
+| Reasoning effort | Default, Low, Medium, High, Extra high and Maximum are enabled according to the selected model and interface. Choices are saved locally and sent per request using reasoning.effort (Responses) or reasoning_effort (Chat Completions). Custom endpoints can declare supported levels in advanced settings. Thinking switches remain separate; automatic routing uses the default policy |
+| Project changes | Preview an existing text file and generate a proposal with the current model and reasoning effort. Review the full diff, original and revised text, including BOM and line endings. On supported Windows projects, apply, undo or keep a change through a separate native confirmation for each action; see the limits below |
 | Thinking trace | In Deep mode the model's thinking streams live, auto-expands while thinking and folds once the answer starts; it can be re-opened anytime, is saved with the conversation and survives a reload |
 | Rich answers | Answers render as Markdown — headings, lists, tables, highlighted code blocks, quotes and links; HTML is sanitized and links open in the system browser on the desktop build |
 | Message actions | Every answer carries an action row: Copy the raw text, Regenerate (replaces that answer — no duplicate Q&A left in history), Retry in Deep (a one-off deep answer that does not change your saved effort), and Helpful / Not helpful (saved with the conversation; click again to undo) |
 | Attachments | Attach files by drag & drop, paste or the file picker: text files are read directly, PDF / Word go through the extraction endpoint (≤ 5 MB each); up to 3 attachments, injected into that request only — history keeps the question plus an "[attachments]" file note |
 | Command palette & slash commands | `Ctrl + K` opens it — type to filter (new chat, history, export, page switching, theme …), ↑ / ↓ then Enter; typing `/` in the composer opens slash commands (`/new`, `/history`, `/export`, `/theme`) |
 | History tools | Full-text search over questions and answers (with hit snippets), rename, pin and batch delete; everything works on touch devices without hover |
+
+### Project files and confirmed changes
+
+The composer’s **Project permission** selector offers **Read only** and **Confirm changes**, saved locally. Desktop defaults to Confirm changes; the web version stays read only. It controls only this app’s native project apply, revert and keep operations. Previewing, proposals, copying originals, status checks and recovery archives remain available in read-only mode. Confirm changes still requires native confirmation for each action. Switching to read only revokes the main process’s in-memory permission before saving; a disk failure keeps changes disabled, and Confirm changes takes effect only after a successful save. Save failures are shown in the interface. This setting does not control OS, MCP or sandbox permissions or offer full access. See the [permission specification](docs/superpowers/specs/2026-10-31-project-permission-selector-design.md).
+
+Choose a project through the desktop directory picker, then explicitly select the file to send to the model. Generating or reviewing a proposal does not modify the project. Applying changes is limited to **one existing UTF-8 file on a local Windows NTFS volume**, at most **12,000 characters, 64 KiB and 2,000 lines**; oversized files are refused rather than truncated. There is no terminal execution, multi-file editing, file creation/deletion/renaming command or automatic Git commit.
+
+- **Confirm each action.** Apply, undo and keep each require a native desktop confirmation. Undo requires the current file identity and complete raw-byte SHA-256 to match the version produced by that change; later edits or replacements cause a conflict instead of being overwritten. Keep ends the recovery record and releases its slot without modifying the file. The original text remains available for copying when a version conflict prevents undo.
+- **Copy-on-write with explicit failure states.** The original file object is never written in place. A completed staging file is published using two handle-based renames that refuse to replace an occupied name. This is **not a crash-atomic transaction**: the original name can briefly be absent, and interruption can leave staging/backup files requiring manual recovery. For pending or uncertain results, inspect the recorded status and copy the original if needed; queries never automatically replay project writes.
+- **Persistent local recovery.** `dataDir/project-changes.sqlite3` stores the selected original bytes, version hashes, operation states and the root's physical identity, rather than its absolute root path. Recovery survives proposal expiry, project closure and restart. To inspect, undo or copy an old original, the user must select the same physical root again. These stored originals stay on the local machine and recovery actions do not resend them to the model. At most 32 unresolved and 32 resolved original-byte recovery records are retained; resolved records may be evicted.
+- **Limited Windows metadata support.** The original owner, group and integrity label must match the new staging file. The DACL, including its protected state, is copied and verified. Read-only, system, reparse, encrypted, compressed and sparse files, named alternate data streams, and other unsupported attributes are refused. Files with custom audit SACL rules are outside the supported scope: Mens does not enable `SeSecurityPrivilege` or claim to preserve the complete Windows security descriptor.
 
 ### Knowledge base and retrieval
 
@@ -101,6 +113,14 @@ assistant is meant to be.
 | Local records | Submitted requests are listed newest first so the result can be confirmed |
 | Demo data | Unconfigured endpoints return clearly labelled demo data instead of pretending a school system is connected |
 
+### Bounded campus read tasks (P4A)
+
+Explicitly request grades, schedule, earned credits or available classrooms in the current message using the supported Chinese command vocabulary, for example `查询我的成绩和课表` (“query my grades and schedule”). The app runs up to **3 distinct built-in reads in the requested order**, deduplicating repeated requests. Asking for all four starts no reads and asks you to narrow the request. History, attachments, project text and model or tool results cannot grant further reads. Denials, policy explanations and document/code discussions do not trigger personal-data reads merely by naming a service.
+
+A **20-second cooperative budget** checks time and cancellation before each read and after it returns. This is not a hard timeout: an in-flight synchronous call may finish after the budget, while cancellation prevents subsequent reads. There are no automatic retries or extra model calls for planning or formatting. Each result is limited to 4,000 characters, with 12,000 result characters overall and visible truncation markers. Successful results survive independent failures, and each section labels demo data or the school API separately.
+
+Ordinary HTTP and SSE share the runner. On an SSE disconnect, the worker finishes its current call and saves completed evidence and the truthful partial/failed state to history. Collapsed run details show attempts, stop reason and truncation. This stage adds no durable task resume, MCP batching or broader file access. See the [P4A specification](docs/superpowers/specs/2026-10-31-bounded-campus-reads-design.md).
+
 ### Model access
 
 | Mode | Notes |
@@ -111,14 +131,30 @@ assistant is meant to be.
 | Download reliability | Resumable downloads, pinned versions, SHA-256 verification and import retries, with progress and cancel |
 | Degradation | Without a key or when a model is unavailable, the app plans with rules and quotes knowledge-base passages, labelled as such |
 
+### Settings and token usage
+
+- Settings are grouped into General, Models, Token usage, Connections, and Data & app. The monochrome theme remains, switching groups preserves unsaved model/connection drafts, and diagnostic details stay collapsed until needed.
+- Token usage shows the last 7 or 30 UTC calendar days: input, output, reported total, daily trends, model distribution, and daily details. Tracking starts with this feature; old chat text is not backfilled and these records are not a provider billing statement.
+- Missing counts appear as “—”, with separate partial/unreported request counts. Stopped or failed snapshots may be incomplete; cache/reasoning breakdowns are not added to totals again. Connection tests are excluded, and rule-based answers do not create model requests.
+- For Chat Completions endpoints that support it, enable `stream_usage` under the model's advanced compatibility options. It is off by default to preserve compatibility with gateways that reject this parameter; other supported protocols use their own returned usage fields.
+- Desktop usage covers the local app's unowned records; authenticated websites scope by account, and anonymous websites by client. Deleting or regenerating chats does not erase usage. Normal database backups include the new table, while old backups remain importable.
+
+See the [settings and usage implementation notes](docs/research/2026-10-31-settings-token-usage.md).
+
 ### Data, backup and updates
 
 | Feature | Notes |
 | --- | --- |
-| Backup export | One click exports a zip with the knowledge base, conversations, model and campus-endpoint settings; SQLite is snapshotted consistently with `VACUUM INTO` and a SHA-256 manifest of every file is included |
-| Backup import | Verified and restored, so a new machine or a reinstall can be brought back completely (the zip contains key files — keep it safe) |
+| Backup export | Format 1 is the default: knowledge base, conversations, model and campus-endpoint settings, a consistent SQLite backup API snapshot, and a size/SHA-256 manifest. The optional “Include project recovery originals” checkbox exports format 2 |
+| Backup import | Validates the complete ZIP, manifest, materials and database before restoring application data and settings. Optional originals merge as copy-only materials, with imported/duplicate counts (the zip contains key files — keep it safe) |
 | Update check | Once an administrator sets an HTTPS manifest, Settings can check for a newer version and open the download page; leaving it empty keeps the feature entirely offline |
 | Version consistency | The build script refuses to package unless the desktop, frontend and backend versions agree |
+
+The include-originals checkbox is unchecked by default. Ordinary format 1 backups exclude project recovery originals. Selecting it sends `include_project_recoveries=true` and produces format 2, optionally containing controlled `project-recovery.json` materials from live recovery originals and previously imported materials. Each bundle and the retained local archive are limited to 256 materials and 16 MiB of original bytes; the JSON limit is 25 MiB. Each original still has the 64 KiB / 12,000-character / 2,000-line limit. Exceeding the limits fails explicitly without silently evicting originals.
+
+Import transactionally merges materials into the separate `project-recovery-archive.sqlite3`, deduplicating by physical root, relative path and original-byte hash. These materials offer copying only. Import preserves the live `project-changes.sqlite3`, operation states and replay-prevention tombstones, grants no old undo authority, and writes no project files. Select the same physical directory again through the native picker to copy originals in the separate backup-material section. Another device or a copied directory is not automatically associated. Neither backup mode includes the project working tree or executable recovery operation state.
+
+Old format 1 backups remain supported. Import rejects duplicate, unknown or unsafe ZIP entries, bounds each entry and total uncompressed content to 200 MB, and checks applicable manifest sizes and SHA-256 hashes; format 2 requires exact manifest correspondence. Uploaded databases are rebuilt using the trusted application schema before publication, without executing uploaded triggers or views. Requests use separate staging directories, and import/export publication is serialized. Invalid inputs fail before application data changes; runtime I/O failures may still leave partial application or configuration restoration, so cross-database/filesystem crash atomicity is not guaranteed.
 
 ### Desktop experience
 
@@ -363,7 +399,7 @@ Field layouts, value paths and examples for the nine endpoints are in
 - **Local first**: the desktop backend listens only on a random port on `127.0.0.1` with a one-time token per start; the shell injects an extra request header and tightens Electron (`nodeIntegration:false`, `contextIsolation:true`, `sandbox:true`, `webSecurity:true`, `webviewTag` disabled), so outside pages cannot reach those endpoints.
 - **Outbound discipline** (plugins, web search and update checks share it): HTTPS on 443 only; the connection is pinned to a resolved and validated public address (SNI preserved against DNS rebinding); redirects are refused; responses have size and timeout caps; system proxy environment variables are ignored (`trust_env=False`); anything resolving to a private address is rejected outright.
 - **Key storage**: Windows uses DPAPI; macOS and Linux have no equivalent system facility, so keys go into a plain file with `0600` permissions readable by the same user only — stated plainly in [PLATFORMS.md](docs/PLATFORMS.md).
-- **Backups**: the exported zip contains key files, so keep it safe; imports verify the SHA-256 manifest first.
+- **Backups**: the exported zip contains key files, so keep it safe. Selecting recovery originals also includes original source contents. Import validates the manifest and contents first; optional originals merge as copy-only materials and do not restore project-write authority.
 - **Nothing is faked**: demo data, degraded retrieval and web sources are always labelled.
 
 ### Repository layout
@@ -382,19 +418,38 @@ campus-agent/
 └─ README.md etc.   Trilingual READMEs, CHANGELOG, CONTRIBUTING / LICENSE / NOTICE
 ```
 
+## Performance refactor (2026-10-31)
+
+This wave separates measured hot paths into focused modules while retaining the interface and permission boundaries:
+
+| Module | Current behavior |
+| --- | --- |
+| `frontend/src/ui.ts` | Production and integration tests share an installer for the 19 used Element Plus components plus Loading; existing CSS is retained |
+| `ChatMarkdown` and scrolling | Unchanged messages are not parsed again; the first streamed text renders immediately, subsequent renders are at most once per 80 ms, and completion, failure or stop flushes the final text synchronously; scroll scheduling is coalesced |
+| `history_queries.py` | Ownership filtering precedes pin/activity/ID pagination; a page uses at most two SQL queries without fetching complete answers or result JSON |
+| Model configuration | Each status enumeration reads one fresh operation-local snapshot, reducing storage reads from 29 to 1; the next call observes new settings, with no credential cache across requests |
+| Planning and recovery lists | Deterministic branches avoid one planner model request when MCP planning is unnecessary; `ProjectRecoveryList` merges refresh signals, keeps one read in flight per root and discards dirty results before one follow-up read |
+| `compiled_documents.py` | Immutable passages and token sets use stable admission with a default 32 MiB / 2,048-entry limit; retrieval still reads current SQL documents and checks content hashes |
+
+Using the same build measurement, frontend JS fell from **1,430,135 to 853,863 bytes (−40.3%)**, and gzip from **449,828 to 275,318 bytes**. A synthetic SQLite history with 1,000 conversations / 40,000 messages and a page of 50 fell from **1,001 to 2 SQL queries**, with median time **320.293 → 9.083 ms**. Synthetic retrieval times for the old implementation / new cold / new warm cache were **69.910 / 90.768 / 2.438 ms** for 100 documents and **336.510 / 400.848 / 26.599 ms** for 500. Cold caches and small budgets can add overhead; SQL still loads the full corpus. These are build measurements and synthetic microbenchmarks, not desktop launch timings or live provider measurements. See the [results and limits](docs/research/2026-10-31-performance-refactor-results.md).
+
+**Vector index compatibility:** Document version hashes now use a separate domain and UTF-8 length framing to distinguish titles/content containing NUL. Existing vector versions become stale; correct keyword fallback remains available until documents are reindexed or the index is rebuilt. Authentication, project grants and NTFS identity/full-hash checks are not cached.
+
 ## Tests and verification
 
+Final validation for this wave: backend **1,349 passed, 2 skipped, 87 subtests passed**; frontend **298 passed**; desktop **46 passed**; Vue type checking and the production build passed. Tests used synthetic data and empty configuration, with no real keys, personal projects, school or model calls; installers were not rebuilt. The earlier P4A counts of 1,312 / 285 / 46 remain historical batch evidence.
+
 ```powershell
-# Backend (394 cases, 65 subtests)
+# Backend
 cd backend
 .venv\Scripts\python -m pytest -q
 
-# Frontend (29 unit tests) and production build
+# Frontend and production build
 cd ..\frontend
 npm test
 npm run build
 
-# Desktop shell (9 tests)
+# Desktop shell
 cd ..\desktop
 npm test
 

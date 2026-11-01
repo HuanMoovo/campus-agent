@@ -88,6 +88,17 @@ def test_repair_history_requires_admin_and_lists_newest_first():
         assert {"id", "location", "issue", "contact", "status"} <= set(rows[0])
 
 
+def test_local_repair_history_remains_demo_after_school_source_is_configured():
+    with TestClient(app) as client:
+        created = client.post("/api/services/repairs", json={
+            "location": "A101", "issue": "灯具无法正常点亮", "contact": "test@example.edu"})
+        assert created.json()["demo"] is True
+        with patch("app.services.campus_data.configured", return_value=True):
+            listed = client.get("/api/services/repairs", headers={"X-Admin-Token": "test-admin-token"}).json()
+        assert any(row["id"] == created.json()["id"] for row in listed["items"])
+        assert listed["demo"] is True
+
+
 def test_plugin_manifest_and_patch_validation():
     with TestClient(app) as client:
         headers = {"X-Admin-Token": "test-admin-token"}
@@ -121,7 +132,7 @@ def test_chat_model_switch_is_request_scoped_and_preserves_history():
     with TestClient(app) as client:
         seen = []
 
-        def answer(db, question, history, model, local_model=None, use_web=False, reasoning=None):
+        def answer(db, question, history, model, local_model=None, use_web=False, reasoning=None, attachments=None):
             seen.append((model, local_model, history, reasoning))
             return {"answer": local_model, "mode": "llm", "sources": []}
 

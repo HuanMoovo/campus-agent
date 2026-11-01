@@ -1,4 +1,5 @@
 import { readFileSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineConfig, type Plugin } from 'vite'
@@ -8,21 +9,29 @@ const root = fileURLToPath(new URL('.', import.meta.url))
 const { version } = JSON.parse(readFileSync(resolve(root, 'package.json'), 'utf8')) as { version: string }
 
 /**
- * The offline shell caches its own name, so a released build must use a fresh cache key or
- * installed copies keep serving the previous shell. The version comes from package.json rather
- * than a hand-maintained string, and the build fails loudly if the placeholder disappears.
+ * Include the release and actual build content in cache names so same-version UI/icon
+ * updates also refresh the worker. HTML remains network-first; obsolete app caches
+ * are removed on activation without touching other applications' caches.
  */
 function serviceWorkerVersion(): Plugin {
+  let outputDirectory: string
   return {
     name: 'mens-service-worker-version',
     apply: 'build',
+    configResolved(config) {
+      outputDirectory = resolve(config.root, config.build.outDir)
+    },
     closeBundle() {
-      const file = resolve(root, 'dist', 'sw.js')
+      const file = resolve(outputDirectory, 'sw.js')
       const source = readFileSync(file, 'utf8')
       if (!source.includes('__MENS_VERSION__')) {
-        throw new Error('dist/sw.js is missing the __MENS_VERSION__ placeholder')
+        throw new Error(`${file} is missing the __MENS_VERSION__ placeholder`)
       }
-      writeFileSync(file, source.replaceAll('__MENS_VERSION__', version))
+      const fingerprint = createHash('sha256')
+        .update(readFileSync(resolve(outputDirectory, 'index.html')))
+        .update(readFileSync(resolve(outputDirectory, 'favicon.png')))
+        .digest('hex').slice(0, 12)
+      writeFileSync(file, source.replaceAll('__MENS_VERSION__', `${version}-${fingerprint}`))
     },
   }
 }
