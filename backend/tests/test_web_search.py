@@ -4,6 +4,7 @@ All outbound traffic is substituted; the only real code paths are parsing, valid
 and the agent/API wiring.
 """
 import atexit
+import base64
 import json
 import os
 import tempfile
@@ -108,6 +109,48 @@ class WebSearchTestCase(unittest.TestCase):
 
 
 class ParsingTests(WebSearchTestCase):
+    def test_chinese_page_decoding_handles_quoted_charset_and_fallback(self):
+        text = "选课通知：学生须在周五之前完成选课。"
+        raw = text.encode("gb18030")
+        for content_type in ('text/html; charset="gb18030"',
+                             "text/html; charset = 'gb2312'", "text/html"):
+            with self.subTest(content_type=content_type):
+                self.assertEqual(web_search._decode(raw, content_type), text)
+
+    def test_page_decoding_retains_utf8_and_recovers_from_unknown_charset(self):
+        text = "选课通知：课程安排。"
+        for content_type in ("text/html", "text/html; charset=not-a-real-encoding"):
+            with self.subTest(content_type=content_type):
+                self.assertEqual(web_search._decode(text.encode("utf-8"), content_type), text)
+        self.assertIsInstance(web_search._decode(b"\xff\xff", "text/html"), str)
+
+    def test_bing_wrapped_links_are_deduplicated_by_destination(self):
+        urls = ["https://one.example.edu/notice", "https://two.example.edu/course"]
+        markup = "<ol>"
+        for url in urls:
+            encoded = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+            markup += ('<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?'
+                       f'u=a1{encoded}&amp;ntb=1">选课通知</a></h2></li>')
+        markup += "</ol>"
+        rows = web_search.parse_bing_results(markup, 5)
+        self.assertEqual([row["url"] for row in rows], urls)
+        self.assertEqual([row["url"] for row in web_search.filter_results("选课通知", rows)], urls)
+
+    def test_bing_wrapped_links_do_not_rescue_invalid_destinations(self):
+        urls = ["http://unsafe.example/a", "https://127.0.0.1/private",
+                "https://user:password@school.example/a", "https://[broken"]
+        markup = "<ol>"
+        for url in urls:
+            encoded = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
+            markup += ('<li class="b_algo"><h2><a href="https://cn.bing.com/ck/a?'
+                       f'u=a1{encoded}">选课通知</a></h2></li>')
+        markup += ('<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?u=a1bad!">'
+                   '选课通知</a></h2></li>'
+                   '<li class="b_algo"><h2><a href="https://school.example/a">'
+                   '选课通知</a></h2></li></ol>')
+        self.assertEqual([row["url"] for row in web_search.parse_bing_results(markup, 10)],
+                         ["https://school.example/a"])
+
     def test_bing_results_are_parsed_and_plain_https_only(self):
         results = web_search.parse_bing_results(BING_FIXTURE, 5)
         self.assertEqual(len(results), 2)
@@ -126,6 +169,27 @@ class ParsingTests(WebSearchTestCase):
         results = web_search.parse_bing_results(markup, 5)
         self.assertEqual([row["url"] for row in results], ["https://www.example.edu.cn/notice/2"])
 
+    def test_bing_class_order_and_ads_do_not_hide_adjacent_results(self):
+        markup = """<ol id='b_results'>
+        <li data-id='1' class='featured b_algo'><h2><a href='https://one.example/'>校园<strong>选课</strong>通知</a></h2><p>第一条</p></li>
+        <li class='b_algo b_ad'><h2><a href='https://ads.example/'>选课广告</a></h2></li>
+        <li class='b_algo'><h2><a href='https://two.example/'>选课指南</a></h2><p>第二条</p></li>
+        <li class='b_algo'><h2><a href='https://ads2.example/'>赞助选课</a></h2><span class='b_adlabel other'>广告</span></li>
+        <li class='b_algo'><h2><a href='https://three.example/'>选课时间</a></h2></li>
+        </ol>"""
+        results = web_search.parse_bing_results(markup, 5)
+        self.assertEqual([row["url"] for row in results],
+                         ["https://one.example/", "https://two.example/", "https://three.example/"])
+        self.assertIn("选课", results[0]["title"])
+
+    def test_bing_results_allow_omitted_li_end_tags_and_nested_lists(self):
+        markup = """<ol><li class='b_algo'><h2><a href='https://one.example/'>First</a></h2>
+        <ul><li>Nested item<li>Another nested item</ul>
+        <li class='b_algo b_ad'><h2><a href='https://ad.example/'>Ad</a></h2>
+        <li class='b_algo'><h2><a href='https://two.example/'>Second</a></h2></ol>"""
+        self.assertEqual([row["url"] for row in web_search.parse_bing_results(markup, 5)],
+                         ["https://one.example/", "https://two.example/"])
+
     def test_page_text_extraction_skips_scripts_and_keeps_structure(self):
         title, text = web_search.html_to_text(PAGE_FIXTURE)
         self.assertEqual(title, "选课通知 - 教务处")
@@ -140,6 +204,36 @@ class ParsingTests(WebSearchTestCase):
 
 
 class UrlSafetyTests(WebSearchTestCase):
+    def test_unicode_hostname_fetch_uses_ascii_dns_host_and_sni(self):
+        host = "学校.example".encode("idna").decode("ascii")
+        client_type = httpx.Client
+
+        def handle(request):
+            self.assertEqual(request.url.host, "93.184.216.34")
+            self.assertEqual(request.headers["Host"], host)
+            self.assertEqual(request.extensions["sni_hostname"], host)
+            return httpx.Response(200, headers={"content-type": "text/html"}, content=b"<p>Schedule</p>")
+
+        def client(**kwargs):
+            return client_type(transport=httpx.MockTransport(handle), **kwargs)
+
+        with patch("socket.getaddrinfo", side_effect=public_dns) as dns, \
+                patch.object(httpx, "Client", client):
+            page = web_search.read_page("https://学校.example/notice")
+        self.assertEqual(page["text"], "Schedule")
+        dns.assert_called_once_with(host, 443, type=web_search.socket.SOCK_STREAM)
+
+    def test_invalid_idna_and_resolver_unicode_errors_are_web_search_errors(self):
+        def checked_dns(host, *args, **kwargs):
+            host.encode("idna")
+            return public_dns(host, *args, **kwargs)
+
+        with patch("socket.getaddrinfo", checked_dns), self.assertRaises(web_search.WebSearchError):
+            web_search.validate_external_url("https://school.example../notice")
+        with patch("socket.getaddrinfo", side_effect=UnicodeError("invalid host")), \
+                self.assertRaises(web_search.WebSearchError):
+            web_search.validate_external_url("https://school.example/notice")
+
     def test_only_plain_public_https_urls_pass(self):
         with patch("socket.getaddrinfo", public_dns):
             self.assertEqual(web_search.validate_external_url("https://example.com/a")[0], "example.com")
@@ -213,6 +307,72 @@ class ConfigurationTests(WebSearchTestCase):
 
 
 class SearchDispatchTests(WebSearchTestCase):
+    def test_bing_unicode_destination_is_normalized_before_page_reading(self):
+        target = "https://学校.example:443/notice?q=1#section"
+        host = "学校.example".encode("idna").decode("ascii")
+        expected = f"https://{host}:443/notice?q=1#section"
+        encoded = base64.urlsafe_b64encode(target.encode()).decode().rstrip("=")
+        markup = ('<li class="b_algo"><h2><a href="https://www.bing.com/ck/a?'
+                  f'u=a1{encoded}">选课通知</a></h2></li>')
+        config = {**web_search.configuration(), "enabled": True, "provider": "bing", "fetch_pages": 1}
+        client_type = httpx.Client
+
+        def handle(request):
+            self.assertEqual(request.headers["Host"], host)
+            return httpx.Response(200, headers={"content-type": "text/html"}, content=b"<p>Schedule</p>")
+
+        def client(**kwargs):
+            return client_type(transport=httpx.MockTransport(handle), **kwargs)
+
+        with patch.dict(web_search.SEARCHERS, {"bing": lambda *args: web_search.parse_bing_results(markup, 5)}), \
+                patch("socket.getaddrinfo", public_dns), patch.object(httpx, "Client", client):
+            context = web_search.live_context("选课通知", config=config)
+        self.assertEqual(context["error"], "")
+        self.assertEqual(context["results"][0]["url"], expected)
+        self.assertEqual(context["results"][0]["text"], "Schedule")
+
+    def test_live_context_reads_valid_page_after_invalid_idna_candidate(self):
+        config = {**web_search.configuration(), "enabled": True, "provider": "bing", "fetch_pages": 1}
+        bad_url = "https://school.example../notice"
+        encoded = base64.urlsafe_b64encode(bad_url.encode()).decode().rstrip("=")
+        candidates = [bad_url, f"https://www.bing.com/ck/a?u=a1{encoded}"]
+
+        def checked_dns(host, *args, **kwargs):
+            host.encode("idna")  # Match the hostname conversion performed by getaddrinfo.
+            return public_dns(host, *args, **kwargs)
+
+        for candidate in candidates:
+            with self.subTest(candidate=candidate):
+                valid = {"title": "选课通知", "url": "https://school.example/notice", "snippet": "正常通知"}
+                rows = [{"title": "选课通知", "url": candidate, "snippet": "无效地址"}, valid]
+                with patch.dict(web_search.SEARCHERS, {"bing": lambda *args: rows}), \
+                        patch.object(web_search.socket, "getaddrinfo", checked_dns), \
+                        patch.object(web_search.httpx, "Client", fake_client(chunks=(b"<p>Course schedule</p>",))):
+                    context = web_search.live_context("选课通知", config=config)
+                self.assertEqual(context["error"], "")
+                self.assertEqual(context["results"], [{**valid, "text": "Course schedule"}])
+
+    def test_live_context_skips_malformed_provider_links_and_keeps_valid_results(self):
+        config = {**web_search.configuration(), "enabled": True, "provider": "bing"}
+        rows = [{"title": "选课通知", "url": "https://[broken", "snippet": "无效地址"},
+                {"title": "选课通知", "url": "https://school.example/notice", "snippet": "正常通知"}]
+        with patch.dict(web_search.SEARCHERS, {"bing": lambda *args: rows}):
+            context = web_search.live_context("选课通知", config=config)
+        self.assertEqual(context["error"], "")
+        self.assertEqual(context["results"], [rows[1]])
+
+    def test_provider_invalid_candidates_do_not_use_the_result_limit(self):
+        valid_url = "https://school.example/notice"
+        for provider in ("tavily", "bocha"):
+            with self.subTest(provider=provider):
+                rows = [{"title": "选课通知", "name": "选课通知", "url": "https://[broken"},
+                        {"title": "选课通知", "name": "选课通知", "url": valid_url}]
+                response = ({"results": rows} if provider == "tavily" else
+                            {"data": {"webPages": {"value": rows}}})
+                with patch.object(web_search, "_post_json", return_value=response):
+                    results = web_search.SEARCHERS[provider]("选课通知", 1, {"api_key": "test-key"})
+                self.assertEqual([row["url"] for row in results], [valid_url])
+
     def test_disabled_search_does_not_touch_the_network(self):
         def fail(*args, **kwargs):
             raise AssertionError("disabled search performed network work")
@@ -277,6 +437,33 @@ class SearchDispatchTests(WebSearchTestCase):
 
 
 class RelevanceFilterTests(WebSearchTestCase):
+    def test_hostname_validation_allows_one_trailing_dot_and_rejects_empty_labels(self):
+        valid = {"title": "选课通知", "url": "https://school.example./notice"}
+        rows = [{"title": "选课通知", "url": f"https://{host}/notice"}
+                for host in ("school.example..", "school..example", ".school.example")]
+        self.assertEqual(web_search.filter_results("选课通知", rows + [valid]), [valid])
+
+    def test_url_normalization_preserves_public_ipv6_and_url_components(self):
+        url = "https://[2606:4700:4700::1111]:443/notice?q=1#section"
+        row = {"title": "选课通知", "url": url}
+        self.assertEqual(web_search.filter_results("选课通知", [row]), [row])
+
+    def test_unsafe_candidate_urls_are_removed_before_relevance_and_deduplication(self):
+        invalid = ["https://user:password@school.example/notice", "https://school.example:8443/a",
+                   "https://school.example:invalid/a", "http://school.example/a", "https:///notice",
+                   "https://localhost/a", "https://service.localhost/a", "https://127.0.0.1/a",
+                   "https://10.0.0.1/a", "https://[::1]/a", "https://[broken",
+                   "https://school.example\\@127.0.0.1/a", "https://school.example/\nnotice",
+                   "https://school.example/" + "a" * 2000]
+        rows = [{"title": "选课通知", "url": url} for url in invalid]
+        valid = {"title": "选课通知", "url": "https://school.example/notice"}
+        self.assertEqual(web_search.filter_results("选课通知", rows + [valid]), [valid])
+
+    def test_invalid_candidate_shapes_do_not_interrupt_filtering(self):
+        valid = {"title": "选课通知", "url": "https://school.example/notice"}
+        rows = [None, "invalid", {}, {"title": "选课通知", "url": None}, valid]
+        self.assertEqual(web_search.filter_results("选课通知", rows), [valid])
+
     def test_irrelevant_and_duplicate_hosts_are_dropped(self):
         rows = [
             {"title": "校园一卡通补办指南", "url": "https://www.campus.edu/a", "snippet": "补办材料：学生证或身份证。"},
@@ -309,6 +496,19 @@ class RelevanceFilterTests(WebSearchTestCase):
         rows = [{"title": "人人网已经倒闭了", "url": "https://www.zhihu.com/question/1",
                  "snippet": "校内网 图书馆 借阅 续借 规则 什么"}]
         self.assertEqual(web_search.filter_results("校内图书馆的借阅与续借规则是什么？", rows), [])
+
+    def test_single_chinese_character_filters_and_deduplicates(self):
+        rows = [
+            {"title": "课程查询", "url": "https://school.example/a"},
+            {"title": "课程安排", "url": "https://school.example/b"},
+            {"title": "美食新闻", "url": "https://news.example/a"},
+            {"title": "课表", "url": "https://other.example/a"},
+        ]
+        self.assertEqual(web_search.filter_results("课？", rows), [rows[0], rows[3]])
+
+    def test_punctuation_only_query_has_no_supported_relevance(self):
+        rows = [{"title": "美食新闻", "url": "https://news.example/a"}]
+        self.assertEqual(web_search.filter_results("！？", rows), [])
 
     def test_all_filtered_results_report_a_clear_message(self):
         markup = ('<ol id="b_results"><li class="b_algo">'

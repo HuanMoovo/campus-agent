@@ -100,26 +100,26 @@ def test_feedback_sets_switches_and_clears():
     conversation_id = _seed_conversation("actions-test")
     persist_stream_exchange(conversation_id, "问题", "回答", None, "", streamed_from_model=True)
     with TestClient(app) as client:
-        history = client.get(f"/api/conversations/{conversation_id}").json()["messages"]
+        history = client.get(f"/api/conversations/{conversation_id}", params={"client_id": "actions-test"}).json()["messages"]
         assistant = history[-1]
         assert isinstance(assistant["id"], int)
         message_id = assistant["id"]
-        endpoint = f"/api/conversations/{conversation_id}/messages/{message_id}/feedback"
+        endpoint = f"/api/conversations/{conversation_id}/messages/{message_id}/feedback?client_id=actions-test"
 
         response = client.post(endpoint, json={"value": "up"})
         assert response.status_code == 200 and response.json() == {"ok": True, "feedback": "up"}
-        assert client.get(f"/api/conversations/{conversation_id}").json()["messages"][-1]["feedback"] == "up"
+        assert client.get(f"/api/conversations/{conversation_id}", params={"client_id": "actions-test"}).json()["messages"][-1]["feedback"] == "up"
 
         client.post(endpoint, json={"value": "down"})
-        assert client.get(f"/api/conversations/{conversation_id}").json()["messages"][-1]["feedback"] == "down"
+        assert client.get(f"/api/conversations/{conversation_id}", params={"client_id": "actions-test"}).json()["messages"][-1]["feedback"] == "down"
 
         client.post(endpoint, json={"value": None})
-        assert "feedback" not in client.get(f"/api/conversations/{conversation_id}").json()["messages"][-1]
+        assert "feedback" not in client.get(f"/api/conversations/{conversation_id}", params={"client_id": "actions-test"}).json()["messages"][-1]
 
         assert client.post(f"/api/conversations/{uuid4()}/messages/{message_id}/feedback", json={"value": "up"}).status_code == 404
         user_message_id = history[0]["id"]
-        assert client.post(f"/api/conversations/{conversation_id}/messages/{user_message_id}/feedback", json={"value": "up"}).status_code == 404
-        assert client.post(f"/api/conversations/{conversation_id}/messages/999999/feedback", json={"value": "up"}).status_code == 404
+        assert client.post(f"/api/conversations/{conversation_id}/messages/{user_message_id}/feedback", params={"client_id": "actions-test"}, json={"value": "up"}).status_code == 404
+        assert client.post(f"/api/conversations/{conversation_id}/messages/999999/feedback", params={"client_id": "actions-test"}, json={"value": "up"}).status_code == 404
         assert client.post(endpoint, json={"value": "maybe"}).status_code == 422
 
 
@@ -132,4 +132,4 @@ def test_replace_trailing_exchange_is_strict_about_match():
         assert replace_trailing_exchange(db, conversation_id, "问题一") is True
         db.commit()
     with TestClient(app) as client:
-        assert client.get(f"/api/conversations/{conversation_id}").json()["messages"] == []
+        assert client.get(f"/api/conversations/{conversation_id}", params={"client_id": "actions-test"}).json()["messages"] == []

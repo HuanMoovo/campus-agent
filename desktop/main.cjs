@@ -6,7 +6,9 @@ const fs = require('node:fs')
 const path = require('node:path')
 const { pathToFileURL } = require('node:url')
 const { startBackend } = require('./lib/backend.cjs')
-const { isOwnUrl, BACKUP_LIMIT, EXPORT_LIMIT, validateBackupBytes, validateBackupName, validateExportName, validateExternalUrl, validateWorkspace } = require('./lib/policy.cjs')
+const { isOwnUrl, BACKUP_LIMIT, EXPORT_LIMIT, validateBackupBytes, validateBackupName, validateExportName, validateExternalUrl, validateWorkspace,
+  PROJECT_CHANGE_CODES, validateProjectId, validateProjectChangeArguments, validateProjectChangePreparation,
+  validateProjectChangeReceipt, projectChangePublicReceipt, validateProjectChangeList, validateProjectRecoveryOriginal } = require('./lib/policy.cjs')
 
 app.setName('Mens')
 // Keep the established data path so upgrades retain the existing database and settings.
@@ -20,7 +22,13 @@ let backendOrigin = null
 let backendToken = null
 let quitting = false
 let shutdownComplete = false
-let workspace = { model: 'auto', conversationId: '', clientId: '', localModel: '', appearance: 'system', accentColor: '#147b75' }
+let workspace = { model: 'auto', conversationId: '', clientId: '', localModel: '', appearance: 'system', accentColor: '#147b75', projectPermission: 'confirm', onboardingDone: false }
+let workspaceReadError = null
+let projectPermissionOverride = null
+let projectPickerBusy = false
+let pickedProject = null
+const projectChangeLocks = new Set()
+const projectChangeBindings = new Map()
 const dataDir = app.getPath('userData')
 const workspacePath = path.join(dataDir, 'workspace.json')
 
@@ -51,6 +59,118 @@ function assertSender(event) {
       || !isOwnUrl(event.senderFrame.url, backendOrigin)) throw new Error('不允许的桌面调用来源')
 }
 
+function safeProjectChangeError(error, fallback = 'project_change_failed') {
+  const code = PROJECT_CHANGE_CODES.has(error?.code) ? error.code : fallback
+  return new Error(`[${code}]`)
+}
+function assertChangeSender(event) {
+  try { assertSender(event) } catch { throw safeProjectChangeError(null, 'project_change_sender') }
+}
+function changeFailure(receipt, error, state = 'failed') {
+  return { ...receipt, state, can_revert: false,
+    error_code: PROJECT_CHANGE_CODES.has(error?.code) ? error.code : 'project_change_failed',
+    ...(Number.isInteger(error?.status) && error.status >= 0 && error.status <= 599 ? { error_status: error.status } : {}),
+  }
+}
+function validateChangeIds(args, count) {
+  try {
+    if (args.length !== count) throw new TypeError('Invalid argument count')
+    return args.map(validateProjectId)
+  } catch { throw safeProjectChangeError(null, 'project_change_invalid_arguments') }
+}
+function responseChangeError() { return { code: 'project_change_invalid_response', status: 502 } }
+function rememberProjectChange(expected) {
+  projectChangeBindings.set(`${expected.project_id}/${expected.operation_id}`, Object.freeze({ ...expected }))
+  while (projectChangeBindings.size > 256) projectChangeBindings.delete(projectChangeBindings.keys().next().value)
+}
+async function readProjectChange(event, args, count, operation, validate) {
+  assertChangeSender(event)
+  const ids = validateChangeIds(args, count)
+  let result
+  try { result = await operation(...ids) }
+  catch (error) { assertChangeSender(event); throw safeProjectChangeError(error) }
+  assertChangeSender(event)
+  try { return validate(result, ...ids) }
+  catch { throw safeProjectChangeError(null, 'project_change_invalid_response') }
+}
+function projectChangeDialog(prepared) {
+  const name = pickedProject?.id === prepared.project_id ? pickedProject.name : prepared.project_id
+  const action = prepared.action
+  const title = action === 'apply' ? '确认应用单个文件修改' : action === 'revert' ? '确认撤销本次文件修改' : '确认保留当前修改'
+  const detail = action === 'keep'
+    ? '保留当前修改并结束一键恢复记录。文件内容不会再次修改，之后不能再通过这条记录一键撤销。'
+    : action === 'revert'
+      ? '仅当文件仍匹配本次写入后的版本时，恢复原始文件内容。不会覆盖其他后续修改。'
+      : '仅替换此既有文件，不执行文件。提交会创建临时副本和本机恢复记录；发生冲突会保留恢复材料。'
+  const boundary = action === 'keep' ? '' : '\n\n仅支持普通本地 NTFS 文件，保留 owner/group/DACL 和完整性标签；自定义文件审计（SACL）不在本轮支持范围。原始内容保存在本机恢复记录中，旧版备份包不包含恢复记录。'
+  return {
+    type: 'warning', title, message: `${title}\n${prepared.path}`,
+    detail: `项目：${name}\n相对路径：${prepared.path}\n\n${detail}${boundary}\n\n模型说明（仅供参考）：\n${prepared.summary}\n\n新增 ${prepared.added_lines} 行 · 删除 ${prepared.removed_lines} 行`,
+    buttons: ['取消', action === 'apply' ? '确认应用' : action === 'revert' ? '确认撤销' : '保留并结束恢复'],
+    defaultId: 0, cancelId: 0, noLink: true,
+  }
+}
+async function changeProjectFile(event, args) {
+  assertChangeSender(event)
+  let values
+  try { values = validateProjectChangeArguments(args) }
+  catch { throw safeProjectChangeError(null, 'project_change_invalid_arguments') }
+  const { projectId, subjectId, action } = values
+  let fallback = {
+    operation_id: crypto.randomUUID(), project_id: projectId, subject_id: subjectId,
+    proposal_id: action === 'apply' ? subjectId : '', recovery_id: action === 'apply' ? '' : subjectId,
+    action, state: 'failed', path: '', summary: '', created_at: new Date().toISOString(), can_revert: false,
+  }
+  const readOnlyFailure = () => changeFailure(fallback, { code: 'project_change_read_only', status: 403 })
+  if (workspaceReadError || workspace.projectPermission !== 'confirm') return readOnlyFailure()
+  if (projectPickerBusy || projectChangeLocks.has(projectId)) return changeFailure(fallback, { code: 'project_change_busy', status: 409 })
+  projectChangeLocks.add(projectId)
+  try {
+    let prepared
+    try { prepared = await backend.prepareProjectChange(projectId, subjectId, action) }
+    catch (error) {
+      assertChangeSender(event)
+      return changeFailure(fallback, error, error?.code === 'project_change_conflict' ? 'conflict' : 'failed')
+    }
+    assertChangeSender(event)
+    if (workspaceReadError || workspace.projectPermission !== 'confirm') return readOnlyFailure()
+    try { validateProjectChangePreparation(prepared, values) }
+    catch { return changeFailure(fallback, responseChangeError()) }
+    prepared = Object.freeze({ ...prepared })
+    fallback = { ...fallback, path: prepared.path, summary: prepared.summary, proposal_id: prepared.proposal_id }
+    let decision
+    try { decision = await dialog.showMessageBox(window, projectChangeDialog(prepared)) }
+    catch (error) { assertChangeSender(event); return changeFailure(fallback, error) }
+    assertChangeSender(event)
+    if (workspaceReadError || workspace.projectPermission !== 'confirm') return readOnlyFailure()
+    if (decision?.response !== 1) return { ...fallback, state: 'cancelled' }
+    // The renderer never supplies the digest, operation ID, path, or bytes.
+    const commit = { subject_id: subjectId, action, digest: prepared.digest, operation_id: fallback.operation_id }
+    const expected = { operation_id: commit.operation_id, project_id: projectId, subject_id: subjectId,
+      proposal_id: prepared.proposal_id, action, digest: prepared.digest }
+    rememberProjectChange(expected)
+    let committed
+    try {
+      committed = await backend.commitProjectChange(projectId, commit)
+    } catch (error) {
+      assertChangeSender(event)
+      const rejected = Number.isInteger(error?.status) && error.status >= 400 && error.status < 500
+      return changeFailure(fallback, error, rejected ? error?.code === 'project_change_conflict' ? 'conflict' : 'failed' : 'uncertain')
+    }
+    assertChangeSender(event)
+    try { validateProjectChangeReceipt(committed, expected) }
+    catch { return changeFailure(fallback, responseChangeError(), 'uncertain') }
+    fallback = projectChangePublicReceipt(committed)
+    let verified
+    try { verified = await backend.projectChangeStatus(projectId, commit.operation_id) }
+    catch (error) { assertChangeSender(event); return changeFailure(fallback, error, 'uncertain') }
+    assertChangeSender(event)
+    try { validateProjectChangeReceipt(verified, { ...expected, recovery_id: committed.recovery_id }) }
+    catch { return changeFailure(fallback, responseChangeError(), 'uncertain') }
+    return projectChangePublicReceipt(verified)
+  } finally { projectChangeLocks.delete(projectId) }
+}
+
 async function openDataDirectory() {
   fs.mkdirSync(dataDir, { recursive: true })
   let error
@@ -68,6 +188,22 @@ function writeWorkspaceFile(value) {
   const temporary = `${workspacePath}.tmp`
   fs.writeFileSync(temporary, JSON.stringify(value, null, 2), { encoding: 'utf8', mode: 0o600 })
   fs.renameSync(temporary, workspacePath)
+}
+
+function readWorkspaceFile() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(workspacePath, 'utf8'))
+    // Migrate unknown saved modes without weakening strict renderer IPC validation.
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      parsed.projectPermission = parsed.projectPermission === 'read_only' ? 'read_only' : 'confirm'
+    }
+    const saved = validateWorkspace(parsed)
+    workspace = { ...workspace, ...saved, ...(projectPermissionOverride ? { projectPermission: projectPermissionOverride } : {}) }
+    workspaceReadError = null
+  } catch (error) {
+    workspaceReadError = error
+    throw new Error('无法读取本地会话设置，请检查数据文件夹中的 workspace.json 后重试。')
+  }
 }
 
 function clampNumber(value, min, max) {
@@ -134,15 +270,42 @@ function bindIPC() {
   })
   ipcMain.handle('campus:load-workspace', event => {
     assertSender(event)
+    if (workspaceReadError) readWorkspaceFile()
     return { ...workspace }
   })
   ipcMain.handle('campus:save-workspace', (event, value) => {
     assertSender(event)
-    const updated = { ...workspace, ...validateWorkspace(value) }
+    if (workspaceReadError) throw new Error('本地会话设置尚未恢复，已阻止覆盖原有数据。请先重试恢复。')
+    // Ordinary queued preference snapshots cannot change the live permission gate.
+    const updated = { ...workspace, ...validateWorkspace(value), projectPermission: workspace.projectPermission }
     writeWorkspaceFile(updated)
     workspace = updated
     nativeTheme.themeSource = workspace.appearance
     return { ...workspace }
+  })
+  ipcMain.handle('campus:set-project-permission', (event, ...args) => {
+    assertSender(event)
+    if (args.length !== 1) throw new TypeError('Invalid project permission arguments')
+    const { projectPermission } = validateWorkspace({ projectPermission: args[0] })
+    // Revocation must take effect before any fallible filesystem operation.
+    if (projectPermission === 'read_only') {
+      workspace.projectPermission = 'read_only'
+      projectPermissionOverride = 'read_only'
+    }
+    const updated = { ...workspace, projectPermission }
+    try {
+      if (workspaceReadError) throw workspaceReadError
+      writeWorkspaceFile(updated)
+      // Promotion takes effect only once it is durably saved.
+      workspace = updated
+      projectPermissionOverride = projectPermission
+      return { projectPermission: workspace.projectPermission, persisted: true }
+    } catch {
+      // A failed request must never leave the renderer showing read-only over a live write gate.
+      workspace.projectPermission = 'read_only'
+      projectPermissionOverride = 'read_only'
+      return { projectPermission: workspace.projectPermission, persisted: false }
+    }
   })
   ipcMain.handle('campus:open-data', async event => {
     assertSender(event)
@@ -201,6 +364,32 @@ function bindIPC() {
     fs.writeFileSync(filePath, view)
     return { saved: true, path: filePath }
   })
+  ipcMain.handle('campus:pick-project', async event => {
+    assertSender(event)
+    if (projectPickerBusy || projectChangeLocks.size) throw safeProjectChangeError(null, 'project_change_busy')
+    projectPickerBusy = true
+    try {
+      const { canceled, filePaths } = await dialog.showOpenDialog(window, {
+        title: '选择项目目录', properties: ['openDirectory'],
+      })
+      // A navigation or frame replacement while the dialog is open revokes this call.
+      assertSender(event)
+      if (canceled || !filePaths || !filePaths.length) return { picked: false }
+      const status = await backend.openProject(filePaths[0])
+      assertSender(event)
+      if (status.project && typeof status.project.name === 'string') pickedProject = { id: status.project.id, name: status.project.name }
+      return { picked: true, ...status }
+    } finally { projectPickerBusy = false }
+  })
+  ipcMain.handle('campus:change-project-file', (event, ...args) => changeProjectFile(event, args))
+  ipcMain.handle('campus:project-change-status', (event, ...args) => readProjectChange(event, args, 2,
+    (projectId, operationId) => backend.projectChangeStatus(projectId, operationId),
+    (result, projectId, operationId) => projectChangePublicReceipt(validateProjectChangeReceipt(result,
+      { project_id: projectId, operation_id: operationId, ...projectChangeBindings.get(`${projectId}/${operationId}`) }))))
+  ipcMain.handle('campus:project-changes', (event, ...args) => readProjectChange(event, args, 1,
+    projectId => backend.projectChanges(projectId), validateProjectChangeList))
+  ipcMain.handle('campus:project-recovery-original', (event, ...args) => readProjectChange(event, args, 2,
+    (projectId, recoveryId) => backend.projectRecoveryOriginal(projectId, recoveryId), validateProjectRecoveryOriginal))
   ipcMain.handle('campus:pick-backup', async event => {
     assertSender(event)
     const { canceled, filePaths } = await dialog.showOpenDialog(window, {
@@ -271,10 +460,10 @@ async function start() {
     fs.writeFileSync(configFile, config, { encoding: 'utf8', flag: 'wx', mode: 0o600 })
   }
   if (fs.existsSync(workspacePath)) {
-    try { workspace = { ...workspace, ...validateWorkspace(JSON.parse(fs.readFileSync(workspacePath, 'utf8'))) } }
-    catch { /* Corrupt preferences must not prevent startup; do not touch the database. */ }
+    try { readWorkspaceFile() }
+    catch { /* Keep unreadable settings intact; the renderer can retry recovery. */ }
   }
-  if (!workspace.clientId) {
+  if (!workspaceReadError && !workspace.clientId) {
     workspace.clientId = crypto.randomUUID()
     try { writeWorkspaceFile(workspace) } catch { /* the generated ID still scopes this session */ }
   }
@@ -284,7 +473,7 @@ async function start() {
   const { maximized, ...windowState } = readWindowState()
   window = new BrowserWindow({
     title: 'Mens', width: 1240, height: 820, minWidth: 760, minHeight: 580, ...windowState,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#181b1e' : '#f5f7f7', icon: path.join(__dirname, 'assets', 'mens.png'), show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#181818' : '#ffffff', icon: path.join(__dirname, 'assets', 'mens.png'), show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true,
       sandbox: true, webSecurity: true, allowRunningInsecureContent: false, webviewTag: false,
@@ -309,6 +498,9 @@ async function start() {
   })
   session.webRequest.onBeforeSendHeaders((details, callback) => {
     const headers = { ...details.requestHeaders }
+    for (const key of Object.keys(headers)) {
+      if (['x-campus-desktop-token', 'x-campus-project-grant', 'x-campus-project-write'].includes(key.toLowerCase())) delete headers[key]
+    }
     if (isOwnUrl(details.url, backendOrigin) && details.webContentsId === window?.webContents.id) {
       headers['X-Campus-Desktop-Token'] = backendToken
     }

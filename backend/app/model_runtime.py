@@ -20,6 +20,9 @@ from uuid import uuid4
 import httpx
 
 from .config import get_settings
+from .model_protocol import normalize_request_options
+from .model_reasoning import reasoning_capability
+from .provider_catalog import CLOUD_PROTOCOLS, CLOUD_PROVIDER_IDS, provider_defaults, public_catalog
 
 
 OLLAMA_URL = "http://127.0.0.1:11434"
@@ -136,30 +139,52 @@ def _default(provider: str) -> dict:
         return {"api_key": settings.deepseek_api_key, "base_url": settings.deepseek_base_url, "model": settings.deepseek_model}
     if provider == "ollama":
         return {"api_key": "", "base_url": OLLAMA_URL + "/v1", "model": "qwen3:0.6b"}
+    if provider in CLOUD_PROVIDER_IDS:
+        return provider_defaults(provider)
     raise ValueError("Unknown model provider")
 
 
 def provider_settings(provider: str) -> dict:
     with _lock:
-        stored = _load().get(provider, {})
+        snapshot = _load()
+    return _provider_settings_from_snapshot(provider, snapshot)
+
+
+def _provider_settings_from_snapshot(provider: str, snapshot: dict) -> dict:
+    stored = snapshot.get(provider, {})
     result = _default(provider)
-    for field_name in ("base_url", "model"):
+    for field_name in ("base_url", "model", "protocol"):
         if field_name in stored:
             result[field_name] = stored[field_name]
     if "api_key" in stored:
         result["api_key"] = _decrypt(stored["api_key"]) if stored["api_key"] else ""
+    if provider != "ollama":
+        defaults = provider_defaults(provider)
+        result.setdefault("protocol", defaults["protocol"])
+        result["request_options"] = normalize_request_options({**defaults["request_options"], **stored.get("request_options", {})})
     return result
 
 
 def configuration() -> dict:
+    # A fresh operation-local snapshot keeps enumeration coherent without
+    # retaining credentials or settings across calls.
+    with _lock:
+        snapshot = _load()
     providers = {}
-    for provider in ("qwen", "deepseek"):
-        current = provider_settings(provider)
-        providers[provider] = {"configured": bool(current["api_key"]), "base_url": current["base_url"], "model": current["model"]}
-    return {"providers": providers, "ollama": {"base_url": OLLAMA_URL, "model": provider_settings("ollama")["model"]}}
+    for provider in CLOUD_PROVIDER_IDS:
+        current = _provider_settings_from_snapshot(provider, snapshot)
+        providers[provider] = {"configured": bool(current["api_key"] and current["model"]),
+                               "api_key_set": bool(current["api_key"]),
+                               "base_url": current["base_url"], "model": current["model"],
+                               "protocol": current["protocol"],
+                               "request_options": current["request_options"],
+                               "reasoning": reasoning_capability(provider, current["model"], current["protocol"],
+                                                                 current["base_url"], current["request_options"])}
+    return {"providers": providers, "catalog": public_catalog(),
+            "ollama": {"base_url": OLLAMA_URL, "model": _provider_settings_from_snapshot("ollama", snapshot)["model"]}}
 
 
-def _valid_base_url(value: str) -> str:
+def _valid_base_url(value: str, allow_custom_path: bool = False) -> str:
     if not isinstance(value, str) or len(value) > 2000 or any(ord(c) <= 32 or ord(c) == 127 for c in value):
         raise ValueError("Invalid API address")
     try:
@@ -170,14 +195,20 @@ def _valid_base_url(value: str) -> str:
     if (parsed.scheme != "https" or not parsed.hostname
             or parsed.username is not None or parsed.password is not None or port == 0
             or "\\" in value or parsed.query or parsed.fragment
-            or parsed.path not in ("", "/", "/v1", "/compatible-mode/v1")):
+            or (parsed.path not in ("", "/", "/v1", "/compatible-mode/v1") and
+                (not allow_custom_path or not re.fullmatch(r"/[A-Za-z0-9._~/-]*", parsed.path)
+                 or any(part in (".", "..") for part in parsed.path.split("/"))))):
         raise ValueError("API address must be an HTTPS provider root or /v1 endpoint")
     return value.rstrip("/")
 
 
 def update_provider(provider: str, changes: dict) -> dict:
-    if provider not in ("qwen", "deepseek", "ollama"):
+    if provider not in (*CLOUD_PROVIDER_IDS, "ollama"):
         raise ValueError("Unknown model provider")
+    if not isinstance(changes, dict) or set(changes) - {"api_key", "clear_api_key", "base_url", "model", "request_options", "protocol"}:
+        raise ValueError("Unknown model configuration field")
+    if "clear_api_key" in changes and type(changes["clear_api_key"]) is not bool:
+        raise ValueError("clear_api_key must be a boolean")
     with _lock:
         data = _load()
         current = dict(data.get(provider, {}))
@@ -189,6 +220,18 @@ def update_provider(provider: str, changes: dict) -> dict:
                 raise ValueError("Invalid local model name")
             current["model"] = model
         else:
+            if "protocol" in changes:
+                if not isinstance(changes["protocol"], str) or changes["protocol"] not in CLOUD_PROTOCOLS:
+                    raise ValueError("Unknown model protocol")
+                current["protocol"] = changes["protocol"]
+            if "request_options" in changes:
+                if not isinstance(changes["request_options"], dict):
+                    raise ValueError("request_options must be an object")
+                # Validate the patch before merging, so null cannot mean 'keep old'.
+                normalize_request_options(changes["request_options"])
+                current["request_options"] = normalize_request_options({
+                    **provider_defaults(provider)["request_options"],
+                    **current.get("request_options", {}), **changes["request_options"]})
             if changes.get("clear_api_key") and "api_key" in changes:
                 raise ValueError("Cannot set and clear an API key together")
             if changes.get("clear_api_key"):
@@ -199,9 +242,10 @@ def update_provider(provider: str, changes: dict) -> dict:
                     raise ValueError("Invalid API key")
                 current["api_key"] = _encrypt(key)
             if "base_url" in changes:
-                target_url = _valid_base_url(changes["base_url"])
+                custom_path = provider not in ("qwen", "deepseek")
+                target_url = _valid_base_url(changes["base_url"], custom_path)
                 defaults = _default(provider)
-                previous = urlsplit(_valid_base_url(current.get("base_url", defaults["base_url"])))
+                previous = urlsplit(_valid_base_url(current.get("base_url", defaults["base_url"]), custom_path))
                 target = urlsplit(target_url)
                 authority_changed = (previous.hostname.lower(), previous.port or 443) != (target.hostname.lower(), target.port or 443)
                 previous_key = data.get(provider, {}).get("api_key", defaults["api_key"])
@@ -218,33 +262,27 @@ def update_provider(provider: str, changes: dict) -> dict:
     return configuration()
 
 
-def test_provider(provider: str) -> dict:
-    if provider == "ollama":
-        current = provider_settings("ollama")
-        try:
-            response = httpx.post(OLLAMA_URL + "/api/show", json={"model": current["model"]}, timeout=10, trust_env=False)
-            if response.status_code == 404:
-                return {"ok": False, "error": "所选模型尚未下载"}
-            response.raise_for_status()
-            return {"ok": True}
-        except httpx.HTTPError:
-            return {"ok": False, "error": "无法连接本机 Ollama，请安装并启动 Ollama"}
-    current = provider_settings(provider)
-    if not current["api_key"]:
-        return {"ok": False, "error": "请先填写 API Key"}
+def test_provider(provider: str, capability: str = "chat") -> dict:
+    if provider not in (*CLOUD_PROVIDER_IDS, "ollama"):
+        raise ValueError("Unknown model provider")
+    if capability not in ("chat", "streaming", "tools"):
+        raise ValueError("Unknown model capability")
+    if provider != "ollama":
+        from .model_client import probe_provider
+        return probe_provider(provider, provider_settings(provider), capability)
+    # Legacy local-model check verifies installation metadata, not chat capability.
+    if capability != "chat":
+        return {"ok": False, "error_code": "capability_disabled",
+                "error": "本地模型的此项能力诊断尚未开放"}
+    current = provider_settings("ollama")
     try:
-        response = httpx.post(current["base_url"].rstrip("/") + "/chat/completions",
-                              headers={"Authorization": "Bearer " + current["api_key"]},
-                              json={"model": current["model"], "messages": [{"role": "user", "content": "hi"}], "max_tokens": 1},
-                              timeout=20, trust_env=False)
-        if response.status_code in (401, 403):
-            return {"ok": False, "error": "API Key 未通过服务商验证"}
-        if response.status_code >= 400:
-            return {"ok": False, "error": f"服务商返回 HTTP {response.status_code}；请检查模型名称和额度"}
+        response = httpx.post(OLLAMA_URL + "/api/show", json={"model": current["model"]}, timeout=10, trust_env=False)
+        if response.status_code == 404:
+            return {"ok": False, "error": "所选模型尚未下载"}
+        response.raise_for_status()
         return {"ok": True}
     except httpx.HTTPError:
-        return {"ok": False, "error": "无法连接模型服务商，请检查网络或 API 地址"}
-
+        return {"ok": False, "error": "无法连接本机 Ollama，请安装并启动 Ollama"}
 
 def local_models() -> dict:
     installed = []

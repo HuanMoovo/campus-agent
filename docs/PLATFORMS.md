@@ -6,12 +6,12 @@ Mens 由三部分组成：Electron 桌面外壳、Vue 3 前端、随应用一起
 | 平台 | 状态 | 交付物与说明 |
 | --- | --- | --- |
 | Windows 10/11 x64 | ✅ 已构建并在本机验收 | NSIS 安装包 `release/Mens-Setup-<版本>-x64.exe`，用户级安装（`%LOCALAPPDATA%\Programs\Mens`），数据在 `%APPDATA%\CampusAgent` |
-| macOS 12+（Intel / Apple silicon） | 🔧 由 CI 构建，本机未验收 | `Mens-<版本>-x64.dmg` / `Mens-<版本>-arm64.dmg`（附 zip）；未签名、未公证，首次打开需右键→打开，或在系统设置中允许 |
-| Linux x64（较新的 glibc 发行版） | 🔧 由 CI 构建，本机未验收 | AppImage（免安装）与 deb 包；数据在 `~/.config/CampusAgent` |
+| macOS 12+（Intel / Apple silicon） | 🔧 已配置 CI，本轮未原生验收 | `Mens-<版本>-x64.dmg` / `Mens-<版本>-arm64.dmg`（附 zip）；当前未签名、未公证；系统与 Electron 版本兼容性须在对应环境验证 |
+| Linux x64（较新的 glibc 发行版） | 🔧 已配置 CI，本轮未原生验收 | AppImage（免安装）与 deb 包；数据在 `~/.config/CampusAgent` |
 | Android / iOS | ⚠️ 不提供原生应用 | 使用可安装的 Web 应用（PWA）：手机浏览器打开部署好的站点 → “添加到主屏幕” |
 
 “已验收 / 未验收”指的是：是否在对应操作系统上真正启动过安装后的应用并完成界面检查。
-Windows 的记录见 `VERIFICATION.md`；macOS 与 Linux 的产物由 GitHub Actions 生成，尚未在真机上运行过。
+Windows 的历史记录见 `VERIFICATION.md`；macOS 与 Linux 已配置 GitHub Actions 构建，但本轮没有对应平台实际构建与运行的证据。
 
 ## 代码层的跨平台处理
 
@@ -49,10 +49,13 @@ python scripts/build_desktop.py --directory
 要点：
 
 - PyInstaller **不能交叉编译**，必须在目标平台上构建目标平台的产物，所以 `--os` 只允许指定当前平台（CI 用不同 runner 覆盖）。
+- 构建脚本对显式 `--os` 同样执行本机平台校验；`--arch` 必须匹配实际用于 PyInstaller 的 `backend/.venv` 中 64 位解释器架构。未指定时以该解释器为准，不能按启动构建脚本的另一个 Python 或宿主 CPU 猜测。未知、冲突或 32 位架构会在依赖安装与冻结前失败。
 - 首次运行会自动创建 `backend/.venv` 并安装依赖；本地已有依赖时加 `--skip-install`。
 - 打包阶段由 electron-builder 完成：Windows → NSIS，macOS → dmg + zip，Linux → AppImage + deb。
 - macOS 未配置签名证书，脚本会设置 `CSC_IDENTITY_AUTO_DISCOVERY=false`，产出未签名应用；正式分发前应购买证书并配置公证。
 
 ## 持续集成
 
-`.github/workflows/build-desktop.yml` 在 `windows-latest`、`macos-13`（x64）、`macos-latest`（arm64）、`ubuntu-latest` 上分别执行同一套构建脚本：跑完全部测试 → 冻结后端 → 验证冻结后的后端 → 生成安装包 → 上传为构建产物。推送 `v*` 标签时会自动创建 Release 并附带安装包。
+`.github/workflows/build-desktop.yml` 配置了 `windows-latest`、`macos-15-intel`（x64）、`macos-latest`（arm64）、`ubuntu-latest`，分别执行同一套构建脚本：跑完全部测试 → 冻结后端 → 验证冻结后的后端 → 生成安装包 → 上传为构建产物。推送 `v*` 标签时会执行 Release 发布步骤。工作流配置存在不代表本轮已运行这些 runner；原生测试、依赖版本与签名状态须以对应构建日志和产物验签为准。
+
+正式验收的签名范围、所需资源与平台证据要求见 [FORMAL-ACCEPTANCE.md](FORMAL-ACCEPTANCE.md)。

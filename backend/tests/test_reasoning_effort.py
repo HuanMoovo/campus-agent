@@ -38,7 +38,7 @@ def test_reasoning_values_are_accepted(reasoning):
     assert ChatRequest(message="hello", reasoning=reasoning).reasoning == reasoning
 
 
-@pytest.mark.parametrize("reasoning", ["ultra", "medium", "FAST", True, 1])
+@pytest.mark.parametrize("reasoning", ["ultra", "minimal", "FAST", True, 1])
 def test_unknown_reasoning_values_are_rejected(reasoning):
     with pytest.raises(ValidationError):
         ChatRequest(message="hello", reasoning=reasoning)

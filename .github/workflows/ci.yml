@@ -21,6 +21,13 @@ jobs:
   tests:
     name: Suites (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    env:
+      ADMIN_TOKEN: test-admin-token
+      ENABLE_RAG: 'false'
+      QWEN_API_KEY: ''
+      DEEPSEEK_API_KEY: ''
+      LANGSMITH_TRACING: 'false'
+      LANGCHAIN_TRACING_V2: 'false'
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -43,6 +50,19 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Use an owned temporary directory for test fixtures
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          # macOS /private ancestry is denied by the project-file privacy policy.
+          # Keep test fixtures in a physical, runner-owned directory instead.
+          directory = (Path(os.environ['RUNNER_TEMP']) / 'mens-test-temp').resolve()
+          directory.mkdir(parents=True, exist_ok=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              for name in ('TMPDIR', 'TEMP', 'TMP'):
+                  output.write(f'{name}={directory}\n')
+
       - name: Backend tests
         working-directory: backend
         run: |
@@ -61,10 +81,14 @@ jobs:
       - name: Desktop shell tests
         working-directory: desktop
         # backend.integration.cjs needs the frozen backend and runs in build-desktop.yml;
-        # these are the shell, policy and version suites that need no packaging step.
+        # npm test discovers every *.test.cjs suite, including project grant/change tests.
         run: |
           npm ci
-          node --test tests/main.test.cjs tests/policy.test.cjs tests/version.test.cjs
+          npm test
+
+      - name: Release preparation and signing regressions
+        # Signing process doubles run on Windows; platform-independent CI tests run everywhere.
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
 
       - name: Compose file is valid
         if: matrix.os == 'ubuntu-latest'

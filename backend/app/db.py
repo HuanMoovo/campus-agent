@@ -41,6 +41,9 @@ def ensure_conversation_columns(target_engine=None) -> None:
         if "client_id" not in columns:
             connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN client_id VARCHAR(64) NOT NULL DEFAULT ''")
             connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_conversations_client_id ON conversations (client_id)")
+        if "owner_user_id" not in columns:
+            connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN owner_user_id VARCHAR(36)")
+            connection.exec_driver_sql("CREATE INDEX IF NOT EXISTS ix_conversations_owner_user_id ON conversations (owner_user_id)")
         if "title" not in columns:
             connection.exec_driver_sql("ALTER TABLE conversations ADD COLUMN title VARCHAR(120)")
         if "pinned" not in columns:

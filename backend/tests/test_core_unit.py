@@ -33,7 +33,7 @@ stubs = {
     "_campus_core_test": module("_campus_core_test", __path__=[str(APP)]),
     "_campus_core_test.config": module("_campus_core_test.config", BASE_DIR=APP.parent, get_settings=lambda: settings),
     "_campus_core_test.models": module("_campus_core_test.models", Plugin=object, Document=object),
-    "pydantic": module("pydantic", BaseModel=object, ConfigDict=dict, HttpUrl=str,
+    "pydantic": module("pydantic", BaseModel=object, ConfigDict=dict, HttpUrl=str, StrictBool=bool, StrictInt=int,
                        Field=lambda *args, **kwargs: None,
                        field_validator=lambda *args, **kwargs: lambda fn: fn,
                        model_validator=lambda *args, **kwargs: lambda fn: fn),

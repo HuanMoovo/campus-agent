@@ -2,7 +2,9 @@ import math
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, HttpUrl, StrictBool, StrictInt, field_validator, model_validator
+from .provider_catalog import ModelPreference
+from .model_reasoning import normalize_reasoning_efforts
 
 
 def validate_parameter_schema(schema: dict) -> dict:
@@ -63,17 +65,32 @@ class ChatAttachment(RequestModel):
     text: str = Field(min_length=1, max_length=200_000)
 
 
+class ProjectSelection(RequestModel):
+    id: str = Field(min_length=16, max_length=64, pattern=r"^[A-Za-z0-9_-]+$")
+    files: list[str] = Field(min_length=1, max_length=4)
+
+    @field_validator("files")
+    @classmethod
+    def valid_file_references(cls, value):
+        if any(not isinstance(path, str) or not path or len(path) > 1024 for path in value):
+            raise ValueError("项目文件路径无效")
+        if len(value) != len(set(value)):
+            raise ValueError("项目文件不能重复选择")
+        return value
+
+
 class ChatRequest(RequestModel):
     message: str = Field(min_length=1, max_length=4000)
     conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
     client_id: str | None = Field(default=None, max_length=64, pattern=r"^[A-Za-z0-9_-]*$")
-    model: Literal["auto", "qwen", "deepseek", "ollama"] | None = None
+    model: ModelPreference | None = None
     web: bool = False
     local_model: str | None = Field(default=None, min_length=1, max_length=128,
                                     pattern=r"^[a-zA-Z0-9][a-zA-Z0-9._:/-]*$")
-    reasoning: Literal["fast", "deep"] | None = None
+    reasoning: Literal["auto", "low", "medium", "high", "xhigh", "max", "fast", "deep"] | None = None
     regenerate: bool = False
     attachments: list[ChatAttachment] | None = Field(default=None, max_length=3)
+    project: ProjectSelection | None = None
 
     @model_validator(mode="after")
     def local_model_requires_ollama(self):
@@ -113,6 +130,11 @@ class Source(BaseModel):
     snippet: str = ""
     url: str = ""
     kind: str = ""
+    path: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    truncated: bool | None = None
+    excerpt_sha256: str | None = None
 
 
 class ChatResponse(BaseModel):
@@ -122,6 +144,8 @@ class ChatResponse(BaseModel):
     tool_calls: list[dict] = Field(default_factory=list)
     mode: str = "demo"
     web: dict = Field(default_factory=dict)
+    context: dict = Field(default_factory=dict)
+    run: dict = Field(default_factory=dict)
 
 
 class DocumentCreate(RequestModel):
@@ -227,7 +251,7 @@ class RepairCreate(RequestModel):
 
 
 class SettingsUpdate(RequestModel):
-    model: Literal["auto", "qwen", "deepseek", "ollama"]
+    model: ModelPreference
 
 
 class WebSearchConfigUpdate(RequestModel):
@@ -238,11 +262,46 @@ class WebSearchConfigUpdate(RequestModel):
     fetch_pages: int | None = Field(default=None, ge=0, le=3)
 
 
+class ModelRequestOptions(RequestModel):
+    token_parameter: Literal["max_tokens", "max_completion_tokens"] | None = None
+    send_temperature: StrictBool | None = None
+    supports_tools: StrictBool | None = None
+    supports_streaming: StrictBool | None = None
+    stream_usage: StrictBool | None = None
+    max_output_tokens: StrictInt | None = Field(default=None, ge=64, le=65536)
+    reasoning_efforts: list[Literal["low", "medium", "high", "xhigh", "max"]] | None = None
+
+    @field_validator("reasoning_efforts", mode="before")
+    @classmethod
+    def valid_reasoning_efforts(cls, value):
+        return normalize_reasoning_efforts(value)
+
+    @field_validator("token_parameter", "send_temperature", "supports_tools", "supports_streaming", "stream_usage", "max_output_tokens")
+    @classmethod
+    def disallow_null_option(cls, value):
+        if value is None:
+            raise ValueError("兼容选项不可为 null；不修改的字段请省略")
+        return value
+
+
 class ModelProviderUpdate(RequestModel):
     api_key: str | None = Field(default=None, min_length=1, max_length=4096)
-    clear_api_key: bool = False
+    clear_api_key: StrictBool = False
     base_url: str | None = Field(default=None, min_length=8, max_length=500)
     model: str | None = Field(default=None, min_length=1, max_length=128)
+    request_options: ModelRequestOptions | None = None
+    protocol: Literal["chat_completions", "responses", "anthropic", "gemini"] | None = None
+
+    @field_validator("request_options", "protocol")
+    @classmethod
+    def disallow_null_options(cls, value):
+        if value is None:
+            raise ValueError("request_options 不可为 null")
+        return value
+
+
+class ModelProbeRequest(RequestModel):
+    capability: Literal["chat", "streaming", "tools"] = "chat"
 
 
 class LocalModelPull(RequestModel):

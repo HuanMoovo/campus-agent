@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from . import mcp_client
 from .models import McpServer
+from .tool_policy import validate_arguments
 
 NAME_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$")
 PREFIX = "mcp__"
@@ -156,7 +157,7 @@ def catalog(db: Session, enabled_only: bool = True) -> list[dict]:
     entries = []
     for row in db.scalars(statement).all():
         for tool in list(row.last_tools or []):
-            if not isinstance(tool, dict) or not tool.get("name"):
+            if not isinstance(tool, dict) or not tool.get("name") or not isinstance(tool.get("inputSchema"), dict):
                 continue
             entries.append({
                 "server_id": row.id,
@@ -164,7 +165,7 @@ def catalog(db: Session, enabled_only: bool = True) -> list[dict]:
                 "tool": str(tool["name"]),
                 "function": function_name(row.name, str(tool["name"])),
                 "description": (str(tool.get("description") or "").strip() or f"{row.name} 的 {tool['name']} 工具"),
-                "inputSchema": tool.get("inputSchema") if isinstance(tool.get("inputSchema"), dict) else {"type": "object", "properties": {}},
+                "inputSchema": tool["inputSchema"],
             })
     return entries
 
@@ -185,9 +186,14 @@ def call(db: Session, function: str, arguments: dict | None = None) -> dict:
     if row is None or not row.enabled:
         return {"ok": False, "error": f"MCP 服务器未启用：{entry['server']}", "server": entry["server"],
                 "tool": entry["tool"], "text": ""}
+    parameters = {} if arguments is None else arguments
+    try:
+        validate_arguments(entry["inputSchema"], parameters)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc), "server": entry["server"], "tool": entry["tool"], "text": ""}
     try:
         with mcp_client.McpStdioClient(row.command, list(row.args or []), dict(row.env or {})) as connection:
-            result = connection.call_tool(entry["tool"], arguments or {})
+            result = connection.call_tool(entry["tool"], parameters)
     except mcp_client.McpError as exc:
         return {"ok": False, "error": str(exc), "server": entry["server"], "tool": entry["tool"], "text": ""}
     return {"ok": not result["is_error"], "error": "" if not result["is_error"] else "工具返回错误",

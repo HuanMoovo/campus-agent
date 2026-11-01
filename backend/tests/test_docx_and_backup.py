@@ -4,10 +4,13 @@ import json
 import os
 from io import BytesIO
 from pathlib import Path
+import stat
 import tempfile
 from types import SimpleNamespace
 from uuid import uuid4
 from zipfile import ZipFile
+
+import pytest
 
 _test_data = tempfile.TemporaryDirectory(prefix="campus-docx-backup-test-")
 os.environ["DATABASE_URL"] = "sqlite:///" + (Path(_test_data.name) / "test.db").as_posix()
@@ -116,7 +119,7 @@ def test_backup_round_trip_restores_deleted_conversations(monkeypatch, tmp_path)
         assert restored.status_code == 200
         body = restored.json()
         assert "campus.db" in body["restored"] and body["failed"] == []
-        history = client.get(f"/api/conversations/{created['conversation_id']}")
+        history = client.get(f"/api/conversations/{created['conversation_id']}", params={"client_id": client_id})
         assert history.status_code == 200
         assert [row["role"] for row in history.json()["messages"]] == ["user", "assistant"]
 
@@ -141,6 +144,113 @@ def test_backup_import_restores_configuration_files(monkeypatch, tmp_path):
         assert (data_dir / "workspace.json").read_text(encoding="utf-8") == '{"appearance": "dark"}'
 
 
+CONFIG_BACKUP_PAYLOADS = {
+    "workspace.json": b'{"appearance": "dark"}',
+    "model-providers.json": b'{"qwen": {"model": "synthetic-model"}}',
+    "campus-sources.json": b'{"schedule": {"enabled": false}}',
+    "web-search.json": b'{"enabled": false}',
+    ".env": b"MENS_RESTORE_TEST=synthetic\n",
+}
+
+
+@pytest.mark.parametrize("existing", [False, True], ids=["new", "replacement"])
+def test_backup_import_makes_configs_private_before_publication(monkeypatch, tmp_path, existing):
+    data_dir = use_temp_data_dir(monkeypatch, tmp_path)
+    if existing:
+        for name in CONFIG_BACKUP_PAYLOADS:
+            path = data_dir / name
+            path.write_bytes(b"synthetic original")
+            os.chmod(path, 0o600)
+    real_chmod, real_replace = os.chmod, os.replace
+    private_staged_files, published = set(), []
+
+    def record_chmod(path, mode, *args, **kwargs):
+        result = real_chmod(path, mode, *args, **kwargs)
+        if mode == 0o600:
+            private_staged_files.add(Path(path))
+        return result
+
+    def record_replace(source, target, *args, **kwargs):
+        if Path(target).parent == data_dir and Path(target).name in CONFIG_BACKUP_PAYLOADS:
+            published.append((Path(target).name, Path(source) in private_staged_files))
+        return real_replace(source, target, *args, **kwargs)
+
+    monkeypatch.setattr(main_module.os, "chmod", record_chmod)
+    monkeypatch.setattr(main_module.os, "replace", record_replace)
+    raw = zip_bytes([("mens-backup.json", '{"app": "Mens", "format": 1}'), *CONFIG_BACKUP_PAYLOADS.items()])
+    with TestClient(app) as client:
+        response = client.post("/api/backup/import", headers=HEADERS,
+                               files={"file": ("synthetic.zip", raw, "application/zip")})
+    assert response.status_code == 200
+    assert set(response.json()["restored"]) == set(CONFIG_BACKUP_PAYLOADS)
+    assert response.json()["failed"] == []
+    assert sorted(published) == sorted((name, True) for name in CONFIG_BACKUP_PAYLOADS)
+    for name, payload in CONFIG_BACKUP_PAYLOADS.items():
+        assert (data_dir / name).read_bytes() == payload
+
+
+@pytest.mark.parametrize("operation", ["chmod", "replace"])
+def test_backup_import_config_publication_failure_preserves_private_original(monkeypatch, tmp_path, operation):
+    data_dir = use_temp_data_dir(monkeypatch, tmp_path)
+    original = data_dir / "model-providers.json"
+    original.write_bytes(b"synthetic original")
+    os.chmod(original, 0o600)
+    real_operation = getattr(os, operation)
+
+    def fail_config_operation(path, *args, **kwargs):
+        if Path(path).name == original.name:
+            raise PermissionError("synthetic config publication failure")
+        return real_operation(path, *args, **kwargs)
+
+    monkeypatch.setattr(main_module.os, operation, fail_config_operation)
+    raw = zip_bytes([("mens-backup.json", '{"app": "Mens", "format": 1}'),
+                     (original.name, CONFIG_BACKUP_PAYLOADS[original.name])])
+    with TestClient(app) as client:
+        response = client.post("/api/backup/import", headers=HEADERS,
+                               files={"file": ("synthetic.zip", raw, "application/zip")})
+    assert response.status_code == 200
+    assert response.json()["restored"] == []
+    assert response.json()["failed"] == [original.name]
+    assert original.read_bytes() == b"synthetic original"
+    if os.name != "nt":
+        assert stat.S_IMODE(original.stat().st_mode) == 0o600
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits require a native POSIX filesystem")
+@pytest.mark.parametrize("existing", [False, True], ids=["new", "replacement"])
+def test_backup_import_config_permissions_are_private_on_posix(monkeypatch, tmp_path, existing):
+    data_dir = use_temp_data_dir(monkeypatch, tmp_path)
+    if existing:
+        for name in CONFIG_BACKUP_PAYLOADS:
+            path = data_dir / name
+            path.write_bytes(b"synthetic original")
+            os.chmod(path, 0o600)
+    real_replace = os.replace
+    staged_modes = {}
+
+    def record_replace(source, target, *args, **kwargs):
+        if Path(target).parent == data_dir and Path(target).name in CONFIG_BACKUP_PAYLOADS:
+            staged_modes[Path(target).name] = stat.S_IMODE(Path(source).stat().st_mode)
+        return real_replace(source, target, *args, **kwargs)
+
+    monkeypatch.setattr(main_module.os, "replace", record_replace)
+    raw = zip_bytes([("mens-backup.json", '{"app": "Mens", "format": 1}'), *CONFIG_BACKUP_PAYLOADS.items()])
+    previous_umask = os.umask(0o022)
+    try:
+        with TestClient(app) as client:
+            response = client.post("/api/backup/import", headers=HEADERS,
+                                   files={"file": ("synthetic.zip", raw, "application/zip")})
+    finally:
+        os.umask(previous_umask)
+    assert response.status_code == 200
+    assert response.json()["failed"] == []
+    assert staged_modes == {name: 0o600 for name in CONFIG_BACKUP_PAYLOADS}
+    for name, payload in CONFIG_BACKUP_PAYLOADS.items():
+        path = data_dir / name
+        assert path.read_bytes() == payload
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
+
+
 def test_backup_import_rejects_foreign_or_unsafe_archives(monkeypatch, tmp_path):
     use_temp_data_dir(monkeypatch, tmp_path)
     manifest = json.dumps({"app": "Mens", "format": 1})
@@ -157,6 +267,6 @@ def test_backup_import_rejects_foreign_or_unsafe_archives(monkeypatch, tmp_path)
         assert client.post("/api/backup/import", headers=HEADERS, files={
             "file": ("x.zip", zip_bytes([("mens-backup.json", manifest), ("campus.db", b"not a database")]), "application/zip")}).status_code == 400
         # A rejected import must leave the live database untouched.
-        assert client.get(f"/api/conversations/{survivor['conversation_id']}").status_code == 200
+        assert client.get(f"/api/conversations/{survivor['conversation_id']}", params={"client_id": "import-guard"}).status_code == 200
         listed = client.get("/api/conversations", params={"client_id": "import-guard"}).json()
         assert [row["id"] for row in listed] == [survivor["conversation_id"]]

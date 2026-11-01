@@ -65,11 +65,12 @@ def test_stream_injects_attachment_content_but_persists_plain_question(monkeypat
         assert "行政楼 101" not in history[0]["content"]
 
 
-def test_nonstream_injects_attachment_content(monkeypatch):
+def test_nonstream_passes_attachments_separately_from_the_request(monkeypatch):
     captured = {}
 
-    def fake_run_agent(db, question, history, model, local_model=None, use_web=False, reasoning=None):
+    def fake_run_agent(db, question, history, model, local_model=None, use_web=False, reasoning=None, attachments=None):
         captured["question"] = question
+        captured["attachments"] = attachments
         return {"answer": "好的。", "sources": [], "tool_calls": [], "mode": "demo"}
 
     monkeypatch.setattr("app.main.run_agent", fake_run_agent)
@@ -80,7 +81,8 @@ def test_nonstream_injects_attachment_content(monkeypatch):
             "attachments": [{"name": "t.md", "text": "第二条内容"}],
         })
         assert response.status_code == 200
-    assert "文件：t.md" in captured["question"] and "第二条内容" in captured["question"]
+    assert captured["question"] == "总结一下附件"
+    assert captured["attachments"] == [{"name": "t.md", "text": "第二条内容"}]
 
 
 def test_attachment_validation_and_extract_endpoint():

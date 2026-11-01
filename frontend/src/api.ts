@@ -1,5 +1,45 @@
 import { desktop } from './desktop'
 import type { ChatAttachment } from './attachments'
+import type { ProjectSelection, ProjectStatus, ProjectListing, ProjectExcerpt } from './project-files'
+import { ProjectProposalError, type ProjectProposal, type ProjectProposalRequest } from './project-proposals'
+import { readAgentMetadata } from './agent-diagnostics'
+import { modelForApi, type CloudModelProvider, type ModelCatalogEntry, type ModelProtocol } from './model-providers'
+export type { CloudModelProvider, ModelProtocol } from './model-providers'
+
+export type ChatPhase = 'preparing' | 'querying' | 'answering'
+
+export interface ContextReport {
+  limit_chars: number
+  input_chars: number
+  history_available: number
+  history_used: number
+  history_omitted: number
+  sources_used: number
+  sources_omitted: number
+  sources_truncated: number
+  attachments_used: number
+  attachments_truncated: number
+  trimmed: boolean
+}
+
+export interface CampusReadTask {
+  kind: 'campus_reads'
+  limit_steps: 3
+  planned_steps: number
+  attempted_steps: number
+  completed_steps: number
+  limit_ms: 20000
+  stop_reason: 'completed' | 'step_limit' | 'deadline' | 'cancelled' | 'tool_error' | 'invalid_request'
+  truncated_results: number
+}
+
+export interface AgentRun {
+  id: string
+  status: 'running' | 'completed' | 'partial' | 'failed'
+  duration_ms: number
+  steps: Array<{ phase: 'plan' | 'retrieve' | 'tool' | 'answer'; status: 'completed' | 'failed'; duration_ms: number }>
+  task?: CampusReadTask
+}
 
 export interface Source {
   title: string
@@ -8,6 +48,11 @@ export interface Source {
   score?: number
   url?: string
   kind?: string
+  path?: string
+  start_line?: number
+  end_line?: number
+  truncated?: boolean
+  excerpt_sha256?: string
 }
 
 export interface WebStatus {
@@ -31,6 +76,8 @@ export interface ChatResponse {
   model?: string
   mode?: string
   web?: { provider?: string; error?: string; fetched_at?: string }
+  context?: ContextReport
+  run?: AgentRun
 }
 
 export interface KnowledgeDocument {
@@ -46,13 +93,13 @@ export interface Health {
   status: string
   rag_enabled: boolean
   rag_degraded?: boolean
-  models: { qwen: boolean; deepseek: boolean; ollama?: boolean }
+  models: Record<string, boolean | undefined>
   demo_services: boolean
 }
 
 export interface ConversationHistory {
   id: string
-  messages: Array<{ id?: number; role: 'user' | 'assistant'; content: string; created_at: string; sources?: Source[]; tool_calls?: Array<{ name: string }>; mode?: string; partial?: boolean; thinking?: string; feedback?: 'up' | 'down' }>
+  messages: Array<{ id?: number; role: 'user' | 'assistant'; content: string; created_at: string; sources?: Source[]; tool_calls?: Array<{ name: string }>; mode?: string; partial?: boolean; thinking?: string; feedback?: 'up' | 'down'; context?: ContextReport; run?: AgentRun }>
 }
 
 export interface Plugin {
@@ -64,14 +111,46 @@ export interface Plugin {
   parameters?: Record<string, unknown>
 }
 
+export type ModelCapability = 'chat' | 'streaming' | 'tools'
+export type CapabilityStatus = 'verified' | 'not_tested' | 'not_verified'
+
+export interface ModelRequestOptions {
+  token_parameter: 'max_tokens' | 'max_completion_tokens'
+  send_temperature: boolean
+  supports_tools: boolean
+  supports_streaming: boolean
+  stream_usage?: boolean
+  max_output_tokens?: number
+  reasoning_efforts?: import('./reasoning').ReasoningLevel[] | null
+}
+
+export interface ModelDiagnostic {
+  ok: boolean
+  error?: string
+  error_code?: string
+  http_status?: number
+  latency_ms?: number
+  provider?: string
+  model?: string
+  protocol?: string
+  capability?: ModelCapability
+  capabilities?: Record<ModelCapability, CapabilityStatus>
+  hint?: string
+}
+
 export interface ModelProvider {
   configured: boolean
+  api_key_set?: boolean
   base_url: string
   model: string
+  protocol?: ModelProtocol
+  request_options?: ModelRequestOptions
+  reasoning?: import('./reasoning').ReasoningCapability
 }
 
 export interface ModelConfig {
-  providers: { qwen: ModelProvider; deepseek: ModelProvider }
+  providers: Record<'qwen' | 'deepseek' | 'openai_compatible', ModelProvider> & Partial<Record<CloudModelProvider, ModelProvider>>
+  catalog?: ModelCatalogEntry[]
   ollama: { model: string }
 }
 
@@ -131,17 +210,20 @@ export interface ConversationSearchResult {
 
 export interface ChatStreamCallbacks {
   onMeta?: (conversationId: string) => void
+  onStatus?: (phase: ChatPhase, metadata: Partial<ChatResponse>) => void
   onThinking?: (text: string) => void
   onDelta?: (text: string) => void
 }
 
 export class ChatStreamError extends Error {
   partial: string
+  metadata: Partial<ChatResponse>
 
-  constructor(message: string, partial: string) {
+  constructor(message: string, partial: string, metadata: Partial<ChatResponse> = {}) {
     super(message)
     this.name = 'ChatStreamError'
     this.partial = partial
+    this.metadata = metadata
   }
 }
 
@@ -155,7 +237,7 @@ export function parseSseFrame(frame: string): { event: string; data: Record<stri
   if (!dataLines.length) return null
   try {
     const data = JSON.parse(dataLines.join('\n'))
-    return data && typeof data === 'object' ? { event, data } : null
+    return data && typeof data === 'object' && !Array.isArray(data) ? { event, data } : null
   } catch {
     return null
   }
@@ -243,16 +325,17 @@ function json(method: string, body: unknown): RequestInit {
   return { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
 }
 
-function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false, reasoning: 'fast' | 'deep' = 'fast', regenerate = false, attachments: ChatAttachment[] = []) {
+function chatPayload(message: string, conversationId: string, model: string, localModel: string | undefined, clientId: string, web = false, reasoning: import('./reasoning').ReasoningPreference | 'fast' = 'auto', regenerate = false, attachments: ChatAttachment[] = [], project?: ProjectSelection) {
   return {
     message,
     conversation_id: conversationId || undefined,
-    model: model === 'qwen3' ? 'qwen' : model,
+    model: modelForApi(model),
     client_id: clientId || undefined,
     ...(web ? { web: true } : {}),
-    ...(reasoning === 'deep' ? { reasoning: 'deep' } : {}),
+    ...(reasoning !== 'auto' && reasoning !== 'fast' ? { reasoning } : {}),
     ...(regenerate ? { regenerate: true } : {}),
     ...(attachments.length ? { attachments } : {}),
+    ...(project?.files.length ? { project: { id: project.id, files: [...project.files] } } : {}),
     ...(model === 'ollama' && localModel ? { local_model: localModel } : {}),
   }
 }
@@ -263,7 +346,7 @@ function responseError(status: number, detail: string) {
 
 /** Streams an answer over SSE; aborts by passing signal.abort(), partial text is kept by the caller. */
 export async function chatStream(
-  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean; reasoning?: 'fast' | 'deep'; regenerate?: boolean; attachments?: ChatAttachment[] },
+  payload: { message: string; conversationId: string; model: string; localModel?: string; clientId: string; web?: boolean; reasoning?: import('./reasoning').ReasoningPreference | 'fast'; regenerate?: boolean; attachments?: ChatAttachment[]; project?: ProjectSelection },
   callbacks: ChatStreamCallbacks,
   signal: AbortSignal,
 ): Promise<ChatResponse> {
@@ -272,7 +355,7 @@ export async function chatStream(
     response = await fetch(`${base}/chat/stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web, payload.reasoning, payload.regenerate, payload.attachments)),
+      body: JSON.stringify(chatPayload(payload.message, payload.conversationId, payload.model, payload.localModel, payload.clientId, payload.web, payload.reasoning, payload.regenerate, payload.attachments, payload.project)),
       signal,
     })
   } catch (error) {
@@ -294,8 +377,13 @@ export async function chatStream(
   let answer = ''
   let final: ChatResponse | null = null
   let failure = ''
+  let metadata: Partial<ChatResponse> = {}
+  let receivedOutput = false
+  const interruptedMetadata = () => metadata.run?.status === 'running'
+    ? { ...metadata, run: { ...metadata.run, status: receivedOutput ? 'partial' as const : 'failed' as const } }
+    : metadata
   try {
-    for (;;) {
+    readFrames: for (;;) {
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
@@ -305,52 +393,91 @@ export async function chatStream(
         buffer = buffer.slice(boundary + 2)
         boundary = buffer.indexOf('\n\n')
         if (!frame) continue
+        if (['meta', 'status', 'done', 'error'].includes(frame.event)) {
+          metadata = { ...metadata, ...readAgentMetadata(frame.data) }
+        }
         if (frame.event === 'meta') {
           const id = frame.data.conversation_id
           if (typeof id === 'string' && id) callbacks.onMeta?.(id)
+        } else if (frame.event === 'status') {
+          const phase = frame.data.phase
+          if (phase === 'preparing' || phase === 'querying' || phase === 'answering') callbacks.onStatus?.(phase, metadata)
         } else if (frame.event === 'thinking') {
           const text = frame.data.text
-          if (typeof text === 'string' && text) callbacks.onThinking?.(text)
+          if (typeof text === 'string' && text) {
+            receivedOutput = true
+            callbacks.onThinking?.(text)
+          }
         } else if (frame.event === 'delta') {
           const text = frame.data.text
           if (typeof text === 'string' && text) {
+            receivedOutput = true
             answer += text
             callbacks.onDelta?.(text)
           }
         } else if (frame.event === 'done') {
           final = {
-            conversation_id: typeof frame.data.conversation_id === 'string' ? frame.data.conversation_id : '',
+            ...metadata,
+            conversation_id: metadata.conversation_id || '',
             answer: typeof frame.data.answer === 'string' ? frame.data.answer : answer,
-            sources: (frame.data.sources as Source[]) || [],
-            tool_calls: frame.data.tool_calls as ChatResponse['tool_calls'],
+            sources: metadata.sources || [],
             mode: typeof frame.data.mode === 'string' ? frame.data.mode : 'demo',
           }
+          break readFrames
         } else if (frame.event === 'error') {
           failure = typeof frame.data.message === 'string' && frame.data.message ? frame.data.message : '生成失败，请重试。'
           const partial = frame.data.partial
           if (typeof partial === 'string' && partial) answer = partial
+          break readFrames
         }
       }
     }
+  } catch {
+    throw new ChatStreamError(t('chat.streamInterrupted'), answer, interruptedMetadata())
   } finally {
+    try { await reader.cancel() } catch { /* transport may already be closed */ }
     try { reader.releaseLock() } catch { /* the stream already closed */ }
   }
-  if (failure) throw new ChatStreamError(failure, answer)
-  if (!final) throw new ChatStreamError('连接中断，未收到完整回答。请重试。', answer)
+  if (failure) throw new ChatStreamError(failure, answer, interruptedMetadata())
+  if (!final) throw new ChatStreamError(t('chat.streamInterrupted'), answer, interruptedMetadata())
   return final
 }
 
+async function projectProposalRequest(path: string, init?: RequestInit): Promise<ProjectProposal> {
+  let response: Response
+  try { response = await fetch(`${base}${path}`, init) }
+  catch { throw new ProjectProposalError('project_service_unavailable', 0) }
+  if (!response.ok) {
+    const code = response.headers.get('X-Project-Error') || 'project_proposal_request_failed'
+    throw new ProjectProposalError(code, response.status)
+  }
+  try { return await response.json() as ProjectProposal }
+  catch { throw new ProjectProposalError('project_proposal_invalid_result', 502) }
+}
+
 export const api = {
+  projects: () => request<ProjectStatus>('/projects'),
+  projectFiles: (id: string, path = '') => request<ProjectListing>(`/projects/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`),
+  projectRead: (id: string, path: string) => request<ProjectExcerpt>(`/projects/${encodeURIComponent(id)}/read`, json('POST', { path })),
+  projectPropose: (id: string, proposal: ProjectProposalRequest) => projectProposalRequest(`/projects/${encodeURIComponent(id)}/proposals`, json('POST', {
+    path: proposal.path,
+    instruction: proposal.instruction,
+    model: modelForApi(proposal.model),
+    ...(proposal.model === 'ollama' && proposal.localModel ? { local_model: proposal.localModel } : {}),
+    ...(proposal.reasoning && !['auto', 'fast'].includes(proposal.reasoning) ? { reasoning: proposal.reasoning } : {}),
+  })),
+  projectProposal: (id: string, proposalId: string) => projectProposalRequest(`/projects/${encodeURIComponent(id)}/proposals/${encodeURIComponent(proposalId)}`),
+  closeProject: (id: string) => request<{ ok: boolean }>(`/projects/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   health: () => request<Health>('/health'),
-  conversation: (id: string) => request<ConversationHistory>(`/conversations/${encodeURIComponent(id)}`),
+  conversation: (id: string, clientId: string) => request<ConversationHistory>(`/conversations/${encodeURIComponent(id)}?client_id=${encodeURIComponent(clientId)}`),
   conversations: (clientId: string, limit = 50) =>
     request<ConversationSummary[]>(`/conversations?client_id=${encodeURIComponent(clientId)}&limit=${limit}`),
   deleteConversation: (id: string, clientId: string) =>
     request<{ deleted: boolean }>(`/conversations/${encodeURIComponent(id)}?client_id=${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
   clearConversations: (clientId: string) =>
     request<{ deleted: number }>(`/conversations?client_id=${encodeURIComponent(clientId)}`, { method: 'DELETE' }),
-  setFeedback: (conversationId: string, messageId: number, value: 'up' | 'down' | null) =>
-    request<{ ok: boolean; feedback: string | null }>(`/conversations/${encodeURIComponent(conversationId)}/messages/${messageId}/feedback`, json('POST', { value })),
+  setFeedback: (conversationId: string, messageId: number, value: 'up' | 'down' | null, clientId: string) =>
+    request<{ ok: boolean; feedback: string | null }>(`/conversations/${encodeURIComponent(conversationId)}/messages/${messageId}/feedback?client_id=${encodeURIComponent(clientId)}`, json('POST', { value })),
   searchConversations: (clientId: string, q: string) =>
     request<ConversationSearchResult[]>(`/conversations/search?client_id=${encodeURIComponent(clientId)}&q=${encodeURIComponent(q)}`),
   updateConversation: (id: string, clientId: string, patch: { title?: string; pinned?: boolean }) =>
@@ -362,15 +489,15 @@ export const api = {
     form.append('file', file)
     return request<{ name: string; text: string }>('/chat/attachments/extract', { method: 'POST', body: form })
   },
-  chat: (message: string, conversationId: string, model: string, localModel?: string, clientId = '', web = false) =>
-    request<ChatResponse>('/chat', json('POST', chatPayload(message, conversationId, model, localModel, clientId, web))),
+  chat: (message: string, conversationId: string, model: string, localModel?: string, clientId = '', web = false, project?: ProjectSelection) =>
+    request<ChatResponse>('/chat', json('POST', chatPayload(message, conversationId, model, localModel, clientId, web, 'fast', false, [], project))),
   webStatus: () => request<WebStatus>('/web/status'),
   saveWebConfig: (values: { enabled?: boolean; provider?: string; api_key?: string; max_results?: number; fetch_pages?: number }) =>
     request<WebStatus>('/web/config', json('PUT', values)),
   modelConfig: () => request<ModelConfig>('/models/config'),
-  saveModelConfig: (provider: 'qwen' | 'deepseek' | 'ollama', values: { api_key?: string; clear_api_key?: boolean; base_url?: string; model?: string }) =>
+  saveModelConfig: (provider: CloudModelProvider | 'ollama', values: { api_key?: string; clear_api_key?: boolean; base_url?: string; model?: string; protocol?: ModelProtocol; request_options?: ModelRequestOptions }) =>
     request<ModelConfig>(`/models/config/${provider}`, json('PUT', values)),
-  testModel: (provider: 'qwen' | 'deepseek') => request<{ ok: boolean; error?: string }>(`/models/test/${provider}`, { method: 'POST' }),
+  testModel: (provider: CloudModelProvider, capability: ModelCapability = 'chat') => request<ModelDiagnostic>(`/models/test/${provider}`, json('POST', { capability })),
   localModels: () => request<LocalModels>('/models/local'),
   pullLocalModel: (model: string, source: string) => request<ModelDownload>('/models/local/pull', json('POST', { model, source })),
   localModelDownload: (id: string) => request<ModelDownload>(`/models/local/jobs/${encodeURIComponent(id)}`),
@@ -391,10 +518,10 @@ export const api = {
   },
   importDocumentUrl: (url: string) => request<KnowledgeDocument>('/documents/import-url', json('POST', { url }))
     .then(doc => ({ ...doc, filename: doc.filename || String((doc as { title?: string }).title || '') })),
-  exportConversation: async (id: string, format: 'md' | 'json') => {
+  exportConversation: async (id: string, format: 'md' | 'json', clientId: string) => {
     let response: Response
     try {
-      response = await fetch(`${base}/conversations/${encodeURIComponent(id)}/export?format=${format}`)
+      response = await fetch(`${base}/conversations/${encodeURIComponent(id)}/export?format=${format}&client_id=${encodeURIComponent(clientId)}`)
     } catch {
       throw new Error('无法连接 Mens 服务。请检查后端是否已启动。')
     }
@@ -434,12 +561,12 @@ export const api = {
     request<unknown>('/services/repairs', json('POST', { location: payload.location, issue: payload.description, contact: payload.contact })),
   repairs: () => request<{ demo: boolean; items: RepairRecord[] }>('/services/repairs', undefined, true),
   checkUpdate: () => request<UpdateCheck>('/update/check', undefined, true),
-  exportBackup: async () => {
+  exportBackup: async (includeProjectRecoveries = false) => {
     const headers = new Headers()
     if (!desktop) headers.set('X-Admin-Token', sessionStorage.getItem('campus-agent-admin-token') || '')
     let response: Response
     try {
-      response = await fetch(`${base}/backup/export`, { headers })
+      response = await fetch(`${base}/backup/export${includeProjectRecoveries ? '?include_project_recoveries=true' : ''}`, { headers })
     } catch {
       throw new Error('无法连接 Mens 服务。请检查后端是否已启动。')
     }
@@ -457,7 +584,7 @@ export const api = {
     const form = new FormData()
     // DOM types require an ArrayBuffer-backed view for Blob parts.
     form.append('file', new Blob([bytes.slice().buffer as ArrayBuffer], { type: 'application/zip' }), name)
-    return request<{ restored: string[]; failed: string[]; restart_required: boolean }>('/backup/import', { method: 'POST', body: form })
+    return request<{ restored: string[]; failed: string[]; restart_required: boolean; project_recoveries?: { imported: number; duplicates: number } }>('/backup/import', { method: 'POST', body: form })
   },
 }
 

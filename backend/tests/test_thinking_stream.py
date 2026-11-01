@@ -105,8 +105,8 @@ def test_streamed_thinking_emits_sse_events_and_persists(monkeypatch):
                     data = line[5:].strip()
             events.append((name, json.loads(data) if data else None))
         names = [name for name, _ in events]
-        assert names == ["meta", "thinking", "delta", "done"]
-        assert events[1][1]["text"] == "先思考"
+        assert names == ["meta", "status", "status", "thinking", "delta", "done"]
+        assert next(data for name, data in events if name == "thinking")["text"] == "先思考"
         assert events[-1][1]["answer"] == "后回答"
         conversation_id = events[0][1]["conversation_id"]
         history = client.get(f"/api/conversations/{conversation_id}").json()

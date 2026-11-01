@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .db import Base
@@ -15,6 +15,7 @@ class Conversation(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     # Scopes history listing/deletion to the browser or desktop profile that created it.
     client_id: Mapped[str] = mapped_column(String(64), default="", server_default="", index=True)
+    owner_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
     # 用户重命名后的自定义标题；为空时由首条提问推导。
     title: Mapped[str | None] = mapped_column(String(120), nullable=True)
     pinned: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
@@ -29,6 +30,27 @@ class Message(Base):
     content: Mapped[str] = mapped_column(Text)
     result_data: Mapped[dict] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TokenUsage(Base):
+    """Provider-reported usage, independent of the editable conversation history."""
+    __tablename__ = "token_usage"
+    __table_args__ = (Index("ix_token_usage_scope_time", "owner_user_id", "client_id", "created_at"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    owner_user_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    client_id: Mapped[str] = mapped_column(String(64), default="", server_default="")
+    provider: Mapped[str] = mapped_column(String(64))
+    model: Mapped[str] = mapped_column(String(128))
+    protocol: Mapped[str] = mapped_column(String(32))
+    operation: Mapped[str] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(16))
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cached_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cache_creation_input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reasoning_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
 
 class Document(Base):

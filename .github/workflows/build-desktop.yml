@@ -23,6 +23,13 @@ jobs:
   build:
     name: ${{ matrix.label }}
     runs-on: ${{ matrix.runner }}
+    env:
+      ADMIN_TOKEN: test-admin-token
+      ENABLE_RAG: 'false'
+      QWEN_API_KEY: ''
+      DEEPSEEK_API_KEY: ''
+      LANGSMITH_TRACING: 'false'
+      LANGCHAIN_TRACING_V2: 'false'
     strategy:
       fail-fast: false
       matrix:
@@ -56,14 +63,44 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Use an owned temporary directory for test fixtures
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          # macOS /private ancestry is denied by the project-file privacy policy.
+          # Keep test fixtures in a physical, runner-owned directory instead.
+          directory = (Path(os.environ['RUNNER_TEMP']) / 'mens-test-temp').resolve()
+          directory.mkdir(parents=True, exist_ok=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              for name in ('TMPDIR', 'TEMP', 'TMP'):
+                  output.write(f'{name}={directory}\n')
+
+      - name: Release preparation and signing regressions
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
       - name: Build (install dependencies, run all suites, freeze backend, package)
         shell: bash
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # Supply the identity before packaging so inner executables and the
+          # NSIS uninstaller are signed before they enter the final installer.
+          WIN_CSC_LINK: ${{ matrix.target_os == 'win' && secrets.WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.target_os == 'win' && secrets.WINDOWS_SIGNING_PASSWORD || '' }}
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-build.txt
           python scripts/build_desktop.py --os ${{ matrix.target_os }} --arch ${{ matrix.arch }}
+
+      - name: Sign and verify when configured, otherwise record unsigned build
+        shell: bash
+        env:
+          # Optional repository secrets; configured builds must verify every
+          # unpacked EXE and the final installer without re-signing package bytes.
+          # Other platforms currently ship explicitly unsigned packages.
+          WINDOWS_SIGNING_PFX_BASE64: ${{ matrix.target_os == 'win' && secrets.WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          WINDOWS_SIGNING_PASSWORD: ${{ matrix.target_os == 'win' && secrets.WINDOWS_SIGNING_PASSWORD || '' }}
+        run: python scripts/prepare_release_ci.py --dir release --os ${{ matrix.target_os }} --arch ${{ matrix.arch }}
 
       - name: Smoke-test the packaged app
         shell: bash
@@ -101,36 +138,84 @@ jobs:
               ;;
           esac
 
+      - name: Generate checksums of final release packages
+        shell: bash
+        run: |
+          python scripts/release_checksums.py --dir release --out release/SHA256SUMS.txt
+          cat release/SIGNING-STATUS-*.json >> "$GITHUB_STEP_SUMMARY"
+          cat release/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
           name: mens-${{ matrix.target_os }}-${{ matrix.arch }}
+          # Signing changes package bytes. Do not publish pre-sign blockmaps or
+          # updater metadata (latest*.yml); this workflow distributes installers only.
           path: |
             release/*.exe
-            release/*.blockmap
             release/*.dmg
             release/*.zip
             release/*.AppImage
             release/*.deb
+            release/SHA256SUMS.txt
+            release/SIGNING-STATUS-*.json
           if-no-files-found: error
           retention-days: 14
 
-      - name: Attach packages to the release
-        if: startsWith(github.ref, 'refs/tags/v')
+  release:
+    name: Publish packages and combined checksums
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mens-*
+          path: release
+          merge-multiple: true
+      - name: Generate combined checksums after all platform builds
+        # Each platform artifact includes its own manifest; replace the merged copy with
+        # one manifest covering every downloaded final package before publishing.
+        run: python scripts/release_checksums.py --dir release --out release/SHA256SUMS.txt
+      - name: Upload combined checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: mens-checksums
+          path: release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Attach packages, signing status and checksums to the release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
           gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
             gh release create "${GITHUB_REF_NAME}" --title "Mens ${GITHUB_REF_NAME}" --notes "见 docs/VERIFICATION.md 的构建与验收记录。"
-          # Never overwrite an artifact that is already attached: for the Windows installer the
-          # release may already carry the locally built and verified package with the SHA-256
-          # recorded in docs/VERIFICATION.md. Later runs therefore only add missing files.
+          # Never silently mix an old package with newly generated checksums. Preserve
+          # identical existing assets and fail before uploads if any bytes differ.
           existing=$(gh release view "${GITHUB_REF_NAME}" --json assets -q '.assets[].name')
-          for file in release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb; do
+          existing_dir=$(mktemp -d)
+          files=(release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb release/SHA256SUMS.txt release/SIGNING-STATUS-*.json)
+          for file in "${files[@]}"; do
             [ -f "$file" ] || continue
             name=$(basename "$file")
-            if printf '%s\n' "$existing" | grep -qx "$name"; then
+            if printf '%s\n' "$existing" | grep -qxF "$name"; then
+              gh release download "${GITHUB_REF_NAME}" --pattern "$name" --dir "$existing_dir"
+              if ! cmp -s "$file" "$existing_dir/$name"; then
+                echo "Release asset differs from this verified build: $name" >&2
+                exit 1
+              fi
+            fi
+          done
+          for file in "${files[@]}"; do
+            [ -f "$file" ] || continue
+            name=$(basename "$file")
+            if printf '%s\n' "$existing" | grep -qxF "$name"; then
               echo "kept existing asset $name"
               continue
             fi
