@@ -1,0 +1,223 @@
+name: Build desktop packages
+
+# Builds the Windows installer, the macOS app (Intel + Apple silicon) and the Linux
+# AppImage/deb. PyInstaller cannot cross-compile the bundled Python backend, so every
+# platform (and every architecture) is built on its own runner.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'desktop/**'
+      - 'scripts/**'
+      - '.github/workflows/build-desktop.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      ADMIN_TOKEN: test-admin-token
+      ENABLE_RAG: 'false'
+      QWEN_API_KEY: ''
+      DEEPSEEK_API_KEY: ''
+      LANGSMITH_TRACING: 'false'
+      LANGCHAIN_TRACING_V2: 'false'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows x64 (NSIS installer)
+            runner: windows-latest
+            target_os: win
+            arch: x64
+            args: --win nsis --x64
+          - label: macOS x64 (dmg + zip)
+            runner: macos-15-intel
+            target_os: mac
+            arch: x64
+            args: --mac dmg zip --x64
+          - label: macOS arm64 (dmg + zip)
+            runner: macos-latest
+            target_os: mac
+            arch: arm64
+            args: --mac dmg zip --arm64
+          - label: Linux x64 (AppImage + deb)
+            runner: ubuntu-latest
+            target_os: linux
+            arch: x64
+            args: --linux AppImage deb --x64
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - name: Use an owned temporary directory for test fixtures
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          # macOS /private ancestry is denied by the project-file privacy policy.
+          # Keep test fixtures in a physical, runner-owned directory instead.
+          directory = (Path(os.environ['RUNNER_TEMP']) / 'mens-test-temp').resolve()
+          directory.mkdir(parents=True, exist_ok=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              for name in ('TMPDIR', 'TEMP', 'TMP'):
+                  output.write(f'{name}={directory}\n')
+
+      - name: Release preparation and signing regressions
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Build (install dependencies, run all suites, freeze backend, package)
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+          # Supply the identity before packaging so inner executables and the
+          # NSIS uninstaller are signed before they enter the final installer.
+          WIN_CSC_LINK: ${{ matrix.target_os == 'win' && secrets.WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.target_os == 'win' && secrets.WINDOWS_SIGNING_PASSWORD || '' }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements-build.txt
+          python scripts/build_desktop.py --os ${{ matrix.target_os }} --arch ${{ matrix.arch }}
+
+      - name: Sign and verify when configured, otherwise record unsigned build
+        shell: bash
+        env:
+          # Optional repository secrets; configured builds must verify every
+          # unpacked EXE and the final installer without re-signing package bytes.
+          # Other platforms currently ship explicitly unsigned packages.
+          WINDOWS_SIGNING_PFX_BASE64: ${{ matrix.target_os == 'win' && secrets.WINDOWS_SIGNING_PFX_BASE64 || '' }}
+          WINDOWS_SIGNING_PASSWORD: ${{ matrix.target_os == 'win' && secrets.WINDOWS_SIGNING_PASSWORD || '' }}
+        run: python scripts/prepare_release_ci.py --dir release --os ${{ matrix.target_os }} --arch ${{ matrix.arch }}
+
+      - name: Smoke-test the packaged app
+        shell: bash
+        env:
+          PYTHONIOENCODING: utf-8
+        run: |
+          set -e
+          # 产物跑得起来才算通过：启动内置后端与界面，从调试端口取出内部地址后再退出。
+          # 401 属于预期（桌面后端要求外壳注入的请求头），脚本会据此判定鉴权生效。
+          case "${{ matrix.target_os }}" in
+            win)
+              installer=$(ls release/Mens-Setup-*.exe | head -n 1)
+              echo "install: $installer"
+              powershell -NoProfile -Command "Start-Process -FilePath '$(cygpath -w "$installer")' -ArgumentList '/S' -Wait"
+              sleep 12
+              # cygpath -m 转成 C:/... 形式：反斜杠会被 Python 的 shlex 当转义符吃掉
+              installed="$(cygpath -m "${LOCALAPPDATA:-$HOME/AppData/Local}")/Programs/Mens/Mens.exe"
+              python scripts/smoke_package.py --command "$installed" --expect Mens
+              ;;
+            mac)
+              dmg=$(ls release/Mens-*.dmg | head -n 1)
+              echo "attach: $dmg"
+              hdiutil attach "$dmg" -nobrowse -quiet -mountpoint /tmp/mens-dmg
+              cp -R /tmp/mens-dmg/*.app /tmp/Mens.app
+              hdiutil detach /tmp/mens-dmg -quiet
+              xattr -dr com.apple.quarantine /tmp/Mens.app || true
+              python scripts/smoke_package.py --command "/tmp/Mens.app/Contents/MacOS/Mens" --expect Mens
+              ;;
+            linux)
+              appimage=$(ls release/*.AppImage | head -n 1)
+              chmod +x "$appimage"
+              command -v xvfb-run >/dev/null 2>&1 || sudo apt-get install -y -qq xvfb
+              python scripts/smoke_package.py \
+                --command "xvfb-run -a $appimage --appimage-extract-and-run --no-sandbox" --expect Mens
+              ;;
+          esac
+
+      - name: Generate checksums of final release packages
+        shell: bash
+        run: |
+          python scripts/release_checksums.py --dir release --out release/SHA256SUMS.txt
+          cat release/SIGNING-STATUS-*.json >> "$GITHUB_STEP_SUMMARY"
+          cat release/SHA256SUMS.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: mens-${{ matrix.target_os }}-${{ matrix.arch }}
+          # Signing changes package bytes. Do not publish pre-sign blockmaps or
+          # updater metadata (latest*.yml); this workflow distributes installers only.
+          path: |
+            release/*.exe
+            release/*.dmg
+            release/*.zip
+            release/*.AppImage
+            release/*.deb
+            release/SHA256SUMS.txt
+            release/SIGNING-STATUS-*.json
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish packages and combined checksums
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mens-*
+          path: release
+          merge-multiple: true
+      - name: Generate combined checksums after all platform builds
+        # Each platform artifact includes its own manifest; replace the merged copy with
+        # one manifest covering every downloaded final package before publishing.
+        run: python scripts/release_checksums.py --dir release --out release/SHA256SUMS.txt
+      - name: Upload combined checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: mens-checksums
+          path: release/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Attach packages, signing status and checksums to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || \
+            gh release create "${GITHUB_REF_NAME}" --title "Mens ${GITHUB_REF_NAME}" --notes "见 docs/VERIFICATION.md 的构建与验收记录。"
+          # Never silently mix an old package with newly generated checksums. Preserve
+          # identical existing assets and fail before uploads if any bytes differ.
+          existing=$(gh release view "${GITHUB_REF_NAME}" --json assets -q '.assets[].name')
+          existing_dir=$(mktemp -d)
+          files=(release/*.exe release/*.dmg release/*.zip release/*.AppImage release/*.deb release/SHA256SUMS.txt release/SIGNING-STATUS-*.json)
+          for file in "${files[@]}"; do
+            [ -f "$file" ] || continue
+            name=$(basename "$file")
+            if printf '%s\n' "$existing" | grep -qxF "$name"; then
+              gh release download "${GITHUB_REF_NAME}" --pattern "$name" --dir "$existing_dir"
+              if ! cmp -s "$file" "$existing_dir/$name"; then
+                echo "Release asset differs from this verified build: $name" >&2
+                exit 1
+              fi
+            fi
+          done
+          for file in "${files[@]}"; do
+            [ -f "$file" ] || continue
+            name=$(basename "$file")
+            if printf '%s\n' "$existing" | grep -qxF "$name"; then
+              echo "kept existing asset $name"
+              continue
+            fi
+            gh release upload "${GITHUB_REF_NAME}" "$file"
+          done

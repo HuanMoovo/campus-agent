@@ -156,6 +156,8 @@ def _copy_security(original, staging):
     old, new = _security(original), _security(staging)
     if any(old[key] != new[key] for key in ("owner", "group", "label")):
         raise error("unsupported")
+    if new == old:
+        return
     acl = ctypes.create_string_buffer(old["dacl"])
     flags = 4 | (0x80000000 if old["protected"] else 0x20000000)
     if A.SetSecurityInfo(staging, 1, flags, None, None, acl, None):

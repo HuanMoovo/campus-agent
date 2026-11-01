@@ -1,19 +1,13 @@
-name: Diagnostic Windows fresh-file ACL comparison and unchanged backend tests
-
-on:
-  workflow_dispatch:
-  push:
-    branches:
-      - codex/acceptance-native-20261101
-
+name: Corrective full suites on exact MAIN candidate
 permissions:
   contents: read
-
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  windows-acl-diagnostic:
-    if: github.ref == 'refs/heads/codex/acceptance-native-20261101'
-    runs-on: windows-latest
-    timeout-minutes: 30
+  tests:
+    name: Suites (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     env:
       ADMIN_TOKEN: test-admin-token
       ENABLE_RAG: 'false'
@@ -21,251 +15,80 @@ jobs:
       DEEPSEEK_API_KEY: ''
       LANGSMITH_TRACING: 'false'
       LANGCHAIN_TRACING_V2: 'false'
-      PYTHONNOUSERSITE: '1'
-      PYTHONUTF8: '1'
-      PYTHONIOENCODING: utf-8
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - os: ubuntu-latest
+          venv_python: ./.venv/bin/python
+        - os: macos-latest
+          venv_python: ./.venv/bin/python
+        - os: windows-latest
+          venv_python: ./.venv/Scripts/python.exe
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-      - name: Install unchanged backend test requirements
-        id: dependencies
-        run: python -m pip install -r backend/requirements.txt
-      - name: Compare ACL bytes on two fresh owned dummy roots without changing temp configuration
-        shell: python
-        run: |
-          """Workflow-embedded diagnostic. Execute only on a fresh authorized Windows VM."""
-          from datetime import datetime, timezone
-          import ctypes
-          import hashlib
-          import json
-          import ntpath
-          import os
-          from pathlib import Path
-          import platform
-          import sys
-          import tempfile
-          import traceback
+    - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@v7
+      with:
+        python-version: '3.12'
+    - uses: actions/setup-node@v6
+      with:
+        node-version: '22'
+    - name: Use an owned temporary directory for test fixtures
+      shell: python
+      run: "import os\nfrom pathlib import Path\n# macOS /private ancestry is denied\
+        \ by the project-file privacy policy.\n# Keep test fixtures in a physical,\
+        \ runner-owned directory instead.\ndirectory = (Path(os.environ['RUNNER_TEMP'])\
+        \ / 'mens-test-temp').resolve()\ndirectory.mkdir(parents=True, exist_ok=True)\n\
+        with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:\n  \
+        \  for name in ('TMPDIR', 'TEMP', 'TMP'):\n        output.write(f'{name}={directory}\\\
+        n')\n"
+    - name: Backend tests
+      working-directory: backend
+      run: 'python -m venv .venv
 
+        ${{ matrix.venv_python }} -m pip install --upgrade pip
 
-          def digest(raw):
-              return {'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
+        ${{ matrix.venv_python }} -m pip install -r requirements.txt
 
+        ${{ matrix.venv_python }} -m pytest -q
 
-          def parse_acl(raw):
-              if len(raw) < 8:
-                  return {'error': 'ACL shorter than header', **digest(raw)}
-              size, count = int.from_bytes(raw[2:4], 'little'), int.from_bytes(raw[4:6], 'little')
-              result = {'revision': raw[0], 'sbz1': raw[1], 'acl_size': size, 'ace_count': count,
-                        'sbz2': int.from_bytes(raw[6:8], 'little'), 'header_hex': raw[:8].hex(),
-                        'full_acl_hex': raw.hex(), **digest(raw), 'aces': []}
-              offset = 8
-              object_types = {5, 6, 7, 8, 11, 12, 15, 16}
-              basic_types = {0, 1, 2, 3, 9, 10, 13, 14, 17, 18, 19, 20, 21}
-              flag_names = {1: 'object_inherit', 2: 'container_inherit', 4: 'no_propagate', 8: 'inherit_only',
-                            16: 'inherited', 64: 'successful_access', 128: 'failed_access'}
-              for index in range(count):
-                  if offset + 4 > min(size, len(raw)):
-                      result['error'] = 'ACE header exceeds captured ACL'
-                      break
-                  ace_size = int.from_bytes(raw[offset + 2:offset + 4], 'little')
-                  if ace_size < 4 or offset + ace_size > min(size, len(raw)):
-                      result['error'] = 'ACE size exceeds captured ACL'
-                      break
-                  ace = raw[offset:offset + ace_size]
-                  kind, flags = ace[0], ace[1]
-                  row = {'index': index, 'offset': offset, 'type': kind, 'flags': flags,
-                         'flag_names': [name for bit, name in flag_names.items() if flags & bit],
-                         'size': ace_size, 'raw_ace_sha256': hashlib.sha256(ace).hexdigest()}
-                  sid_offset = None
-                  if ace_size >= 8:
-                      row['mask_hex'] = '0x' + ace[4:8][::-1].hex()
-                      if kind in basic_types:
-                          sid_offset = 8
-                      elif kind == 4:
-                          sid_offset = 12
-                          row['compound_header_hex'] = ace[8:12].hex()
-                      elif kind in object_types and ace_size >= 12:
-                          object_flags = int.from_bytes(ace[8:12], 'little')
-                          row['object_flags'] = object_flags
-                          sid_offset = 12 + (16 if object_flags & 1 else 0) + (16 if object_flags & 2 else 0)
-                          row['object_guid_bytes_hex'] = ace[12:sid_offset].hex()
-                  if sid_offset is not None and sid_offset + 8 <= len(ace):
-                      sid_size = 8 + 4 * ace[sid_offset + 1]
-                      if sid_offset + sid_size <= len(ace):
-                          sid = ace[sid_offset:sid_offset + sid_size]
-                          row.update(sid_offset=sid_offset, sid_bytes=len(sid), sid_sha256=hashlib.sha256(sid).hexdigest())
-                          extra = ace[sid_offset + sid_size:]
-                          row['extra_data'] = digest(extra)
-                      else:
-                          row['sid_error'] = 'SID length exceeds ACE'
-                  else:
-                      row['opaque_payload_hex'] = ace[4:].hex()
-                  result['aces'].append(row)
-                  offset += ace_size
-              result['ace_end_offset'] = offset
-              result['ace_bytes_in_use_from_parse'] = offset
-              result['ace_bytes_free_from_parse'] = max(0, size - offset)
-              result['trailing_unused_bytes_hex'] = raw[offset:min(size, len(raw))].hex()
-              result['beyond_declared_acl_hex'] = raw[size:].hex() if size < len(raw) else ''
-              return result
+        '
+    - name: Frontend tests and production build
+      working-directory: frontend
+      run: 'npm ci
 
+        npm test
 
-          def compare_security(left, right):
-              changed = [key for key in ('owner', 'group', 'dacl', 'protected', 'label') if left[key] != right[key]]
-              old, new = parse_acl(left['dacl']), parse_acl(right['dacl'])
-              old_aces = [row['raw_ace_sha256'] for row in old.get('aces', [])]
-              new_aces = [row['raw_ace_sha256'] for row in new.get('aces', [])]
-              sequence_equal = old_aces == new_aces and not old.get('error') and not new.get('error')
-              header_equal = all(old.get(key) == new.get(key) for key in ('revision', 'sbz1', 'ace_count', 'sbz2'))
-              return {'changed_keys': changed, 'exact_security_equal': not changed,
-                      'dacl_equal': left['dacl'] == right['dacl'], 'ace_sequence_equal': bool(sequence_equal),
-                      'ace_multiset_equal': sorted(old_aces) == sorted(new_aces),
-                      'acl_header_except_size_equal': header_equal,
-                      'only_dacl_allocation_or_padding_diff': (changed == ['dacl'] and bool(sequence_equal) and header_equal),
-                      'interpretation_limit': 'Byte-structure classification only; no product security equivalence or fix is asserted'}
+        npm run build
 
+        '
+    - name: Desktop shell tests
+      working-directory: desktop
+      run: 'npm ci
 
-          report = {'started_utc': datetime.now(timezone.utc).isoformat(), 'diagnostic_only': True, 'accepted': False,
-                    'platform': platform.platform(), 'product_guard_changed': False, 'dummy_content_only': True,
-                    'ambient_file_contents_read': False, 'credentials_read': False,
-                    'original_temp_environment': {key: os.environ.get(key) for key in ('TEMP', 'TMP', 'TMPDIR', 'RUNNER_TEMP')},
-                    'default_tempdir_before_diagnostics': tempfile.gettempdir(), 'cases': []}
-          out = Path('windows-acl-evidence')
-          out.mkdir(exist_ok=True)
-          try:
-              assert os.name == 'nt', 'Actual Windows is required; no native simulation'
-              sys.path.insert(0, str(Path('backend').resolve()))
-              from app import project_commit_windows as native
-              from ctypes import wintypes
-              class AclSizeInformation(ctypes.Structure):
-                  _fields_ = [('AceCount', wintypes.DWORD), ('AceBytesInUse', wintypes.DWORD), ('AceBytesFree', wintypes.DWORD)]
-              get_acl_info = native.A.GetAclInformation
-              get_acl_info.argtypes = [ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_int]
-              get_acl_info.restype = wintypes.BOOL
+        npm test
 
-              def security_view(value):
-                  acl = parse_acl(value['dacl'])
-                  buffer, info = ctypes.create_string_buffer(value['dacl']), AclSizeInformation()
-                  ok = bool(get_acl_info(buffer, ctypes.byref(info), ctypes.sizeof(info), 2))
-                  acl['GetAclInformation'] = {'success': ok, 'AceCount': info.AceCount,
-                                              'AceBytesInUse': info.AceBytesInUse, 'AceBytesFree': info.AceBytesFree}
-                  if not ok:
-                      acl['GetAclInformation']['last_error'] = ctypes.get_last_error()
-                  return {'owner': digest(value['owner']), 'group': digest(value['group']),
-                          'label': digest(value['label']), 'protected': value['protected'], 'dacl': acl}
+        '
+    - name: Release preparation and signing regressions
+      run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+    - name: Compose file is valid
+      if: matrix.os == 'ubuntu-latest'
+      run: 'cp .env.example .env
 
-              profile_temp = Path(os.environ['USERPROFILE']) / 'AppData/Local/Temp'
-              bases = [('runner-temp', Path(os.environ['RUNNER_TEMP'])), ('c-profile-temp', profile_temp)]
-              for name, parent in bases:
-                  row = {'case': name, 'diagnostic_only': True, 'accepted': False, 'parent': str(parent), 'SetSecurityInfo_calls': []}
-                  root = original_path = stage_path = None
-                  original = stage = None
-                  real_set_security = native.A.SetSecurityInfo
-                  real_security = native._security
-                  try:
-                      if name == 'c-profile-temp' and ntpath.splitdrive(str(parent))[0].lower() != 'c:':
-                          raise RuntimeError('USERPROFILE temp parent is not on C:; no alternate ambient path will be used')
-                      if not parent.is_dir():
-                          raise RuntimeError('Known temp parent unavailable; no ambient directory enumeration or creation')
-                      parent = parent.resolve()
-                      root = Path(tempfile.mkdtemp(prefix='mens-acl-diag-', dir=parent)).resolve()
-                      assert root.is_relative_to(parent) and root.name.startswith('mens-acl-diag-')
-                      row['created_root'] = str(root)
-                      original_path, stage_path = root / 'original-owned-dummy.txt', root / 'staging-owned-dummy.txt'
-                      original_path.write_bytes(b'fresh owned ACL diagnostic dummy\r\n')
-                      filesystem = ctypes.create_unicode_buffer(32)
-                      drive = ntpath.splitdrive(str(root))[0] + '\\'
-                      volume_ok = bool(native.K.GetVolumeInformationW(drive, None, 0, None, None, None, filesystem, len(filesystem)))
-                      row['volume'] = {'drive': drive, 'query_success': volume_ok, 'filesystem': filesystem.value,
-                                       'product_supported': native.supported(original_path)}
-                      original = native._open(original_path)
-                      stage = native._open(stage_path, create=True)
-                      old, initial = native._security(original), native._security(stage)
-                      row['original_before'] = security_view(old)
-                      row['staging_before'] = security_view(initial)
-                      row['original_vs_initial_staging'] = compare_security(old, initial)
-                      internal_reads = []
-                      def trace_security(handle):
-                          value = real_security(handle)
-                          internal_reads.append({'role': 'original' if handle == original else 'staging', 'value': value})
-                          return value
-                      def trace_set_security(*arguments):
-                          result = real_set_security(*arguments)
-                          row['SetSecurityInfo_calls'].append({'security_information_flags': int(arguments[2]), 'return_code': int(result)})
-                          return result
-                      native.A.SetSecurityInfo = trace_set_security
-                      native._security = trace_security
-                      try:
-                          native._copy_security(original, stage)
-                          row['copy_security'] = {'returned': True}
-                      except Exception as error:
-                          row['copy_security'] = {'returned': False, 'error_type': type(error).__name__,
-                                                  'error_code': getattr(error, 'error_code', None), 'error': str(error),
-                                                  'traceback': traceback.format_exc(limit=4)}
-                      finally:
-                          native.A.SetSecurityInfo = real_set_security
-                          native._security = real_security
-                      row['copy_security_internal_reads'] = [{'role': item['role'], 'security': security_view(item['value'])} for item in internal_reads]
-                      if len(internal_reads) >= 2:
-                          row['internal_original_vs_initial_staging'] = compare_security(internal_reads[0]['value'], internal_reads[1]['value'])
-                      if len(internal_reads) >= 3:
-                          row['internal_original_vs_post_set_staging'] = compare_security(internal_reads[0]['value'], internal_reads[-1]['value'])
-                      after, old_after = native._security(stage), native._security(original)
-                      row['staging_after'] = security_view(after)
-                      row['original_after'] = security_view(old_after)
-                      row['original_vs_post_set_staging'] = compare_security(old, after)
-                      row['initial_vs_post_set_staging'] = compare_security(initial, after)
-                      row['original_unchanged'] = compare_security(old, old_after)
-                  except Exception as error:
-                      row['diagnostic_error'] = {'type': type(error).__name__, 'code': getattr(error, 'error_code', None),
-                                                 'message': str(error), 'traceback': traceback.format_exc(limit=4)}
-                  finally:
-                      native.A.SetSecurityInfo = real_set_security
-                      native._security = real_security
-                      for handle in (stage, original):
-                          if handle is not None:
-                              native.K.CloseHandle(handle)
-                      # Only the two exact fresh dummy paths and newly created child root.
-                      # Never enumerate, recursively delete, or modify either temp parent.
-                      if root is not None:
-                          assert root.is_relative_to(parent) and root.name.startswith('mens-acl-diag-')
-                          try:
-                              for owned in (stage_path, original_path):
-                                  if owned is not None:
-                                      assert owned.parent == root
-                                      owned.unlink(missing_ok=True)
-                              root.rmdir()
-                              row['own_dummy_cleanup'] = 'completed'
-                          except OSError as error:
-                              row['own_dummy_cleanup'] = type(error).__name__ + ': ' + str(error)
-                  report['cases'].append(row)
-          except Exception as error:
-              report['setup_error'] = {'type': type(error).__name__, 'message': str(error), 'traceback': traceback.format_exc(limit=4)}
-          report['default_tempdir_after_diagnostics'] = tempfile.gettempdir()
-          report['temp_environment_unchanged'] = report['original_temp_environment'] == {key: os.environ.get(key) for key in ('TEMP', 'TMP', 'TMPDIR', 'RUNNER_TEMP')}
-          report['finished_utc'] = datetime.now(timezone.utc).isoformat()
-          (out / 'acl-diagnostic.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
-          print(json.dumps(report, indent=2))
-      - name: Run full unchanged backend tests with original default OS temp configuration
-        if: always() && steps.dependencies.outcome == 'success'
-        working-directory: backend
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path ../windows-acl-evidence -Force | Out-Null
-          python -m pytest -q 2>&1 | Tee-Object -FilePath ../windows-acl-evidence/backend-pytest.log
-          $pytestExitCode = $LASTEXITCODE
-          @{ diagnostic_only = $true; accepted = $false; exit_code = $pytestExitCode; temp_variables_overridden = $false } | ConvertTo-Json | Set-Content -LiteralPath ../windows-acl-evidence/pytest-result.json -Encoding utf8
-          exit $pytestExitCode
-      - name: Retain small Windows diagnostic evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: windows-acl-diagnostic-evidence
-          path: windows-acl-evidence/
-          if-no-files-found: error
-          retention-days: 7
+        sed -i ''s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-placeholder-password/''
+        .env
+
+        sed -i ''s/^ADMIN_TOKEN=$/ADMIN_TOKEN=ci-placeholder-token/'' .env
+
+        docker compose config --quiet
+
+        '
+    if: github.ref == 'refs/heads/codex/acceptance-native-20261101'
+'on':
+  push:
+    branches:
+    - codex/acceptance-native-20261101
+  workflow_dispatch: null

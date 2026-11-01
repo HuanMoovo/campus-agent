@@ -1,0 +1,99 @@
+name: CI
+
+# The packaging workflow (build-desktop.yml) only runs on version tags, so this one keeps
+# day-to-day work honest: every push to main and every pull request runs the three suites
+# on Ubuntu, macOS and Windows. The Compose validation stays on Ubuntu because only that
+# runner ships Docker.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Suites (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    env:
+      ADMIN_TOKEN: test-admin-token
+      ENABLE_RAG: 'false'
+      QWEN_API_KEY: ''
+      DEEPSEEK_API_KEY: ''
+      LANGSMITH_TRACING: 'false'
+      LANGCHAIN_TRACING_V2: 'false'
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            venv_python: ./.venv/bin/python
+          - os: macos-latest
+            venv_python: ./.venv/bin/python
+          - os: windows-latest
+            venv_python: ./.venv/Scripts/python.exe
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Use an owned temporary directory for test fixtures
+        shell: python
+        run: |
+          import os
+          from pathlib import Path
+          # macOS /private ancestry is denied by the project-file privacy policy.
+          # Keep test fixtures in a physical, runner-owned directory instead.
+          directory = (Path(os.environ['RUNNER_TEMP']) / 'mens-test-temp').resolve()
+          directory.mkdir(parents=True, exist_ok=True)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              for name in ('TMPDIR', 'TEMP', 'TMP'):
+                  output.write(f'{name}={directory}\n')
+
+      - name: Backend tests
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          ${{ matrix.venv_python }} -m pip install --upgrade pip
+          ${{ matrix.venv_python }} -m pip install -r requirements.txt
+          ${{ matrix.venv_python }} -m pytest -q
+
+      - name: Frontend tests and production build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm test
+          npm run build
+
+      - name: Desktop shell tests
+        working-directory: desktop
+        # backend.integration.cjs needs the frozen backend and runs in build-desktop.yml;
+        # npm test discovers every *.test.cjs suite, including project grant/change tests.
+        run: |
+          npm ci
+          npm test
+
+      - name: Release preparation and signing regressions
+        # Signing process doubles run on Windows; platform-independent CI tests run everywhere.
+        run: python -m unittest discover -s scripts/tests -p "test_*.py" -v
+
+      - name: Compose file is valid
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          cp .env.example .env
+          sed -i 's/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=ci-placeholder-password/' .env
+          sed -i 's/^ADMIN_TOKEN=$/ADMIN_TOKEN=ci-placeholder-token/' .env
+          docker compose config --quiet
