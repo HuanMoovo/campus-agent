@@ -146,6 +146,15 @@ jobs:
           pathlib.Path('acceptance-evidence/package-status.json').write_text(json.dumps(report, indent=2) + '\n')
           PY
 
+      - name: Retain native evidence for direct review
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: acceptance-evidence-${{ matrix.target_os }}-${{ matrix.arch }}
+          path: acceptance-evidence/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Retain package and native evidence artifacts
         if: always()
         uses: actions/upload-artifact@v4

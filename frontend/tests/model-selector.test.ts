@@ -14,7 +14,7 @@ async function flush() { await new Promise(resolve => setTimeout(resolve, 0)); a
 const newProviderIds = ['xiaomi', 'zai', 'xai', 'openrouter', 'groq', 'mistral', 'together', 'fireworks', 'deepinfra', 'cerebras', 'huggingface', 'cohere'] as const
 const providerLabel = (id: string) => id === 'xiaomi' ? '小米 · MiMo' : id === 'zai' ? 'Z.AI · GLM' : id === 'zhipu' ? '智谱 · GLM' : `Provider ${id}`
 
-it('lists the complete server catalog in chat and settings, selects China and native providers, and persists the choices', async () => {
+async function mountCatalogApp() {
   localStorage.clear()
   localStorage.setItem('mens-onboarding-done', '1')
   const providers = Object.fromEntries(CLOUD_MODEL_IDS.map(id => [id, { configured: false, base_url: '', model: '' }])) as ModelConfig['providers']
@@ -33,7 +33,11 @@ it('lists the complete server catalog in chat and settings, selects China and na
   dispose = () => { app.unmount(); host.remove() }
   app.mount(host)
   await flush(); await flush()
-  const store = useWorkspaceStore(pinia)
+  return { host, store: useWorkspaceStore(pinia) }
+}
+
+it('lists the complete server catalog and persists initial China and native provider choices', async () => {
+  const { host, store } = await mountCatalogApp()
   host.querySelector<HTMLElement>('.chat-model-picker .el-select__wrapper')!.click()
   await flush()
   for (const id of CLOUD_MODEL_IDS.filter(id => id !== 'openai_compatible')) {
@@ -54,16 +58,19 @@ it('lists the complete server catalog in chat and settings, selects China and na
   expect(store.model).toBe(workspaceModelForProvider('anthropic'))
   await store.flushWorkspace()
   expect(localStorage.getItem('campus-agent-model')).toBe('anthropic')
-  for (const [view, selector] of [['chat', '.chat-model-picker'], ['settings', '.settings-model-picker']] as const) {
-    store.view = view; await flush(); await flush()
-    for (const id of [...newProviderIds, 'zhipu'] as const) {
-      host.querySelector<HTMLElement>(`${selector} .el-select__wrapper`)!.click(); await flush()
-      const item = [...document.querySelectorAll<HTMLElement>('.el-select-dropdown__item')].find(node => node.textContent === providerLabel(id))!
-      expect(item, `${id} is selectable in ${view}`).toBeTruthy()
-      item.click(); await flush()
-      expect(store.model).toBe(id)
-      await store.flushWorkspace()
-      expect(localStorage.getItem('campus-agent-model')).toBe(id)
-    }
-  }
+})
+
+const selectorCases = ([['chat', '.chat-model-picker'], ['settings', '.settings-model-picker']] as const)
+  .flatMap(([view, selector]) => [...newProviderIds, 'zhipu' as const].map(id => ({ view, selector, id })))
+
+it.each(selectorCases)('selects $id in $view and persists the choice', async ({ view, selector, id }) => {
+  const { host, store } = await mountCatalogApp()
+  store.view = view; await flush(); await flush()
+  host.querySelector<HTMLElement>(`${selector} .el-select__wrapper`)!.click(); await flush()
+  const item = [...document.querySelectorAll<HTMLElement>('.el-select-dropdown__item')].find(node => node.textContent === providerLabel(id))!
+  expect(item, `${id} is selectable in ${view}`).toBeTruthy()
+  item.click(); await flush()
+  expect(store.model).toBe(id)
+  await store.flushWorkspace()
+  expect(localStorage.getItem('campus-agent-model')).toBe(id)
 })
