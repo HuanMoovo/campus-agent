@@ -1301,7 +1301,10 @@ def _restore_backup(raw):
             for name in BACKUP_CONFIG_FILES:
                 if name in payloads:
                     try:
-                        (staging / name).write_bytes(payloads[name])
+                        staged = staging / name
+                        staged.write_bytes(payloads[name])
+                        # os.replace publishes the staged inode's permissions.
+                        os.chmod(staged, 0o600)
                         staged_configs.append(name)
                     except OSError:
                         failed.append(name)

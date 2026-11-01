@@ -6,5 +6,7 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['tests/**/*.test.ts'],
+    // Give full-app DOM checks a stable CPU budget on hosted CI runners.
+    fileParallelism: !process.env.CI,
   },
 })
