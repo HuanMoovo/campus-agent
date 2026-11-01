@@ -73,9 +73,9 @@ jobs:
           assert actual == os.environ['EXPECTED_ARCH'], (platform.machine(), os.environ['EXPECTED_ARCH'])
           print(platform.platform(), actual)
           PY
-          mkdir -p "$RUNNER_TEMP/mens-build-home" "$RUNNER_TEMP/mens-build-config" "$RUNNER_TEMP/mens-build-data"
+          mkdir -p "$RUNNER_TEMP/mens-build-home" "$RUNNER_TEMP/mens-build-config" "$RUNNER_TEMP/mens-build-data" "$RUNNER_TEMP/mens-build-tmp"
           touch "$RUNNER_TEMP/mens-build-empty.env"
-          printf '%s\n' "HOME=$RUNNER_TEMP/mens-build-home" "XDG_CONFIG_HOME=$RUNNER_TEMP/mens-build-config" "CAMPUS_CONFIG_FILE=$RUNNER_TEMP/mens-build-empty.env" "CAMPUS_DATA_DIR=$RUNNER_TEMP/mens-build-data" >> "$GITHUB_ENV"
+          printf '%s\n' "HOME=$RUNNER_TEMP/mens-build-home" "XDG_CONFIG_HOME=$RUNNER_TEMP/mens-build-config" "TMPDIR=$RUNNER_TEMP/mens-build-tmp" "CAMPUS_CONFIG_FILE=$RUNNER_TEMP/mens-build-empty.env" "CAMPUS_DATA_DIR=$RUNNER_TEMP/mens-build-data" >> "$GITHUB_ENV"
 
       - name: Install GUI and package prerequisites on disposable Linux runner
         if: runner.os == 'Linux'
