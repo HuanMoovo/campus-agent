@@ -1,4 +1,4 @@
-name: Native package acceptance without browser automation
+name: Diagnostic native artifact reuse without browser automation
 
 on:
   workflow_dispatch:
@@ -8,163 +8,192 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
-  native-packages:
+  mac-arm64-log-diagnostic:
     if: github.ref == 'refs/heads/codex/acceptance-native-20261101'
-    name: Native ${{ matrix.label }}
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 75
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: macOS arm64
-            runner: macos-latest
-            target_os: mac
-            arch: arm64
-          - label: macOS x64
-            runner: macos-15-intel
-            target_os: mac
-            arch: x64
-          - label: Linux x64
-            runner: ubuntu-latest
-            target_os: linux
-            arch: x64
-    env:
-      ADMIN_TOKEN: test-admin-token
-      ENABLE_RAG: 'false'
-      QWEN_API_KEY: ''
-      DEEPSEEK_API_KEY: ''
-      LANGSMITH_TRACING: 'false'
-      LANGCHAIN_TRACING_V2: 'false'
-      PYTHONUTF8: '1'
-      PYTHONIOENCODING: utf-8
-      PYTHONNOUSERSITE: '1'
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      CSC_LINK: ''
-      CSC_KEY_PASSWORD: ''
-      WIN_CSC_LINK: ''
-      WIN_CSC_KEY_PASSWORD: ''
-      APPLE_ID: ''
-      APPLE_APP_SPECIFIC_PASSWORD: ''
-      APPLE_TEAM_ID: ''
+    name: Diagnostic macOS arm64 strict sandbox child log A-B
+    runs-on: macos-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
           fetch-depth: 1
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-
-      - name: Require actual runner architecture and isolate build configuration
+      - name: Reuse the exact previously built macOS arm64 packages
+        uses: actions/download-artifact@v4
+        with:
+          name: acceptance-native-mac-arm64
+          run-id: '41271012516'
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: diagnostic-input
+      - name: Verify reused DMG and actual native runner architecture
+        shell: python
+        run: |
+          import hashlib, json, pathlib, platform
+          assert platform.system() == 'Darwin' and platform.machine() == 'arm64', platform.platform()
+          root = pathlib.Path('diagnostic-input')
+          packages = list((root / 'release').glob('*.dmg'))
+          assert len(packages) == 1, 'Exactly one actual DMG is required'
+          package = packages[0]
+          hasher = hashlib.sha256()
+          with package.open('rb') as stream:
+              for block in iter(lambda: stream.read(1048576), b''):
+                  hasher.update(block)
+          digest = hasher.hexdigest()
+          previous = json.loads((root / 'acceptance-evidence/package-status.json').read_text())
+          matches = [item for item in previous['packages'] if item['file'] == package.name]
+          assert len(matches) == 1 and matches[0]['sha256'] == digest, 'Previous package checksum mismatch'
+          out = pathlib.Path('diagnostic-evidence')
+          out.mkdir()
+          report = {'diagnostic_only': True, 'accepted': False, 'manual_ui_review_pending': True,
+                    'source_run_id': 41271012516, 'built_commit': 'fdceba925aa9a9f0e2c788c03a27dff52f640aeb',
+                    'package': package.name, 'sha256': digest, 'bytes': package.stat().st_size,
+                    'platform': platform.platform(), 'rebuilt': False,
+                    'control_variable': 'child stdout/stderr file location: denied workspace vs allowed private /tmp',
+                    'outer_sandbox': 'original deny actual HOME in both controls',
+                    'renderer_sandbox_changed': False, 'quarantine_removed': False}
+          (out / 'input.json').write_text(json.dumps(report, indent=2) + '\n')
+      - name: Mount actual read-only DMG and run both strict-profile log controls
         shell: bash
-        env:
-          EXPECTED_ARCH: ${{ matrix.arch }}
         run: |
           set -euo pipefail
-          python - <<'PY'
-          import os, platform
-          actual = {'arm64': 'arm64', 'aarch64': 'arm64', 'x86_64': 'x64', 'amd64': 'x64'}.get(platform.machine().lower())
-          assert actual == os.environ['EXPECTED_ARCH'], (platform.machine(), os.environ['EXPECTED_ARCH'])
-          print(platform.platform(), actual)
-          PY
-          mkdir -p "$RUNNER_TEMP/mens-build-home" "$RUNNER_TEMP/mens-build-config" "$RUNNER_TEMP/mens-build-data" "$RUNNER_TEMP/mens-build-tmp"
-          touch "$RUNNER_TEMP/mens-build-empty.env"
-          printf '%s\n' "HOME=$RUNNER_TEMP/mens-build-home" "XDG_CONFIG_HOME=$RUNNER_TEMP/mens-build-config" "TMPDIR=$RUNNER_TEMP/mens-build-tmp" "CAMPUS_CONFIG_FILE=$RUNNER_TEMP/mens-build-empty.env" "CAMPUS_DATA_DIR=$RUNNER_TEMP/mens-build-data" >> "$GITHUB_ENV"
-
-      - name: Install GUI and package prerequisites on disposable Linux runner
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y xvfb x11-utils imagemagick lsof libgtk-3-0t64 libnss3 libgbm1 libasound2t64 libxss1
-
-      - name: Build native packages with existing suites and source/frozen backend integration
-        shell: bash
-        env:
-          GH_TOKEN: ''
-          GITHUB_TOKEN: ''
-        run: |
-          set -euo pipefail
-          mkdir -p acceptance-evidence
-          python scripts/build_desktop.py --os '${{ matrix.target_os }}' --arch '${{ matrix.arch }}' 2>&1 | tee acceptance-evidence/build.log
-
-      - name: Install copied macOS dmg application and inspect its native window
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          dmg=$(find release -maxdepth 1 -name '*.dmg' -print -quit)
-          test -n "$dmg"
-          mount=$(mktemp -d /tmp/mens-native-dmg.XXXXXX)
-          install=$(mktemp -d /tmp/mens-native-install.XXXXXX)
+          dmg=$(find diagnostic-input/release -maxdepth 1 -name '*.dmg' -print -quit)
+          mount=$(mktemp -d /tmp/mens-diagnostic-dmg.XXXXXX)
+          install=$(mktemp -d /tmp/mens-diagnostic-install.XXXXXX)
           hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mount"
           trap 'hdiutil detach "$mount" -quiet || true' EXIT
           ditto "$mount/Mens.app" "$install/Mens.app"
           hdiutil detach "$mount" -quiet
           trap - EXIT
-          # Preserve all quarantine attributes; do not modify signing or trust.
-          xattr -l "$install/Mens.app" > acceptance-evidence/mac-extended-attributes.txt || true
-          python scripts/acceptance_native_smoke.py --package-kind mac-dmg --executable "$install/Mens.app/Contents/MacOS/Mens" --out acceptance-evidence/mac-dmg
-
-      - name: Launch actual Linux AppImage under an X11 display
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          appimage=$(find release -maxdepth 1 -name '*.AppImage' -print -quit)
-          test -n "$appimage"
-          chmod +x "$appimage"
-          xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' python scripts/acceptance_native_smoke.py --package-kind appimage --executable "$appimage" --argument=--appimage-extract-and-run --argument=--no-sandbox --out acceptance-evidence/linux-appimage
-
-      - name: Install actual deb and launch its installed executable under X11
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          deb=$(find release -maxdepth 1 -name '*.deb' -print -quit)
-          test -n "$deb"
-          sudo apt-get install -y "$(pwd)/$deb"
-          xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' python scripts/acceptance_native_smoke.py --package-kind deb --installed-deb "$deb" --argument=--no-sandbox --out acceptance-evidence/linux-deb
-
-      - name: Record unsigned acceptance boundary and package checksums
+          # Preserve quarantine and signing. Launch this same copied binary twice.
+          xattr -l "$install/Mens.app" > diagnostic-evidence/mac-extended-attributes.txt || true
+          for location in workspace state; do
+            if python3 scripts/acceptance_native_smoke.py --package-kind mac-dmg --executable "$install/Mens.app/Contents/MacOS/Mens" --child-log-location "$location" --diagnostic-only --out "diagnostic-evidence/log-$location"; then
+              code=0
+            else
+              code=$?
+            fi
+            printf '%s\t%s\n' "$location" "$code" >> diagnostic-evidence/probe-exit-codes.tsv
+          done
+      - name: Record diagnostic boundary and collected results
         if: always()
-        shell: bash
+        shell: python
         run: |
-          mkdir -p acceptance-evidence
-          python - <<'PY'
-          import hashlib, json, pathlib, platform
-          root = pathlib.Path('release')
-          packages = [{'file': p.name, 'bytes': p.stat().st_size, 'sha256': hashlib.sha256(p.read_bytes()).hexdigest()} for p in sorted(root.glob('*')) if p.is_file() and p.suffix in {'.dmg', '.zip', '.AppImage', '.deb'}]
-          report = {'platform': platform.platform(), 'packages': packages, 'signing_credentials_supplied': False, 'notarization_performed': False, 'quarantine_removed': False, 'browser_automation_used': False, 'fully_loaded_ui_verified': False, 'screenshot_manual_content_review': 'pending', 'manual_ui_review_pending': True, 'electron_sandbox_verified': False, 'linux_launch_limit': 'Linux smoke uses --no-sandbox only on disposable CI runner; no hardened desktop sandbox claim', 'acceptance_limit': 'Native visible OS window, owned frozen backend loopback listener and unauthenticated HTTP401, isolated fresh SQLite, screenshot pending manual content review; no UI-feature or Gatekeeper acceptance'}
-          pathlib.Path('acceptance-evidence/package-status.json').write_text(json.dumps(report, indent=2) + '\n')
-          PY
-
-      - name: Retain native evidence for direct review
+          import json, pathlib
+          out = pathlib.Path('diagnostic-evidence')
+          out.mkdir(exist_ok=True)
+          results = []
+          for location in ('workspace', 'state'):
+              path = out / ('log-' + location) / 'native-result.json'
+              result = json.loads(path.read_text()) if path.is_file() else {'error': 'Probe report missing'}
+              result.update(diagnostic_only=True, accepted=False, manual_ui_review_pending=True)
+              results.append({'child_log_location': location, 'result': result})
+          report = {'diagnostic_only': True, 'accepted': False, 'manual_ui_review_pending': True,
+                    'job_success_is_acceptance': False, 'browser_automation_used': False,
+                    'debugging_protocol_used': False, 'product_code_changed': False,
+                    'purpose': 'Test child-fd metadata denial hypothesis while preserving strict HOME sandbox',
+                    'results': results}
+          (out / 'diagnostic-summary.json').write_text(json.dumps(report, indent=2) + '\n')
+      - name: Retain small diagnostic evidence only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: acceptance-evidence-${{ matrix.target_os }}-${{ matrix.arch }}
-          path: acceptance-evidence/
+          name: diagnostic-evidence-mac-arm64-log-location
+          path: diagnostic-evidence/
           if-no-files-found: error
           retention-days: 7
 
-      - name: Retain package and native evidence artifacts
+  linux-deb-exec-diagnostic:
+    if: github.ref == 'refs/heads/codex/acceptance-native-20261101'
+    name: Diagnostic Linux x64 package-owned desktop Exec
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12'
+      - name: Reuse the exact previously built Linux x64 packages
+        uses: actions/download-artifact@v4
+        with:
+          name: acceptance-native-linux-x64
+          run-id: '41271012516'
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: diagnostic-input
+      - name: Verify reused DEB and actual native runner architecture
+        shell: python
+        run: |
+          import hashlib, json, pathlib, platform
+          assert platform.system() == 'Linux' and platform.machine() == 'x86_64', platform.platform()
+          root = pathlib.Path('diagnostic-input')
+          packages = list((root / 'release').glob('*.deb'))
+          assert len(packages) == 1, 'Exactly one actual DEB is required'
+          package = packages[0]
+          hasher = hashlib.sha256()
+          with package.open('rb') as stream:
+              for block in iter(lambda: stream.read(1048576), b''):
+                  hasher.update(block)
+          digest = hasher.hexdigest()
+          previous = json.loads((root / 'acceptance-evidence/package-status.json').read_text())
+          matches = [item for item in previous['packages'] if item['file'] == package.name]
+          assert len(matches) == 1 and matches[0]['sha256'] == digest, 'Previous package checksum mismatch'
+          out = pathlib.Path('diagnostic-evidence')
+          out.mkdir()
+          report = {'diagnostic_only': True, 'accepted': False, 'manual_ui_review_pending': True,
+                    'source_run_id': 41271012516, 'built_commit': 'fdceba925aa9a9f0e2c788c03a27dff52f640aeb',
+                    'package': package.name, 'sha256': digest, 'bytes': package.stat().st_size,
+                    'platform': platform.platform(), 'rebuilt': False,
+                    'control_variable': 'resolve application from validated package-owned desktop Exec',
+                    'linux_no_sandbox_launch': True, 'electron_sandbox_verified': False}
+          (out / 'input.json').write_text(json.dumps(report, indent=2) + '\n')
+      - name: Install native GUI dependencies and actual reused DEB on disposable runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y xvfb x11-utils imagemagick lsof libgtk-3-0t64 libnss3 libgbm1 libasound2t64 libxss1
+          deb=$(find diagnostic-input/release -maxdepth 1 -name '*.deb' -print -quit)
+          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$(pwd)/$deb"
+      - name: Inspect installed package-owned desktop Exec and collect unchanged native requirements
+        shell: bash
+        run: |
+          set -euo pipefail
+          deb=$(find diagnostic-input/release -maxdepth 1 -name '*.deb' -print -quit)
+          if xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' python3 scripts/acceptance_native_smoke.py --package-kind deb --installed-deb "$deb" --argument=--no-sandbox --diagnostic-only --out diagnostic-evidence/linux-deb; then
+            code=0
+          else
+            code=$?
+          fi
+          printf 'deb\t%s\n' "$code" > diagnostic-evidence/probe-exit-codes.tsv
+      - name: Record diagnostic boundary and collected result
+        if: always()
+        shell: python
+        run: |
+          import json, pathlib
+          out = pathlib.Path('diagnostic-evidence')
+          out.mkdir(exist_ok=True)
+          path = out / 'linux-deb/native-result.json'
+          result = json.loads(path.read_text()) if path.is_file() else {'error': 'Probe report missing'}
+          result.update(diagnostic_only=True, accepted=False, manual_ui_review_pending=True)
+          report = {'diagnostic_only': True, 'accepted': False, 'manual_ui_review_pending': True,
+                    'job_success_is_acceptance': False, 'browser_automation_used': False,
+                    'debugging_protocol_used': False, 'product_code_changed': False, 'result': result}
+          (out / 'diagnostic-summary.json').write_text(json.dumps(report, indent=2) + '\n')
+      - name: Retain small diagnostic evidence only
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: acceptance-native-${{ matrix.target_os }}-${{ matrix.arch }}
-          path: |
-            acceptance-evidence/
-            release/*.dmg
-            release/*.zip
-            release/*.AppImage
-            release/*.deb
+          name: diagnostic-evidence-linux-x64-deb-exec
+          path: diagnostic-evidence/
           if-no-files-found: error
           retention-days: 7

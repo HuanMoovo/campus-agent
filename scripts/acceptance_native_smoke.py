@@ -13,7 +13,9 @@ import os
 from pathlib import Path
 import re
 import shutil
+import shlex
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -131,16 +133,75 @@ def native_window(group_id, mac_probe=None):
     return None, group
 
 
-def installed_deb_executable(package):
+def desktop_exec_path(content):
+    section = None
+    values = {}
+    for line in content.splitlines():
+        line = line.strip()
+        if line.startswith('[') and line.endswith(']'):
+            section = line
+        elif section == '[Desktop Entry]' and '=' in line and not line.startswith('#'):
+            key, value = line.split('=', 1)
+            if key in {'Type', 'Exec'}:
+                if key in values:
+                    raise ValueError('Duplicate desktop entry key')
+                values[key] = value
+    if values.get('Type') != 'Application':
+        raise ValueError('Desktop entry is not an Application')
+    words = shlex.split(values.get('Exec', ''), posix=True)
+    if not words or not words[0].startswith('/opt/') or any(c in words[0] for c in ';|&`$<>\n\r'):
+        raise ValueError('Desktop Exec must name one absolute /opt application executable')
+    if any(word not in {'%U', '%u', '%F', '%f'} for word in words[1:]):
+        raise ValueError('Unexpected desktop Exec arguments; no shell or arbitrary fallback')
+    return words[0]
+
+
+def installed_deb_executable(package, evidence=None):
     name = command(['dpkg-deb', '-f', package, 'Package']).stdout.strip()
+    if not re.fullmatch(r'[a-z0-9][a-z0-9+.-]+', name):
+        raise RuntimeError('Invalid actual deb package name')
     files = command(['dpkg-query', '-L', name]).stdout.splitlines()
-    candidates = [Path(value) for value in files if value.startswith('/opt/')
-                  and (Path(value).parent / 'resources/app.asar').is_file()
-                  and Path(value).is_file() and os.access(value, os.X_OK)
-                  and Path(value).name not in {'chrome-sandbox', 'chrome_crashpad_handler'}]
-    candidates = [path for path in candidates if path.read_bytes()[:4] == b'\x7fELF']
+    owned = {Path(value) for value in files if value.startswith('/')}
+    desktops = sorted(path for path in owned if path.suffix == '.desktop')
+    if evidence is not None:
+        evidence.update(package=name, owned_file_count=len(owned), desktop_entries=[], candidates=[])
+    candidates = []
+    if not desktops or len(desktops) > 8:
+        raise RuntimeError('Expected a bounded set of actual package-owned desktop entries')
+    for desktop in desktops:
+        row = {'desktop': str(desktop)}
+        try:
+            if not str(desktop).startswith(('/usr/share/applications/', '/opt/')) or desktop.resolve(strict=True) not in owned:
+                raise ValueError('Desktop entry/resolved path is not an owned application file')
+            if not desktop.is_file() or desktop.stat().st_size > 16384:
+                raise ValueError('Desktop entry unavailable or exceeds 16 KiB')
+            content = desktop.read_text(encoding='utf-8')
+            row['exec_lines'] = [line[:1024] for line in content.splitlines() if line.startswith('Exec=')][:4]
+            path = Path(desktop_exec_path(content))
+            row['exec_executable'] = str(path)
+            resolved = path.resolve(strict=True)
+            row['resolved'] = str(resolved)
+            if path not in owned or resolved not in owned or not resolved.is_relative_to('/opt'):
+                raise ValueError('Desktop Exec executable/resolved path is not owned by this /opt package')
+            if not resolved.is_file() or not os.access(resolved, os.X_OK):
+                raise ValueError('Desktop Exec executable is not an executable file')
+            with resolved.open('rb') as stream:
+                if stream.read(4) != b'\x7fELF':
+                    raise ValueError('Desktop Exec executable is not ELF')
+            archive = resolved.parent / 'resources/app.asar'
+            if archive not in owned or not archive.is_file() or archive.resolve(strict=True) not in owned:
+                raise ValueError('Desktop Exec executable has no adjacent package-owned resources/app.asar')
+            row['validated'] = True
+            candidates.append(resolved)
+        except (OSError, ValueError) as error:
+            row['error'] = type(error).__name__ + ': ' + str(error)
+        if evidence is not None:
+            evidence['desktop_entries'].append(row)
+    candidates = sorted(set(candidates))
+    if evidence is not None:
+        evidence['candidates'] = [str(path) for path in candidates]
     if len(candidates) != 1:
-        raise RuntimeError('Cannot identify exactly one actual installed deb application executable')
+        raise RuntimeError('Cannot identify exactly one validated package-owned desktop Exec executable')
     return candidates[0]
 
 
@@ -166,6 +227,123 @@ def stop_own_group(process):
     return processes(group_id)
 
 
+def mac_outer_profile(actual_home):
+    profile = '(version 1)\n(allow default)\n'
+    profile += '(deny file-read* (subpath ' + json.dumps(str(actual_home)) + '))\n'
+    profile += '(deny file-write* (subpath ' + json.dumps(str(actual_home)) + '))\n'
+    return profile
+
+
+def child_log_path(location, state, out):
+    return (state if location == 'state' else out) / 'app-output.log'
+
+
+def mac_app_home_audit(home):
+    # Metadata only. Never enumerate or read existing real-HOME application data.
+    relatives = ('Library/Application Support/CampusAgent', 'Library/Caches/CampusAgent',
+                 'Library/Logs/CampusAgent', 'Library/Application Support/Mens',
+                 'Library/Caches/Mens', 'Library/Logs/Mens',
+                 'Library/Preferences/edu.campus.agent.desktop.plist',
+                 'Library/Saved Application State/edu.campus.agent.desktop.savedState')
+    rows = []
+    for relative in relatives:
+        path = home / relative
+        row = {'relative': relative, 'exists': False}
+        try:
+            info = path.lstat()
+            row.update(exists=True, directory=stat.S_ISDIR(info.st_mode),
+                       symlink=stat.S_ISLNK(info.st_mode), bytes=info.st_size,
+                       modified_ns=info.st_mtime_ns)
+        except FileNotFoundError:
+            pass
+        rows.append(row)
+    return rows
+
+
+def fake_home_inventory(home, limit=300):
+    # The newly created fake HOME belongs entirely to this launch; no file contents.
+    rows = []
+    for root, directories, files in os.walk(home, followlinks=False):
+        for name in sorted(directories + files):
+            path = Path(root) / name
+            info = path.lstat()
+            rows.append({'relative': str(path.relative_to(home)), 'bytes': info.st_size,
+                         'directory': stat.S_ISDIR(info.st_mode), 'symlink': stat.S_ISLNK(info.st_mode)})
+            if len(rows) >= limit:
+                return {'entries': rows, 'truncated': True, 'limit': limit}
+    return {'entries': rows, 'truncated': False, 'limit': limit}
+
+
+def owned_crash_pid(header, own_pids, app_bundle):
+    modern_pid = re.search(r'"pid"\s*:\s*(\d+)', header)
+    modern_path = re.search(r'"procPath"\s*:\s*("(?:[^"\\]|\\.)*")', header)
+    legacy_pid = re.search(r'^Process:\s+[^\n]+\[(\d+)\]', header, re.MULTILINE)
+    legacy_path = re.search(r'^Path:\s+(.+)$', header, re.MULTILINE)
+    pid = int(modern_pid[1]) if modern_pid else int(legacy_pid[1]) if legacy_pid else None
+    path = json.loads(modern_path[1]) if modern_path else legacy_path[1].strip() if legacy_path else ''
+    if pid in own_pids and path.startswith(str(app_bundle) + '/'):
+        return pid
+    return None
+
+
+def collect_mac_diagnostics(out, state, actual_home, executable, own_pids, launched_at):
+    """Bounded own-app evidence only; no broad process logs or user configuration."""
+    evidence = {'owned_pids': sorted(own_pids), 'crash_reports': [], 'errors': [],
+                'crash_report_limit': 4, 'crash_report_byte_limit': 131072,
+                'system_log_byte_limit': 262144, 'crash_header_byte_limit': 16384}
+    bundle = next(parent for parent in executable.parents if parent.suffix == '.app')
+    # On this disposable VM only our installed Mens app is launched. Candidate
+    # metadata/header must additionally match a PID observed in our process group
+    # and this exact copied bundle before any report body is retained.
+    roots = (state / 'home/Library/Logs/DiagnosticReports',
+             actual_home / 'Library/Logs/DiagnosticReports', Path('/Library/Logs/DiagnosticReports'))
+    for root in roots:
+        for pattern in ('Mens*.ips', 'Mens*.crash', 'campus-backend*.ips', 'campus-backend*.crash'):
+            try:
+                candidates = sorted(root.glob(pattern))
+            except OSError as error:
+                evidence['errors'].append(type(error).__name__ + ': crash directory unavailable')
+                continue
+            for path in candidates[:12]:
+                if len(evidence['crash_reports']) >= evidence['crash_report_limit']:
+                    break
+                try:
+                    info = path.lstat()
+                    if not stat.S_ISREG(info.st_mode) or info.st_mtime < launched_at:
+                        continue
+                    with path.open('rb') as stream:
+                        header = stream.read(evidence['crash_header_byte_limit']).decode('utf-8', 'replace')
+                        pid = owned_crash_pid(header, own_pids, bundle)
+                        if pid is None:
+                            continue
+                        stream.seek(0)
+                        content = stream.read(evidence['crash_report_byte_limit'])
+                    name = 'own-crash-' + str(len(evidence['crash_reports']) + 1) + path.suffix
+                    (out / name).write_bytes(content)
+                    evidence['crash_reports'].append({'file': name, 'pid': pid, 'bytes': len(content),
+                                                     'truncated': info.st_size > len(content)})
+                except (OSError, ValueError) as error:
+                    evidence['errors'].append(type(error).__name__ + ': own crash report unavailable')
+    # Predicate is restricted before collection, and the time/bytes are bounded.
+    # PID reuse is further bounded to this invocation's <=90 second launch window.
+    predicate = 'processIdentifier IN {' + ','.join(map(str, sorted(own_pids))) + '}'
+    log_args = ['/usr/bin/log', 'show', '--style', 'json', '--start',
+                datetime.fromtimestamp(launched_at).strftime('%Y-%m-%d %H:%M:%S'),
+                '--predicate', predicate]
+    evidence['system_log_predicate'] = predicate
+    try:
+        result = command(log_args, timeout=15, check=False)
+        content = result.stdout.encode('utf-8')[:evidence['system_log_byte_limit']]
+        (out / 'own-system-log.json').write_bytes(content)
+        evidence['system_log_returncode'] = result.returncode
+        evidence['system_log_stderr'] = result.stderr[:2000]
+        evidence['system_log_truncated'] = len(result.stdout.encode('utf-8')) > len(content)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        evidence['errors'].append(type(error).__name__ + ': own PID-filtered system log unavailable')
+    (out / 'mac-diagnostics.json').write_text(json.dumps(evidence, indent=2) + '\n', encoding='utf-8')
+    return evidence
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     target = parser.add_mutually_exclusive_group(required=True)
@@ -175,7 +353,11 @@ def main():
     parser.add_argument('--package-kind', choices=['mac-dmg', 'appimage', 'deb'], required=True)
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--timeout', type=int, default=90)
+    parser.add_argument('--child-log-location', choices=['workspace', 'state'], default='workspace')
+    parser.add_argument('--diagnostic-only', action='store_true')
     args = parser.parse_args()
+    if args.child_log_location != 'workspace' and not args.diagnostic_only:
+        parser.error('--child-log-location state requires --diagnostic-only')
     if sys.platform not in {'darwin', 'linux'}:
         parser.error('Native smoke requires actual macOS or Linux; no simulated fallback')
     if (sys.platform == 'darwin') != (args.package_kind == 'mac-dmg'):
@@ -185,6 +367,10 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
     out = args.out.resolve()
     report = {'started_utc': datetime.now(timezone.utc).isoformat(), 'status': 'failed',
+              'diagnostic_only': args.diagnostic_only, 'accepted': False,
+              'diagnostic_probe_requirements_met': False,
+              'mac_outer_sandbox': 'deny-home' if sys.platform == 'darwin' else None,
+              'child_log_location': args.child_log_location,
               'platform': sys.platform, 'package_kind': args.package_kind,
               'native_window_verified': False, 'isolated_database_verified': False, 'owned_backend_auth_verified': False,
               'screenshot_captured': False, 'browser_automation_used': False,
@@ -197,7 +383,11 @@ def main():
               'cursor_included': False, 'only_own_process_group_signaled': True}
     process = None
     try:
-        executable = installed_deb_executable(args.installed_deb) if args.installed_deb else args.executable.resolve()
+        if args.installed_deb:
+            report['installed_deb_resolution'] = {}
+            executable = installed_deb_executable(args.installed_deb, report['installed_deb_resolution'])
+        else:
+            executable = args.executable.resolve()
         if not executable.is_file() or not os.access(executable, os.X_OK):
             raise RuntimeError('Actual packaged application executable is unavailable')
         report['executable'] = str(executable)
@@ -216,22 +406,36 @@ def main():
             (state / 'empty.env').write_text('', encoding='utf-8')
             launch = [str(executable), *args.argument]
             mac_probe = None
+            actual_home = None
+            audit_before = None
             if sys.platform == 'darwin':
                 import pwd
                 actual_home = Path(pwd.getpwuid(os.getuid()).pw_dir).resolve()
                 if executable.is_relative_to(actual_home):
                     raise RuntimeError('Copy the packaged macOS app outside the actual runner home before launch')
-                sandbox = shutil.which('sandbox-exec')
-                if not sandbox:
-                    raise RuntimeError('macOS home-isolation sandbox is unavailable')
-                profile = state / 'isolation.sb'
-                profile.write_text('(version 1)\n(allow default)\n(deny file-read* (subpath ' + json.dumps(str(actual_home)) + '))\n(deny file-write* (subpath ' + json.dumps(str(actual_home)) + '))\n', encoding='utf-8')
-                launch = [sandbox, '-f', str(profile), *launch]
+                audit_before = mac_app_home_audit(actual_home)
+                report['actual_home_app_paths_before'] = audit_before
+                report['fake_home_before'] = fake_home_inventory(home)
+                profile_text = mac_outer_profile(actual_home)
+                report['outer_sandbox_profile'] = profile_text
+                report['outer_sandbox_applied'] = profile_text is not None
+                if profile_text is not None:
+                    sandbox = shutil.which('sandbox-exec')
+                    if not sandbox:
+                        raise RuntimeError('macOS outer isolation sandbox is unavailable')
+                    profile = state / 'isolation.sb'
+                    profile.write_text(profile_text, encoding='utf-8')
+                    (out / 'outer-sandbox.sb').write_text(profile_text, encoding='utf-8')
+                    report['outer_sandbox_profile_sha256'] = hashlib.sha256(profile_text.encode()).hexdigest()
+                    launch = [sandbox, '-f', str(profile), *launch]
                 source = state / 'window_probe.swift'
                 source.write_text(SWIFT, encoding='utf-8')
                 mac_probe = state / 'window_probe'
-                compile_result = command(['xcrun', 'swiftc', '-framework', 'CoreGraphics', source, '-o', mac_probe], timeout=90)
+                compile_result = command(['xcrun', 'swiftc', '-framework', 'CoreGraphics', source, '-o', mac_probe], timeout=90, check=False)
                 (out / 'native-probe-compile.log').write_text(compile_result.stdout + compile_result.stderr, encoding='utf-8')
+                report['native_probe_compile_returncode'] = compile_result.returncode
+                if compile_result.returncode:
+                    raise RuntimeError('Native Swift window probe compilation failed')
                 app_data = home / 'Library/Application Support/CampusAgent'
                 report['actual_runner_home_denied_by_sandbox'] = str(actual_home)
             else:
@@ -243,16 +447,36 @@ def main():
                 app_data = config / 'CampusAgent'
             report['isolated_state_root'] = str(state)
             report['expected_app_data'] = str(app_data)
+            report['launch_environment_keys'] = sorted(env)
+            report['launch_home'] = env['HOME']
+            report['launch_cffixed_user_home'] = env['CFFIXED_USER_HOME']
+            report['working_directory'] = str(state)
             report['command'] = launch
-            with (out / 'app-output.log').open('w', encoding='utf-8') as log:
+            launched_at = time.time()
+            child_log = child_log_path(args.child_log_location, state, out)
+            report['child_log_target'] = str(child_log)
+            with child_log.open('w', encoding='utf-8') as log:
+                # Both controls inherit exactly the same stdin; only fd 1/2's
+                # backing file moves from the denied workspace to allowed /tmp.
+                stdin_info = os.fstat(0)
+                log_info = os.fstat(log.fileno())
+                report['launch_fd_targets'] = {'0': {'target': 'inherited unchanged', 'device': stdin_info.st_dev,
+                                                    'inode': stdin_info.st_ino, 'mode': stdin_info.st_mode},
+                                               '1': {'target': str(child_log), 'device': log_info.st_dev, 'inode': log_info.st_ino},
+                                               '2': {'target': str(child_log), 'device': log_info.st_dev, 'inode': log_info.st_ino}}
+                if sys.platform == 'darwin':
+                    fd0 = command(['lsof', '-a', '-p', str(os.getpid()), '-d', '0', '-Ffn'], check=False)
+                    report['inherited_stdin_target_lsof'] = fd0.stdout[:2000]
                 process = subprocess.Popen(launch, cwd=state, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
                 report['process_group'] = process.pid
+                own_pids = {process.pid}
                 try:
                     deadline = time.monotonic() + args.timeout
                     window = None
                     ready = None
                     while time.monotonic() < deadline:
                         window, group = native_window(process.pid, mac_probe)
+                        own_pids.update(row['pid'] for row in group)
                         ready = backend_readiness(group)
                         if window and ready and (app_data / 'campus.db').is_file():
                             break
@@ -289,17 +513,56 @@ def main():
                     if not final_window or not backend_readiness(final_group):
                         raise RuntimeError('Native application window/backend disappeared during capture')
                     report['status'] = 'passed-native-window-backend-and-isolated-db-manual-screenshot-review-required'
+                    report['diagnostic_probe_requirements_met'] = True
                 finally:
-                    remaining = stop_own_group(process)
-                    report['remaining_own_processes'] = remaining
-                    if remaining:
-                        report['status'] = 'failed'
-                        report['cleanup_error'] = 'Some launched process-group members remain'
+                    # This is the application outcome BEFORE our cleanup signals.
+                    returncode = process.poll()
+                    report['application_returncode_before_cleanup'] = returncode
+                    report['application_running_before_cleanup'] = returncode is None
+                    report['application_signal_before_cleanup'] = -returncode if returncode is not None and returncode < 0 else None
+                    if sys.platform == 'darwin':
+                        try:
+                            own_pids.update(row['pid'] for row in processes(process.pid))
+                            if returncode is not None and returncode < 0:
+                                time.sleep(2)  # Allow the VM's own crash reporter to finish this app's report.
+                            report['mac_diagnostics'] = collect_mac_diagnostics(out, state, actual_home, executable, own_pids, launched_at)
+                        except Exception as error:
+                            report['diagnostic_collection_error'] = type(error).__name__ + ': ' + str(error)
+                    # Collection can take time. Poll again immediately before the
+                    # first cleanup signal so a spontaneous exit is not attributed
+                    # to our TERM/KILL sequence.
+                    returncode = process.poll()
+                    report['application_returncode_before_cleanup'] = returncode
+                    report['application_running_before_cleanup'] = returncode is None
+                    report['application_signal_before_cleanup'] = -returncode if returncode is not None and returncode < 0 else None
+                    try:
+                        remaining = stop_own_group(process)
+                        report['application_returncode_after_cleanup'] = process.poll()
+                        report['remaining_own_processes'] = remaining
+                        if sys.platform == 'darwin':
+                            report['fake_home_after'] = fake_home_inventory(home)
+                            audit_after = mac_app_home_audit(actual_home)
+                            report['actual_home_app_paths_after'] = audit_after
+                            report['actual_home_app_paths_unchanged'] = audit_after == audit_before
+                            if audit_after != audit_before:
+                                report['status'] = 'failed'
+                                report['real_home_side_effect_error'] = 'Actual-HOME app-owned path metadata changed; no real-HOME data was read or removed'
+                        if remaining:
+                            report['status'] = 'failed'
+                            report['cleanup_error'] = 'Some launched process-group members remain'
+                    finally:
+                        log.flush()
+                        if child_log != out / 'app-output.log':
+                            # Preserve owned output after process cleanup and before
+                            # TemporaryDirectory removes the private state.
+                            shutil.copyfile(child_log, out / 'app-output.log')
     except Exception as error:
         report['status'] = 'failed'
         report['error'] = type(error).__name__ + ': ' + str(error)
     report['finished_utc'] = datetime.now(timezone.utc).isoformat()
     report['exit_code'] = 0 if report['status'].startswith('passed-') else 1
+    if args.diagnostic_only and report['exit_code'] == 0:
+        report['status'] = 'diagnostic-launch-evidence-collected-manual-review-required'
     (out / 'native-result.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
     print(json.dumps(report, indent=2))
     return report['exit_code']
