@@ -1,4 +1,4 @@
-name: Final native package evidence using unchanged built artifacts
+name: Diagnostic Windows fresh-file ACL comparison and unchanged backend tests
 
 on:
   workflow_dispatch:
@@ -8,36 +8,22 @@ on:
 
 permissions:
   contents: read
-  actions: read
 
 jobs:
-  native-packages:
+  windows-acl-diagnostic:
     if: github.ref == 'refs/heads/codex/acceptance-native-20261101'
-    name: Native ${{ matrix.label }}
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: macOS arm64 DMG
-            runner: macos-latest
-            target_os: mac
-            arch: arm64
-            artifact: acceptance-native-mac-arm64
-          - label: macOS x64 DMG
-            runner: macos-15-intel
-            target_os: mac
-            arch: x64
-            artifact: acceptance-native-mac-x64
-          - label: Linux x64 AppImage and DEB
-            runner: ubuntu-latest
-            target_os: linux
-            arch: x64
-            artifact: acceptance-native-linux-x64
+    runs-on: windows-latest
+    timeout-minutes: 30
     env:
-      TARGET_OS: ${{ matrix.target_os }}
-      EXPECTED_ARCH: ${{ matrix.arch }}
+      ADMIN_TOKEN: test-admin-token
+      ENABLE_RAG: 'false'
+      QWEN_API_KEY: ''
+      DEEPSEEK_API_KEY: ''
+      LANGSMITH_TRACING: 'false'
+      LANGCHAIN_TRACING_V2: 'false'
+      PYTHONNOUSERSITE: '1'
+      PYTHONUTF8: '1'
+      PYTHONIOENCODING: utf-8
     steps:
       - uses: actions/checkout@v7
         with:
@@ -46,200 +32,240 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
-      - name: Reuse exact original run4 package artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.artifact }}
-          run-id: '41271012516'
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          path: final-native-input
-      - name: Verify native architecture, unchanged product sources, and package provenance
-        id: inputs
+      - name: Install unchanged backend test requirements
+        id: dependencies
+        run: python -m pip install -r backend/requirements.txt
+      - name: Compare ACL bytes on two fresh owned dummy roots without changing temp configuration
         shell: python
         run: |
-          import hashlib, json, os, pathlib, platform, subprocess
-          def sha(path):
-              digest = hashlib.sha256()
-              with path.open('rb') as stream:
-                  for block in iter(lambda: stream.read(1048576), b''):
-                      digest.update(block)
-              return digest.hexdigest()
-          target, arch = os.environ['TARGET_OS'], os.environ['EXPECTED_ARCH']
-          actual = {'arm64': 'arm64', 'aarch64': 'arm64', 'x86_64': 'x64', 'amd64': 'x64'}.get(platform.machine().lower())
-          assert actual == arch and platform.system() == ('Darwin' if target == 'mac' else 'Linux'), platform.platform()
-          excluded = {'.github/workflows/acceptance-native.yml', 'scripts/acceptance_native_smoke.py'}
-          tracked = subprocess.run(['git', 'ls-files', '-z'], check=True, capture_output=True).stdout.decode().split('\0')
-          names = sorted(name for name in tracked if name and name not in excluded)
-          assert len(names) == 274
-          manifest = ''.join(name + '\0' + sha(pathlib.Path(name)) + '\n' for name in names)
-          product_digest = hashlib.sha256(manifest.encode()).hexdigest()
-          assert product_digest == '2c241ebd156b26b242987f636862b57c3422c355083e5adfab1beaf23ce84def', 'Product source changed from fdce'
-          root = pathlib.Path('final-native-input')
-          previous_path = root / 'acceptance-evidence/package-status.json'
-          previous = json.loads(previous_path.read_text())
-          patterns = {'mac-dmg': '*.dmg'} if target == 'mac' else {'linux-appimage': '*.AppImage', 'linux-deb': '*.deb'}
-          packages = {}
-          for case, pattern in patterns.items():
-              candidates = list((root / 'release').glob(pattern))
-              assert len(candidates) == 1, (case, len(candidates))
-              package = candidates[0]
-              digest = sha(package)
-              matches = [item for item in previous['packages'] if item['file'] == package.name]
-              assert len(matches) == 1 and matches[0]['sha256'] == digest, 'Run4 package checksum mismatch'
-              packages[case] = {'file': package.name, 'bytes': package.stat().st_size, 'sha256': digest}
-              prior_result = root / 'acceptance-evidence' / case / 'native-result.json'
-              if prior_result.is_file():
-                  old = json.loads(prior_result.read_text())
-                  packages[case]['run4_result_sha256'] = sha(prior_result)
-                  packages[case]['reference_executable_sha256'] = old.get('executable_sha256')
-          out = pathlib.Path('final-native-evidence')
-          out.mkdir()
-          report = {'acceptance_run': True, 'diagnostic_only': False, 'accepted': False, 'manual_ui_review_pending': True,
-                    'source_run_id': 41271012516, 'built_commit': 'fdceba925aa9a9f0e2c788c03a27dff52f640aeb',
-                    'harness_commit': os.environ['GITHUB_SHA'], 'workflow_run_id': os.environ['GITHUB_RUN_ID'],
-                    'probe_sha256': sha(pathlib.Path('scripts/acceptance_native_smoke.py')),
-                    'workflow_sha256': sha(pathlib.Path('.github/workflows/acceptance-native.yml')),
-                    'product_source_files': 274, 'product_manifest_sha256': product_digest,
-                    'target_os': target, 'arch': arch, 'platform': platform.platform(), 'packages': packages,
-                    'run4_package_status_sha256': sha(previous_path), 'rebuilt': False,
-                    'product_sandbox_changed': False, 'quarantine_removed': False,
-                    'linux_limit': 'Disposable runner uses --no-sandbox; no hardened sandbox claim',
-                    'mac_home_exception': 'Only new regular own-UID preferences plist <=65536 bytes; metadata only',
-                    'zip_scope': 'Run4 build/structural evidence only; not an additional launched case'}
-          (out / 'input-provenance.json').write_text(json.dumps(report, indent=2) + '\n')
-      - name: Launch actual read-only DMG application on fresh macOS VM
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          dmg=$(find final-native-input/release -maxdepth 1 -name '*.dmg' -print -quit)
-          mount=$(mktemp -d /tmp/mens-final-dmg.XXXXXX)
-          install=$(mktemp -d /tmp/mens-final-install.XXXXXX)
-          hdiutil attach "$dmg" -readonly -nobrowse -mountpoint "$mount"
-          trap 'hdiutil detach "$mount" -quiet || true' EXIT
-          ditto "$mount/Mens.app" "$install/Mens.app"
-          hdiutil detach "$mount" -quiet
-          trap - EXIT
-          # Preserve signing/quarantine and product renderer/GPU/network sandboxes.
-          xattr -l "$install/Mens.app" > final-native-evidence/mac-extended-attributes.txt || true
-          python3 scripts/acceptance_native_smoke.py --package-kind mac-dmg --executable "$install/Mens.app/Contents/MacOS/Mens" --mac-launch-mode standard-vm --child-log-location state --acceptance-run --out final-native-evidence/mac-dmg
-      - name: Install disposable Linux native GUI prerequisites
-        id: prerequisites
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y xvfb x11-utils imagemagick lsof libgtk-3-0t64 libnss3 libgbm1 libasound2t64 libxss1
-      - name: Launch actual Linux AppImage with explicit existing sandbox limitation
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          set -euo pipefail
-          appimage=$(find final-native-input/release -maxdepth 1 -name '*.AppImage' -print -quit)
-          chmod +x "$appimage"
-          xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' python3 scripts/acceptance_native_smoke.py --package-kind appimage --executable "$appimage" --argument=--appimage-extract-and-run --argument=--no-sandbox --child-log-location state --acceptance-run --out final-native-evidence/linux-appimage
-      - name: Install actual DEB and launch its validated package-owned desktop Exec
-        if: always() && runner.os == 'Linux' && steps.inputs.outcome == 'success' && steps.prerequisites.outcome == 'success'
-        shell: bash
-        run: |
-          set -euo pipefail
-          deb=$(find final-native-input/release -maxdepth 1 -name '*.deb' -print -quit)
-          sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "$(pwd)/$deb"
-          xvfb-run -a -s '-screen 0 1440x1000x24 -nolisten tcp' python3 scripts/acceptance_native_smoke.py --package-kind deb --installed-deb "$deb" --argument=--no-sandbox --child-log-location state --acceptance-run --out final-native-evidence/linux-deb
-      - name: Gate every native requirement and bind results to immutable inputs
-        if: always()
-        shell: python
-        run: |
-          import hashlib, importlib.util, json, os, pathlib, sys
-          sys.dont_write_bytecode = True
-          def sha(path):
-              return hashlib.sha256(path.read_bytes()).hexdigest()
-          out = pathlib.Path('final-native-evidence')
-          out.mkdir(exist_ok=True)
-          input_path = out / 'input-provenance.json'
-          errors, cases = [], []
-          target, arch = os.environ['TARGET_OS'], os.environ['EXPECTED_ARCH']
-          expected = {'mac-dmg': 'mac-dmg'} if target == 'mac' else {'linux-appimage': 'appimage', 'linux-deb': 'deb'}
-          provenance = json.loads(input_path.read_text()) if input_path.is_file() else {}
-          spec = importlib.util.spec_from_file_location('native_probe', 'scripts/acceptance_native_smoke.py')
-          probe = importlib.util.module_from_spec(spec)
-          spec.loader.exec_module(probe)
-          for case, kind in expected.items():
-              path = out / case / 'native-result.json'
-              row = {'case': target + '-' + arch + '-' + kind, 'native_evidence_passed': False}
-              try:
-                  assert provenance['acceptance_run'] is True and provenance['diagnostic_only'] is False
-                  assert provenance['accepted'] is False and provenance['manual_ui_review_pending'] is True
-                  assert provenance['target_os'] == target and provenance['arch'] == arch
-                  assert provenance['probe_sha256'] == sha(pathlib.Path('scripts/acceptance_native_smoke.py'))
-                  result = json.loads(path.read_text())
-                  assert result['acceptance_run'] is True and result['diagnostic_only'] is False
-                  assert result['accepted'] is False and result['manual_ui_review_pending'] is True
-                  assert result['status'] == 'passed-native-window-backend-and-isolated-db-manual-screenshot-review-required'
-                  assert result['exit_code'] == 0 and result['native_evidence_status'] == 'passed-manual-ui-review-pending'
-                  assert result['native_evidence_requirements_met'] is True and result['package_kind'] == kind
-                  assert result['platform'] == ('darwin' if target == 'mac' else 'linux')
-                  for key in ('native_window_verified', 'isolated_database_verified', 'owned_backend_auth_verified',
-                              'screenshot_captured', 'fresh_isolated_state_verified', 'only_own_process_group_signaled'):
-                      assert result[key] is True, key
-                  assert result['remaining_own_processes'] == [] and not result.get('cleanup_error')
-                  assert result['application_running_before_cleanup'] is True
-                  assert result['application_returncode_before_cleanup'] is None
-                  assert not result.get('real_home_side_effect_error')
-                  assert result['child_log_location'] == 'state' and result['cursor_included'] is False
-                  assert result['browser_automation_used'] is False and result['debugging_protocol_used'] is False
-                  assert result['fully_loaded_ui_verified'] is False and result['ui_feature_interactions_verified'] is False
-                  assert result['screenshot_manual_content_review'] == 'pending'
-                  state = pathlib.Path(result['isolated_state_root'])
-                  assert pathlib.Path(result['launch_home']) == state / 'home'
-                  assert result['launch_cffixed_user_home'] == result['launch_home']
-                  assert pathlib.Path(result['working_directory']) == state
-                  data = state / ('home/Library/Application Support/CampusAgent' if target == 'mac' else 'config/CampusAgent')
-                  assert pathlib.Path(result['expected_app_data']) == data and result['database_bytes'] >= 16
-                  backend = result['backend']
-                  assert backend['address'] == '127.0.0.1' and backend['unauthenticated_status'] == 401
-                  assert backend['desktop_token_supplied'] is False
-                  assert backend['pid'] in {item['pid'] for item in result['processes']}
-                  if target == 'mac':
-                      assert result['mac_launch_mode'] == 'standard-vm' and result['outer_sandbox_applied'] is False
-                      assert result['outer_sandbox_profile'] is None and result['product_sandbox_overrides_supplied'] is False
-                      assert result['standard_vm_fresh_actual_home_verified'] is True
-                      audit = probe.standard_home_after(result['actual_home_app_paths_before'], result['actual_home_app_paths_after'], os.getuid())
-                      assert audit['passed'] is True and result['standard_vm_actual_home_audit'] == audit
-                      row['actual_home_audit'] = audit
+          """Workflow-embedded diagnostic. Execute only on a fresh authorized Windows VM."""
+          from datetime import datetime, timezone
+          import ctypes
+          import hashlib
+          import json
+          import ntpath
+          import os
+          from pathlib import Path
+          import platform
+          import sys
+          import tempfile
+          import traceback
+
+
+          def digest(raw):
+              return {'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()}
+
+
+          def parse_acl(raw):
+              if len(raw) < 8:
+                  return {'error': 'ACL shorter than header', **digest(raw)}
+              size, count = int.from_bytes(raw[2:4], 'little'), int.from_bytes(raw[4:6], 'little')
+              result = {'revision': raw[0], 'sbz1': raw[1], 'acl_size': size, 'ace_count': count,
+                        'sbz2': int.from_bytes(raw[6:8], 'little'), 'header_hex': raw[:8].hex(),
+                        'full_acl_hex': raw.hex(), **digest(raw), 'aces': []}
+              offset = 8
+              object_types = {5, 6, 7, 8, 11, 12, 15, 16}
+              basic_types = {0, 1, 2, 3, 9, 10, 13, 14, 17, 18, 19, 20, 21}
+              flag_names = {1: 'object_inherit', 2: 'container_inherit', 4: 'no_propagate', 8: 'inherit_only',
+                            16: 'inherited', 64: 'successful_access', 128: 'failed_access'}
+              for index in range(count):
+                  if offset + 4 > min(size, len(raw)):
+                      result['error'] = 'ACE header exceeds captured ACL'
+                      break
+                  ace_size = int.from_bytes(raw[offset + 2:offset + 4], 'little')
+                  if ace_size < 4 or offset + ace_size > min(size, len(raw)):
+                      result['error'] = 'ACE size exceeds captured ACL'
+                      break
+                  ace = raw[offset:offset + ace_size]
+                  kind, flags = ace[0], ace[1]
+                  row = {'index': index, 'offset': offset, 'type': kind, 'flags': flags,
+                         'flag_names': [name for bit, name in flag_names.items() if flags & bit],
+                         'size': ace_size, 'raw_ace_sha256': hashlib.sha256(ace).hexdigest()}
+                  sid_offset = None
+                  if ace_size >= 8:
+                      row['mask_hex'] = '0x' + ace[4:8][::-1].hex()
+                      if kind in basic_types:
+                          sid_offset = 8
+                      elif kind == 4:
+                          sid_offset = 12
+                          row['compound_header_hex'] = ace[8:12].hex()
+                      elif kind in object_types and ace_size >= 12:
+                          object_flags = int.from_bytes(ace[8:12], 'little')
+                          row['object_flags'] = object_flags
+                          sid_offset = 12 + (16 if object_flags & 1 else 0) + (16 if object_flags & 2 else 0)
+                          row['object_guid_bytes_hex'] = ace[12:sid_offset].hex()
+                  if sid_offset is not None and sid_offset + 8 <= len(ace):
+                      sid_size = 8 + 4 * ace[sid_offset + 1]
+                      if sid_offset + sid_size <= len(ace):
+                          sid = ace[sid_offset:sid_offset + sid_size]
+                          row.update(sid_offset=sid_offset, sid_bytes=len(sid), sid_sha256=hashlib.sha256(sid).hexdigest())
+                          extra = ace[sid_offset + sid_size:]
+                          row['extra_data'] = digest(extra)
+                      else:
+                          row['sid_error'] = 'SID length exceeds ACE'
                   else:
-                      assert result['linux_no_sandbox_launch'] is True
-                      row['linux_limit'] = 'Disposable runner --no-sandbox; no hardened sandbox claim'
-                  screenshot = out / case / result['screenshot']
-                  assert screenshot.name == 'native-window.png' and screenshot.stat().st_size >= 1000
-                  assert screenshot.read_bytes()[:8] == b'\x89PNG\r\n\x1a\n'
-                  assert sha(screenshot) == result['screenshot_sha256']
-                  package = provenance['packages'][case]
-                  reference = package.get('reference_executable_sha256')
-                  if reference:
-                      assert reference == result['executable_sha256'], 'Executable differs from the original run4 package probe'
-                  row.update(native_evidence_passed=True, native_result_sha256=sha(path), screenshot_sha256=sha(screenshot),
-                             executable_sha256=result['executable_sha256'], package_sha256=package['sha256'],
-                             input_provenance_sha256=sha(input_path))
-              except Exception as error:
-                  row['error'] = type(error).__name__ + ': ' + str(error)
-                  errors.append(row['case'] + ': ' + row['error'])
-              cases.append(row)
-          summary = {'acceptance_run': True, 'diagnostic_only': False, 'accepted': False, 'manual_ui_review_pending': True,
-                     'status': 'failed' if errors else 'passed-native-evidence-manual-ui-review-pending',
-                     'job_success_is_final_acceptance': False, 'cases': cases, 'errors': errors,
-                     'acceptance_scope': 'Native window, owned backend HTTP401, isolated SQLite, cleanup; screenshots require direct review',
-                     'unverified': ['UI feature interactions', 'fully loaded UI', 'Gatekeeper', 'signing/notarization', 'Electron sandbox verification']}
-          (out / 'native-evidence-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
-          print(json.dumps(summary, indent=2))
-          sys.exit(1 if errors else 0)
-      - name: Retain small native evidence for direct screenshot review
+                      row['opaque_payload_hex'] = ace[4:].hex()
+                  result['aces'].append(row)
+                  offset += ace_size
+              result['ace_end_offset'] = offset
+              result['ace_bytes_in_use_from_parse'] = offset
+              result['ace_bytes_free_from_parse'] = max(0, size - offset)
+              result['trailing_unused_bytes_hex'] = raw[offset:min(size, len(raw))].hex()
+              result['beyond_declared_acl_hex'] = raw[size:].hex() if size < len(raw) else ''
+              return result
+
+
+          def compare_security(left, right):
+              changed = [key for key in ('owner', 'group', 'dacl', 'protected', 'label') if left[key] != right[key]]
+              old, new = parse_acl(left['dacl']), parse_acl(right['dacl'])
+              old_aces = [row['raw_ace_sha256'] for row in old.get('aces', [])]
+              new_aces = [row['raw_ace_sha256'] for row in new.get('aces', [])]
+              sequence_equal = old_aces == new_aces and not old.get('error') and not new.get('error')
+              header_equal = all(old.get(key) == new.get(key) for key in ('revision', 'sbz1', 'ace_count', 'sbz2'))
+              return {'changed_keys': changed, 'exact_security_equal': not changed,
+                      'dacl_equal': left['dacl'] == right['dacl'], 'ace_sequence_equal': bool(sequence_equal),
+                      'ace_multiset_equal': sorted(old_aces) == sorted(new_aces),
+                      'acl_header_except_size_equal': header_equal,
+                      'only_dacl_allocation_or_padding_diff': (changed == ['dacl'] and bool(sequence_equal) and header_equal),
+                      'interpretation_limit': 'Byte-structure classification only; no product security equivalence or fix is asserted'}
+
+
+          report = {'started_utc': datetime.now(timezone.utc).isoformat(), 'diagnostic_only': True, 'accepted': False,
+                    'platform': platform.platform(), 'product_guard_changed': False, 'dummy_content_only': True,
+                    'ambient_file_contents_read': False, 'credentials_read': False,
+                    'original_temp_environment': {key: os.environ.get(key) for key in ('TEMP', 'TMP', 'TMPDIR', 'RUNNER_TEMP')},
+                    'default_tempdir_before_diagnostics': tempfile.gettempdir(), 'cases': []}
+          out = Path('windows-acl-evidence')
+          out.mkdir(exist_ok=True)
+          try:
+              assert os.name == 'nt', 'Actual Windows is required; no native simulation'
+              sys.path.insert(0, str(Path('backend').resolve()))
+              from app import project_commit_windows as native
+              from ctypes import wintypes
+              class AclSizeInformation(ctypes.Structure):
+                  _fields_ = [('AceCount', wintypes.DWORD), ('AceBytesInUse', wintypes.DWORD), ('AceBytesFree', wintypes.DWORD)]
+              get_acl_info = native.A.GetAclInformation
+              get_acl_info.argtypes = [ctypes.c_void_p, ctypes.c_void_p, wintypes.DWORD, ctypes.c_int]
+              get_acl_info.restype = wintypes.BOOL
+
+              def security_view(value):
+                  acl = parse_acl(value['dacl'])
+                  buffer, info = ctypes.create_string_buffer(value['dacl']), AclSizeInformation()
+                  ok = bool(get_acl_info(buffer, ctypes.byref(info), ctypes.sizeof(info), 2))
+                  acl['GetAclInformation'] = {'success': ok, 'AceCount': info.AceCount,
+                                              'AceBytesInUse': info.AceBytesInUse, 'AceBytesFree': info.AceBytesFree}
+                  if not ok:
+                      acl['GetAclInformation']['last_error'] = ctypes.get_last_error()
+                  return {'owner': digest(value['owner']), 'group': digest(value['group']),
+                          'label': digest(value['label']), 'protected': value['protected'], 'dacl': acl}
+
+              profile_temp = Path(os.environ['USERPROFILE']) / 'AppData/Local/Temp'
+              bases = [('runner-temp', Path(os.environ['RUNNER_TEMP'])), ('c-profile-temp', profile_temp)]
+              for name, parent in bases:
+                  row = {'case': name, 'diagnostic_only': True, 'accepted': False, 'parent': str(parent), 'SetSecurityInfo_calls': []}
+                  root = original_path = stage_path = None
+                  original = stage = None
+                  real_set_security = native.A.SetSecurityInfo
+                  real_security = native._security
+                  try:
+                      if name == 'c-profile-temp' and ntpath.splitdrive(str(parent))[0].lower() != 'c:':
+                          raise RuntimeError('USERPROFILE temp parent is not on C:; no alternate ambient path will be used')
+                      if not parent.is_dir():
+                          raise RuntimeError('Known temp parent unavailable; no ambient directory enumeration or creation')
+                      parent = parent.resolve()
+                      root = Path(tempfile.mkdtemp(prefix='mens-acl-diag-', dir=parent)).resolve()
+                      assert root.is_relative_to(parent) and root.name.startswith('mens-acl-diag-')
+                      row['created_root'] = str(root)
+                      original_path, stage_path = root / 'original-owned-dummy.txt', root / 'staging-owned-dummy.txt'
+                      original_path.write_bytes(b'fresh owned ACL diagnostic dummy\r\n')
+                      filesystem = ctypes.create_unicode_buffer(32)
+                      drive = ntpath.splitdrive(str(root))[0] + '\\'
+                      volume_ok = bool(native.K.GetVolumeInformationW(drive, None, 0, None, None, None, filesystem, len(filesystem)))
+                      row['volume'] = {'drive': drive, 'query_success': volume_ok, 'filesystem': filesystem.value,
+                                       'product_supported': native.supported(original_path)}
+                      original = native._open(original_path)
+                      stage = native._open(stage_path, create=True)
+                      old, initial = native._security(original), native._security(stage)
+                      row['original_before'] = security_view(old)
+                      row['staging_before'] = security_view(initial)
+                      row['original_vs_initial_staging'] = compare_security(old, initial)
+                      internal_reads = []
+                      def trace_security(handle):
+                          value = real_security(handle)
+                          internal_reads.append({'role': 'original' if handle == original else 'staging', 'value': value})
+                          return value
+                      def trace_set_security(*arguments):
+                          result = real_set_security(*arguments)
+                          row['SetSecurityInfo_calls'].append({'security_information_flags': int(arguments[2]), 'return_code': int(result)})
+                          return result
+                      native.A.SetSecurityInfo = trace_set_security
+                      native._security = trace_security
+                      try:
+                          native._copy_security(original, stage)
+                          row['copy_security'] = {'returned': True}
+                      except Exception as error:
+                          row['copy_security'] = {'returned': False, 'error_type': type(error).__name__,
+                                                  'error_code': getattr(error, 'error_code', None), 'error': str(error),
+                                                  'traceback': traceback.format_exc(limit=4)}
+                      finally:
+                          native.A.SetSecurityInfo = real_set_security
+                          native._security = real_security
+                      row['copy_security_internal_reads'] = [{'role': item['role'], 'security': security_view(item['value'])} for item in internal_reads]
+                      if len(internal_reads) >= 2:
+                          row['internal_original_vs_initial_staging'] = compare_security(internal_reads[0]['value'], internal_reads[1]['value'])
+                      if len(internal_reads) >= 3:
+                          row['internal_original_vs_post_set_staging'] = compare_security(internal_reads[0]['value'], internal_reads[-1]['value'])
+                      after, old_after = native._security(stage), native._security(original)
+                      row['staging_after'] = security_view(after)
+                      row['original_after'] = security_view(old_after)
+                      row['original_vs_post_set_staging'] = compare_security(old, after)
+                      row['initial_vs_post_set_staging'] = compare_security(initial, after)
+                      row['original_unchanged'] = compare_security(old, old_after)
+                  except Exception as error:
+                      row['diagnostic_error'] = {'type': type(error).__name__, 'code': getattr(error, 'error_code', None),
+                                                 'message': str(error), 'traceback': traceback.format_exc(limit=4)}
+                  finally:
+                      native.A.SetSecurityInfo = real_set_security
+                      native._security = real_security
+                      for handle in (stage, original):
+                          if handle is not None:
+                              native.K.CloseHandle(handle)
+                      # Only the two exact fresh dummy paths and newly created child root.
+                      # Never enumerate, recursively delete, or modify either temp parent.
+                      if root is not None:
+                          assert root.is_relative_to(parent) and root.name.startswith('mens-acl-diag-')
+                          try:
+                              for owned in (stage_path, original_path):
+                                  if owned is not None:
+                                      assert owned.parent == root
+                                      owned.unlink(missing_ok=True)
+                              root.rmdir()
+                              row['own_dummy_cleanup'] = 'completed'
+                          except OSError as error:
+                              row['own_dummy_cleanup'] = type(error).__name__ + ': ' + str(error)
+                  report['cases'].append(row)
+          except Exception as error:
+              report['setup_error'] = {'type': type(error).__name__, 'message': str(error), 'traceback': traceback.format_exc(limit=4)}
+          report['default_tempdir_after_diagnostics'] = tempfile.gettempdir()
+          report['temp_environment_unchanged'] = report['original_temp_environment'] == {key: os.environ.get(key) for key in ('TEMP', 'TMP', 'TMPDIR', 'RUNNER_TEMP')}
+          report['finished_utc'] = datetime.now(timezone.utc).isoformat()
+          (out / 'acl-diagnostic.json').write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(report, indent=2))
+      - name: Run full unchanged backend tests with original default OS temp configuration
+        if: always() && steps.dependencies.outcome == 'success'
+        working-directory: backend
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ../windows-acl-evidence -Force | Out-Null
+          python -m pytest -q 2>&1 | Tee-Object -FilePath ../windows-acl-evidence/backend-pytest.log
+          $pytestExitCode = $LASTEXITCODE
+          @{ diagnostic_only = $true; accepted = $false; exit_code = $pytestExitCode; temp_variables_overridden = $false } | ConvertTo-Json | Set-Content -LiteralPath ../windows-acl-evidence/pytest-result.json -Encoding utf8
+          exit $pytestExitCode
+      - name: Retain small Windows diagnostic evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: final-native-evidence-${{ matrix.target_os }}-${{ matrix.arch }}
-          path: final-native-evidence/
+          name: windows-acl-diagnostic-evidence
+          path: windows-acl-evidence/
           if-no-files-found: error
           retention-days: 7
