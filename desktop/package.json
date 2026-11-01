@@ -19,7 +19,7 @@
   },
   "devDependencies": {
     "electron": "^44.5.1",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.18.0"
   },
   "build": {
     "appId": "edu.campus.agent.desktop",
