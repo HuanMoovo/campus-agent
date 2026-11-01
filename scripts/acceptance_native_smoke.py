@@ -238,26 +238,67 @@ def child_log_path(location, state, out):
     return (state if location == 'state' else out) / 'app-output.log'
 
 
+def validate_mac_launch_mode(mode, diagnostic_only, child_log_location, platform, arguments):
+    if mode not in {'strict', 'standard-vm'}:
+        raise ValueError('Unknown macOS launch mode')
+    if mode == 'standard-vm' and (not diagnostic_only or child_log_location != 'state'
+                                  or platform != 'darwin' or arguments):
+        raise ValueError('standard-vm requires macOS, --diagnostic-only, --child-log-location state, and no application arguments')
+
+
+MAC_APP_HOME_RELATIVES = (
+    'Library/Application Support/CampusAgent', 'Library/Caches/CampusAgent',
+    'Library/Logs/CampusAgent', 'Library/Application Support/Mens',
+    'Library/Caches/Mens', 'Library/Logs/Mens',
+    'Library/Preferences/edu.campus.agent.desktop.plist',
+    'Library/Saved Application State/edu.campus.agent.desktop.savedState')
+MAC_OS_PREFERENCES = 'Library/Preferences/edu.campus.agent.desktop.plist'
+
+
 def mac_app_home_audit(home):
     # Metadata only. Never enumerate or read existing real-HOME application data.
-    relatives = ('Library/Application Support/CampusAgent', 'Library/Caches/CampusAgent',
-                 'Library/Logs/CampusAgent', 'Library/Application Support/Mens',
-                 'Library/Caches/Mens', 'Library/Logs/Mens',
-                 'Library/Preferences/edu.campus.agent.desktop.plist',
-                 'Library/Saved Application State/edu.campus.agent.desktop.savedState')
     rows = []
-    for relative in relatives:
+    for relative in MAC_APP_HOME_RELATIVES:
         path = home / relative
         row = {'relative': relative, 'exists': False}
         try:
             info = path.lstat()
             row.update(exists=True, directory=stat.S_ISDIR(info.st_mode),
                        symlink=stat.S_ISLNK(info.st_mode), bytes=info.st_size,
-                       modified_ns=info.st_mtime_ns)
+                       modified_ns=info.st_mtime_ns, regular_file=stat.S_ISREG(info.st_mode),
+                       uid=info.st_uid)
         except FileNotFoundError:
             pass
         rows.append(row)
     return rows
+
+
+def require_fresh_standard_home(audit):
+    if (len(audit) != len(MAC_APP_HOME_RELATIVES)
+            or {row['relative'] for row in audit} != set(MAC_APP_HOME_RELATIVES)
+            or any(row['exists'] for row in audit)):
+        raise RuntimeError('standard-vm refuses launch unless all eight actual-HOME app-owned paths are absent')
+
+
+def standard_home_after(before, after, own_uid):
+    require_fresh_standard_home(before)
+    result = {'passed': False, 'allowed_os_preferences_addition': None,
+              'audit_scope': 'Metadata only; no real-HOME app-data or preferences contents read'}
+    if len(after) != 8 or {row['relative'] for row in after} != set(MAC_APP_HOME_RELATIVES):
+        result['error'] = 'Incomplete actual-HOME after audit'
+        return result
+    for row in after:
+        if not row['exists']:
+            continue
+        if (row['relative'] == MAC_OS_PREFERENCES and row.get('regular_file') is True
+                and row.get('directory') is False and row.get('symlink') is False
+                and row.get('uid') == own_uid and 0 <= row.get('bytes', -1) <= 65536):
+            result['allowed_os_preferences_addition'] = dict(row)
+        else:
+            result['error'] = 'Unexpected actual-HOME app-owned path creation or unsafe preferences metadata: ' + row['relative']
+            return result
+    result['passed'] = True
+    return result
 
 
 def fake_home_inventory(home, limit=300):
@@ -354,10 +395,15 @@ def main():
     parser.add_argument('--out', type=Path, required=True)
     parser.add_argument('--timeout', type=int, default=90)
     parser.add_argument('--child-log-location', choices=['workspace', 'state'], default='workspace')
+    parser.add_argument('--mac-launch-mode', choices=['strict', 'standard-vm'], default='strict')
     parser.add_argument('--diagnostic-only', action='store_true')
     args = parser.parse_args()
     if args.child_log_location != 'workspace' and not args.diagnostic_only:
         parser.error('--child-log-location state requires --diagnostic-only')
+    try:
+        validate_mac_launch_mode(args.mac_launch_mode, args.diagnostic_only, args.child_log_location, sys.platform, args.argument)
+    except ValueError as error:
+        parser.error(str(error))
     if sys.platform not in {'darwin', 'linux'}:
         parser.error('Native smoke requires actual macOS or Linux; no simulated fallback')
     if (sys.platform == 'darwin') != (args.package_kind == 'mac-dmg'):
@@ -369,7 +415,9 @@ def main():
     report = {'started_utc': datetime.now(timezone.utc).isoformat(), 'status': 'failed',
               'diagnostic_only': args.diagnostic_only, 'accepted': False,
               'diagnostic_probe_requirements_met': False,
-              'mac_outer_sandbox': 'deny-home' if sys.platform == 'darwin' else None,
+              'mac_launch_mode': args.mac_launch_mode if sys.platform == 'darwin' else None,
+              'mac_outer_sandbox': ('deny-home' if args.mac_launch_mode == 'strict' else 'none-standard-vm-diagnostic') if sys.platform == 'darwin' else None,
+              'product_sandbox_overrides_supplied': False if args.mac_launch_mode == 'standard-vm' else None,
               'child_log_location': args.child_log_location,
               'platform': sys.platform, 'package_kind': args.package_kind,
               'native_window_verified': False, 'isolated_database_verified': False, 'owned_backend_auth_verified': False,
@@ -416,7 +464,10 @@ def main():
                 audit_before = mac_app_home_audit(actual_home)
                 report['actual_home_app_paths_before'] = audit_before
                 report['fake_home_before'] = fake_home_inventory(home)
-                profile_text = mac_outer_profile(actual_home)
+                if args.mac_launch_mode == 'standard-vm':
+                    require_fresh_standard_home(audit_before)
+                    report['standard_vm_fresh_actual_home_verified'] = True
+                profile_text = mac_outer_profile(actual_home) if args.mac_launch_mode == 'strict' else None
                 report['outer_sandbox_profile'] = profile_text
                 report['outer_sandbox_applied'] = profile_text is not None
                 if profile_text is not None:
@@ -437,7 +488,7 @@ def main():
                 if compile_result.returncode:
                     raise RuntimeError('Native Swift window probe compilation failed')
                 app_data = home / 'Library/Application Support/CampusAgent'
-                report['actual_runner_home_denied_by_sandbox'] = str(actual_home)
+                report['actual_runner_home_denied_by_sandbox'] = str(actual_home) if args.mac_launch_mode == 'strict' else None
             else:
                 for key in ('DISPLAY', 'XAUTHORITY'):
                     if key in os.environ:
@@ -544,7 +595,12 @@ def main():
                             audit_after = mac_app_home_audit(actual_home)
                             report['actual_home_app_paths_after'] = audit_after
                             report['actual_home_app_paths_unchanged'] = audit_after == audit_before
-                            if audit_after != audit_before:
+                            if args.mac_launch_mode == 'standard-vm':
+                                report['standard_vm_actual_home_audit'] = standard_home_after(audit_before, audit_after, os.getuid())
+                                if not report['standard_vm_actual_home_audit']['passed']:
+                                    report['status'] = 'failed'
+                                    report['real_home_side_effect_error'] = report['standard_vm_actual_home_audit']['error']
+                            elif audit_after != audit_before:
                                 report['status'] = 'failed'
                                 report['real_home_side_effect_error'] = 'Actual-HOME app-owned path metadata changed; no real-HOME data was read or removed'
                         if remaining:
